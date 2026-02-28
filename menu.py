@@ -13,6 +13,7 @@ from simple_term_menu import TerminalMenu
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
 HOTKEY_OPTIONS = ["left_option", "right_option", "left_command", "right_command", "left_shift", "right_shift"]
+VOLUME_OPTIONS = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0"]
 
 _BOX_WIDTH = 34
 _SEPARATOR = "  " + ("─" * 32)
@@ -154,11 +155,14 @@ def run_setup_menu(config_path: Path) -> str:
 
         langs_display = ", ".join(config.whisper.languages)
 
+        vol_pct = f"{int(config.audio_feedback.volume * 100)}%"
+
         title = _boxed_title("WHISPER-DIC SETTINGS") + "\n"
         entries = [
             _setting_line("Provider", config.whisper.provider),
             _setting_line("Languages", langs_display),
             _setting_line("Hotkey", config.hotkey.key),
+            _setting_line("Volume", vol_pct),
             _setting_line("Groq Key", groq_status),
             _SEPARATOR,
             "  ▶ Start Dictating",
@@ -166,7 +170,7 @@ def run_setup_menu(config_path: Path) -> str:
         ]
 
         selection = _show_menu(entries, title)
-        if selection is None or selection == 6:
+        if selection is None or selection == 7:
             _clear_screen()
             return "quit"
 
@@ -199,12 +203,22 @@ def run_setup_menu(config_path: Path) -> str:
             continue
 
         if selection == 3:
+            current_vol = str(config.audio_feedback.volume)
+            vol_labels = [f"{int(float(v) * 100)}%" for v in VOLUME_OPTIONS]
+            current_label = f"{int(config.audio_feedback.volume * 100)}%"
+            idx = _show_choice_menu("SET VOLUME", vol_labels, current_label)
+            if idx is not None and idx != current_label:
+                vol_val = VOLUME_OPTIONS[vol_labels.index(idx)]
+                set_config_value(config_path, "audio_feedback.volume", vol_val)
+            continue
+
+        if selection == 4:
             api_key = _prompt_for_groq_key()
             if api_key is not None:
                 set_config_value(config_path, "whisper.groq.api_key", api_key)
             continue
 
-        if selection == 5:
+        if selection == 6:
             _clear_screen()
             return "start"
 
