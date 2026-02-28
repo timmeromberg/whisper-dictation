@@ -146,6 +146,8 @@ class DictationMenuBar(rumps.App):
             self._autosend_item,
             self._audioctrl_item,
             None,
+            rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
+            None,
             self._help_menu,
             None,
             rumps.MenuItem("Quit", callback=self._quit),
@@ -215,9 +217,8 @@ class DictationMenuBar(rumps.App):
         if provider == self.config.whisper.provider:
             return
         if provider == "groq" and not self.config.whisper.groq.api_key.strip():
-            rumps.notification("whisper-dic", "Groq API key not set",
-                               "Set it via: whisper-dic set whisper.groq.api_key YOUR_KEY")
-            return
+            if not self._prompt_groq_key():
+                return
         set_config_value(self.config_path, "whisper.provider", provider)
         self.config = load_config(self.config_path)
         # Recreate transcriber with new provider
@@ -227,6 +228,45 @@ class DictationMenuBar(rumps.App):
         for item in self._provider_menu.values():
             item.state = 1 if item.title == provider else 0
         print(f"[menubar] Provider: {provider}")
+        # Verify connection in background
+        threading.Thread(target=self._check_provider_health, daemon=True).start()
+
+    def _prompt_groq_key(self) -> bool:
+        """Prompt for Groq API key via dialog. Returns True if key was set."""
+        response = rumps.Window(
+            title="Groq API Key",
+            message="Enter your API key from console.groq.com:",
+            default_text="",
+            ok="Save",
+            cancel="Cancel",
+            secure=True,
+        ).run()
+        if not response.clicked or not response.text.strip():
+            return False
+        set_config_value(self.config_path, "whisper.groq.api_key", response.text.strip())
+        self.config = load_config(self.config_path)
+        return True
+
+    def _set_groq_key(self, _sender) -> None:
+        """Menu item callback to set/update Groq API key."""
+        if self._prompt_groq_key():
+            # If currently using groq, recreate transcriber with new key
+            if self.config.whisper.provider == "groq":
+                self._app.transcriber.close()
+                self._app.transcriber = create_transcriber(self.config.whisper)
+                threading.Thread(target=self._check_provider_health, daemon=True).start()
+            rumps.notification("whisper-dic", "API Key Updated", "Groq API key saved.")
+
+    def _check_provider_health(self) -> None:
+        """Run a health check and notify the user of the result."""
+        ok = self._app.transcriber.health_check()
+        provider = self.config.whisper.provider
+        if ok:
+            rumps.notification("whisper-dic", "Connection Verified",
+                               f"{provider} provider is reachable.")
+        else:
+            rumps.notification("whisper-dic", "Connection Failed",
+                               f"{provider} provider is unreachable. Check your settings.")
 
     def _switch_hotkey(self, sender) -> None:
         hk = sender._hotkey_value
