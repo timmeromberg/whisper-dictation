@@ -393,11 +393,11 @@ class DictationApp:
         except Exception as exc:
             log("audio", f"Beep failed: {exc}")
 
-    def _transcribe_with_retry(self, wav_bytes: bytes, max_attempts: int = 3) -> str:
+    def _transcribe_with_retry(self, audio_bytes: bytes, max_attempts: int = 3) -> str:
         """Transcribe with retry on transient network errors (SSL, connection reset)."""
         for attempt in range(1, max_attempts + 1):
             try:
-                return self.transcriber.transcribe(wav_bytes)
+                return self.transcriber.transcribe(audio_bytes)
             except Exception as exc:
                 err_str = str(exc).lower()
                 is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
@@ -491,11 +491,11 @@ class DictationApp:
     def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
         try:
             with self._pipeline_lock:
-                wav_size_kb = len(result.wav_bytes) / 1024
-                log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({wav_size_kb:.0f} KB)...")
+                size_kb = len(result.audio_bytes) / 1024
+                log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({size_kb:.0f} KB)...")
                 if self.on_state_change:
                     self.on_state_change("transcribing", "")
-                transcript = self._transcribe_with_retry(result.wav_bytes)
+                transcript = self._transcribe_with_retry(result.audio_bytes)
                 log("pipeline", f"Transcript: '{transcript}'")
 
                 cleaned = transcript

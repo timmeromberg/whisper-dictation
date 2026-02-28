@@ -23,8 +23,8 @@ class WhisperTranscriber(ABC):
         """Return True when the configured service is reachable."""
 
     @abstractmethod
-    def transcribe(self, wav_bytes: bytes) -> str:
-        """Transcribe in-memory WAV audio bytes."""
+    def transcribe(self, audio_bytes: bytes) -> str:
+        """Transcribe in-memory audio bytes."""
 
     @abstractmethod
     def close(self) -> None:
@@ -63,9 +63,9 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
         except httpx.HTTPError:
             return False
 
-    def transcribe(self, wav_bytes: bytes) -> str:
+    def transcribe(self, audio_bytes: bytes) -> str:
         files = {
-            "file": ("dictation.wav", wav_bytes, "audio/wav"),
+            "file": ("dictation.flac", audio_bytes, "audio/flac"),
         }
         data: dict[str, str] = {
             "model": self.model,

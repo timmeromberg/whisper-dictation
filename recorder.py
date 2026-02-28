@@ -17,7 +17,7 @@ import soundfile as sf
 class RecordingResult:
     """In-memory WAV payload and metadata for a finished recording."""
 
-    wav_bytes: bytes
+    audio_bytes: bytes
     duration_seconds: float
     sample_count: int
 
@@ -105,10 +105,10 @@ class Recorder:
 
         audio = np.concatenate(chunks, axis=0)
         buffer = io.BytesIO()
-        sf.write(buffer, audio, self.sample_rate, format="WAV", subtype="PCM_16")
+        sf.write(buffer, audio, self.sample_rate, format="FLAC")
 
         return RecordingResult(
-            wav_bytes=buffer.getvalue(),
+            audio_bytes=buffer.getvalue(),
             duration_seconds=sample_count / float(self.sample_rate),
             sample_count=sample_count,
         )
