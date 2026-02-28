@@ -12,6 +12,7 @@ from dictation import (
     DictationApp, ConfigWatcher, LANG_NAMES, load_config, set_config_value,
     create_transcriber, command_install, command_uninstall, _PLIST_PATH,
 )
+from overlay import RecordingOverlay
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
@@ -35,6 +36,7 @@ class DictationMenuBar(rumps.App):
         self._provider_healthy = True
         self._health_notified = False
         self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
+        self._overlay = RecordingOverlay()
 
         # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
@@ -239,16 +241,19 @@ class DictationMenuBar(rumps.App):
             self.title = "\U0001f534"
             self._status_item.title = "Status: Recording..."
             self._level_timer.start()
+            self._overlay.show_recording()
         elif state == "transcribing":
             self._is_recording = False
             self._level_timer.stop()
             self.title = "\u23f3"
             self._status_item.title = "Status: Transcribing..."
+            self._overlay.show_transcribing()
         elif state == "idle":
             self._is_recording = False
             self._level_timer.stop()
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
+            self._overlay.hide()
             self._rebuild_history_menu()
         elif state == "language_changed":
             self.title = "\U0001f3a4"
