@@ -8,7 +8,7 @@ from pathlib import Path
 
 import rumps
 
-from dictation import DictationApp, load_config
+from dictation import DictationApp, load_config, set_config_value, create_transcriber
 
 LANG_NAMES = {
     "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
@@ -17,6 +17,11 @@ LANG_NAMES = {
     "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
     "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
 }
+
+PROVIDER_OPTIONS = ["local", "groq"]
+LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
+HOTKEY_OPTIONS = ["left_option", "right_option", "left_command", "right_command", "left_shift", "right_shift"]
+VOLUME_OPTIONS = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0"]
 
 
 class DictationMenuBar(rumps.App):
@@ -31,62 +36,168 @@ class DictationMenuBar(rumps.App):
         self._app = DictationApp(self.config)
         self._app.on_state_change = self._on_state_change
 
+        # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
         self._status_item.set_callback(None)
 
+        # --- Language submenu ---
         active_lang = self._app._languages[self._app._lang_index]
         display = LANG_NAMES.get(active_lang, active_lang)
-        self._lang_item = rumps.MenuItem(f"Language: {display} ({active_lang})")
-        self._lang_item.set_callback(None)
+        self._lang_menu = rumps.MenuItem(f"Language: {display}")
+        for lang in self._app._languages:
+            name = LANG_NAMES.get(lang, lang)
+            item = rumps.MenuItem(f"{name} ({lang})", callback=self._switch_language)
+            if lang == active_lang:
+                item.state = 1
+            self._lang_menu.add(item)
 
-        self._provider_item = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
-        self._provider_item.set_callback(None)
+        # --- Provider submenu ---
+        self._provider_menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
+        for p in PROVIDER_OPTIONS:
+            item = rumps.MenuItem(p, callback=self._switch_provider)
+            if p == self.config.whisper.provider:
+                item.state = 1
+            self._provider_menu.add(item)
 
-        key = self.config.hotkey.key.replace("_", " ")
-        self._hotkey_item = rumps.MenuItem(f"Hotkey: {key}")
-        self._hotkey_item.set_callback(None)
+        # --- Hotkey submenu ---
+        current_key = self.config.hotkey.key
+        self._hotkey_menu = rumps.MenuItem(f"Hotkey: {current_key.replace('_', ' ')}")
+        for hk in HOTKEY_OPTIONS:
+            item = rumps.MenuItem(hk.replace("_", " "), callback=self._switch_hotkey)
+            item._hotkey_value = hk
+            if hk == current_key:
+                item.state = 1
+            self._hotkey_menu.add(item)
 
-        tc_state = "on" if self.config.text_commands.enabled else "off"
-        self._textcmds_item = rumps.MenuItem(f"Text Commands: {tc_state}")
-        self._textcmds_item.set_callback(None)
+        # --- Volume submenu ---
+        current_vol = f"{int(self.config.audio_feedback.volume * 100)}%"
+        self._volume_menu = rumps.MenuItem(f"Volume: {current_vol}")
+        for v in VOLUME_OPTIONS:
+            label = f"{int(float(v) * 100)}%"
+            item = rumps.MenuItem(label, callback=self._switch_volume)
+            item._vol_value = v
+            if label == current_vol:
+                item.state = 1
+            self._volume_menu.add(item)
 
+        # --- Text Commands toggle ---
+        tc_on = self.config.text_commands.enabled
+        self._textcmds_item = rumps.MenuItem(
+            f"Text Commands: {'on' if tc_on else 'off'}",
+            callback=self._toggle_text_commands,
+        )
+
+        # --- Build menu ---
         self.menu = [
             self._status_item,
-            self._lang_item,
-            None,  # separator
-            self._provider_item,
-            self._hotkey_item,
+            None,
+            self._lang_menu,
+            self._provider_menu,
+            self._hotkey_menu,
+            self._volume_menu,
             self._textcmds_item,
-            None,  # separator
+            None,
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
+    # --- State callbacks ---
+
     def _on_state_change(self, state: str, detail: str) -> None:
         if state == "recording":
-            self.title = "\U0001f534"  # red circle
+            self.title = "\U0001f534"
             self._status_item.title = "Status: Recording..."
         elif state == "transcribing":
-            self.title = "\u23f3"  # hourglass
+            self.title = "\u23f3"
             self._status_item.title = "Status: Transcribing..."
         elif state == "idle":
-            self.title = "\U0001f3a4"  # microphone
+            self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
         elif state == "language_changed":
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
-            self._lang_item.title = f"Language: {detail}"
+            self._lang_menu.title = f"Language: {detail}"
+            # Update checkmarks
+            new_lang = self._app._languages[self._app._lang_index]
+            for item in self._lang_menu.values():
+                item.state = 1 if f"({new_lang})" in item.title else 0
+
+    # --- Setting actions ---
+
+    def _switch_language(self, sender) -> None:
+        # Extract lang code from "English (en)"
+        lang = sender.title.split("(")[-1].rstrip(")")
+        if lang == self._app._languages[self._app._lang_index]:
+            return
+        if lang in self._app._languages:
+            self._app._lang_index = self._app._languages.index(lang)
+        self._app.transcriber.language = lang
+        display = LANG_NAMES.get(lang, lang)
+        self._lang_menu.title = f"Language: {display}"
+        for item in self._lang_menu.values():
+            item.state = 1 if sender.title == item.title else 0
+        set_config_value(self.config_path, "whisper.language", lang)
+        print(f"[menubar] Language: {display} ({lang})")
+
+    def _switch_provider(self, sender) -> None:
+        provider = sender.title
+        if provider == self.config.whisper.provider:
+            return
+        if provider == "groq" and not self.config.whisper.groq.api_key.strip():
+            rumps.notification("whisper-dic", "Groq API key not set",
+                               "Set it via: whisper-dic set whisper.groq.api_key YOUR_KEY")
+            return
+        set_config_value(self.config_path, "whisper.provider", provider)
+        self.config = load_config(self.config_path)
+        # Recreate transcriber with new provider
+        self._app.transcriber.close()
+        self._app.transcriber = create_transcriber(self.config.whisper)
+        self._provider_menu.title = f"Provider: {provider}"
+        for item in self._provider_menu.values():
+            item.state = 1 if item.title == provider else 0
+        print(f"[menubar] Provider: {provider}")
+
+    def _switch_hotkey(self, sender) -> None:
+        hk = sender._hotkey_value
+        if hk == self.config.hotkey.key:
+            return
+        set_config_value(self.config_path, "hotkey.key", hk)
+        self._hotkey_menu.title = f"Hotkey: {hk.replace('_', ' ')}"
+        for item in self._hotkey_menu.values():
+            item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
+        rumps.notification("whisper-dic", "Hotkey Changed",
+                           f"Restart whisper-dic to use: {hk.replace('_', ' ')}")
+        print(f"[menubar] Hotkey: {hk} (restart required)")
+
+    def _switch_volume(self, sender) -> None:
+        vol = sender._vol_value
+        set_config_value(self.config_path, "audio_feedback.volume", vol)
+        self.config = load_config(self.config_path)
+        self._app.config.audio_feedback.volume = float(vol)
+        label = f"{int(float(vol) * 100)}%"
+        self._volume_menu.title = f"Volume: {label}"
+        for item in self._volume_menu.values():
+            item.state = 1 if getattr(item, '_vol_value', None) == vol else 0
+        print(f"[menubar] Volume: {label}")
+
+    def _toggle_text_commands(self, _sender) -> None:
+        current = self.config.text_commands.enabled
+        new_val = not current
+        set_config_value(self.config_path, "text_commands.enabled", "true" if new_val else "false")
+        self.config.text_commands.enabled = new_val
+        self._app.cleaner.text_commands = new_val
+        self._textcmds_item.title = f"Text Commands: {'on' if new_val else 'off'}"
+        print(f"[menubar] Text Commands: {'on' if new_val else 'off'}")
 
     def _quit(self, _sender) -> None:
         self._app.stop()
         rumps.quit_application()
 
+    # --- Startup ---
+
     def _start_dictation(self) -> None:
         if not self._app.startup_health_checks():
-            rumps.notification(
-                title="whisper-dic",
-                subtitle="Startup Failed",
-                message="Whisper provider is unreachable.",
-            )
+            rumps.notification("whisper-dic", "Startup Failed",
+                               "Whisper provider is unreachable.")
             return
 
         self._app._listener.start()
@@ -97,7 +208,6 @@ class DictationMenuBar(rumps.App):
 def run_menubar(config_path: Path) -> int:
     app = DictationMenuBar(config_path)
 
-    # Start dictation listener in background thread
     thread = threading.Thread(target=app._start_dictation, daemon=True)
     thread.start()
 
