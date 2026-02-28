@@ -423,7 +423,7 @@ class DictationApp:
         except Exception as exc:
             log("audio", f"Beep failed: {exc}")
 
-    def _transcribe_with_retry(self, audio_bytes: bytes, max_attempts: int = 3) -> str:
+    def _transcribe_with_retry(self, audio_bytes: bytes, max_attempts: int = 4) -> str:
         """Transcribe with retry on transient network errors (SSL, connection reset)."""
         for attempt in range(1, max_attempts + 1):
             try:
@@ -432,7 +432,7 @@ class DictationApp:
                 err_str = str(exc).lower()
                 is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
                 if is_transient and attempt < max_attempts:
-                    wait = attempt * 0.5
+                    wait = min(0.5 * (2 ** (attempt - 1)), 8.0)
                     log("pipeline", f"Transient error (attempt {attempt}/{max_attempts}): {exc}, retrying in {wait}s...")
                     time.sleep(wait)
                 else:

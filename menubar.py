@@ -31,6 +31,9 @@ class DictationMenuBar(rumps.App):
         self._app.on_state_change = self._on_state_change
         self._is_recording = False
         self._level_timer = rumps.Timer(self._update_level, 0.15)
+        self._health_timer = rumps.Timer(self._periodic_health_check, 60)
+        self._provider_healthy = True
+        self._health_notified = False
 
         # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
@@ -189,6 +192,30 @@ class DictationMenuBar(rumps.App):
             new_lang = self._app.active_language
             for item in self._lang_menu.values():
                 item.state = 1 if f"({new_lang})" in item.title else 0
+
+    def _periodic_health_check(self, _timer) -> None:
+        def _run():
+            ok = self._app.transcriber.health_check()
+            if not ok and self._provider_healthy:
+                # Provider just went down
+                self._provider_healthy = False
+                self._status_item.title = "Status: Provider Unreachable"
+                self.title = "\u26a0\ufe0f"  # warning emoji
+                if not self._health_notified:
+                    provider = self.config.whisper.provider
+                    rumps.notification("whisper-dic", "Provider Unreachable",
+                                       f"{provider} is not responding. Dictation may fail.")
+                    self._health_notified = True
+            elif ok and not self._provider_healthy:
+                # Provider recovered
+                self._provider_healthy = True
+                self._health_notified = False
+                if not self._is_recording:
+                    self._status_item.title = "Status: Idle"
+                    self.title = "\U0001f3a4"
+                rumps.notification("whisper-dic", "Provider Online",
+                                   "Connection restored. Dictation is ready.")
+        threading.Thread(target=_run, daemon=True).start()
 
     def _update_level(self, _timer) -> None:
         if not self._is_recording:
@@ -490,6 +517,7 @@ class DictationMenuBar(rumps.App):
             return
 
         self._app.start_listener()
+        self._health_timer.start()
         key = self.config.hotkey.key.replace("_", " ")
         rumps.notification("whisper-dic", "Ready",
                            f"Hold {key} to dictate. Tap to cycle language.")
