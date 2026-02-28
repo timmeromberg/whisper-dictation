@@ -122,3 +122,13 @@ class Recorder:
             duration_seconds=sample_count / float(self.sample_rate),
             sample_count=sample_count,
         )
+
+    def __del__(self) -> None:
+        """Safety net: close stream if not already closed."""
+        stream = self._stream
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass

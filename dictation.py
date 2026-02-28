@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import io
 import re
 import signal
@@ -329,6 +330,8 @@ class DictationApp:
         # Optional callback for UI updates: fn(state: str, detail: str)
         # States: "idle", "recording", "transcribing", "language_changed"
         self.on_state_change: Callable[[str, str], None] | None = None
+
+        atexit.register(self._atexit_cleanup)
 
     @property
     def stopped(self) -> bool:
@@ -668,6 +671,14 @@ class DictationApp:
         self.transcriber.close()
         self.cleaner.close()
         log("shutdown", "Complete.")
+
+    def _atexit_cleanup(self) -> None:
+        """Belt-and-suspenders cleanup for abnormal exits."""
+        if self.recorder.is_recording:
+            log("atexit", "Cleaning up active recording...")
+            self.recorder.stop()
+        if not self.stopped:
+            self.transcriber.close()
 
 
 def _load_config_from_path(config_path: Path) -> AppConfig:
