@@ -36,6 +36,12 @@ mute_local = true
 
 # Network devices (run 'whisper-dic discover' to find available devices)
 # [[audio_control.devices]]
+# type = "adb"
+# name = "Android Tablet"
+# serial = ""  # leave empty to auto-detect first connected device
+# unmute_volume = 10  # volume level to restore (0-15)
+
+# [[audio_control.devices]]
 # type = "chromecast"
 # name = "Living Room Speaker"
 
@@ -46,9 +52,9 @@ mute_local = true
 
 # [[audio_control.devices]]
 # type = "custom"
-# name = "Android Tablet"
-# mute_command = "adb -s 192.168.1.50:5555 shell media volume --set 0 --stream 3"
-# unmute_command = "adb -s 192.168.1.50:5555 shell media volume --set 10 --stream 3"
+# name = "My Device"
+# mute_command = "some-command --mute"
+# unmute_command = "some-command --unmute"
 
 [audio_feedback]
 enabled = true

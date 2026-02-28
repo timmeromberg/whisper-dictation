@@ -67,6 +67,70 @@ class CustomDevice:
             log("audio_ctrl", f"Unmute failed for {self.name}: {exc}")
 
 
+def _adb_devices() -> list[tuple[str, str]]:
+    """Return list of (serial, model) for connected ADB devices."""
+    try:
+        result = subprocess.run(
+            ["adb", "devices", "-l"],
+            capture_output=True, text=True, timeout=5,
+        )
+        devices = []
+        for line in result.stdout.strip().splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "device":
+                serial = parts[0]
+                model = ""
+                for part in parts[2:]:
+                    if part.startswith("model:"):
+                        model = part.split(":", 1)[1]
+                        break
+                devices.append((serial, model or serial))
+        return devices
+    except Exception:
+        return []
+
+
+class AdbDevice:
+    """Mute/unmute an Android device connected via ADB (WiFi or USB)."""
+
+    def __init__(self, name: str = "", serial: str = "", unmute_volume: int = 10) -> None:
+        self.name = name or "Android Device"
+        self._serial = serial  # empty = auto-detect first device
+        self._unmute_volume = unmute_volume
+
+    def _get_serial(self) -> str | None:
+        if self._serial:
+            return self._serial
+        devices = _adb_devices()
+        if devices:
+            serial, model = devices[0]
+            log("audio_ctrl", f"Auto-detected ADB device: {model} ({serial})")
+            return serial
+        return None
+
+    def _run_adb(self, *args: str) -> bool:
+        serial = self._get_serial()
+        if not serial:
+            log("audio_ctrl", f"No ADB device found for {self.name}")
+            return False
+        cmd = ["adb", "-s", serial] + list(args)
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=10)
+            return True
+        except Exception as exc:
+            log("audio_ctrl", f"ADB command failed for {self.name}: {exc}")
+            return False
+
+    def mute(self) -> None:
+        if self._run_adb("shell", "cmd", "media_session", "volume", "--set", "0", "--stream", "3"):
+            log("audio_ctrl", f"Muted: {self.name} (ADB)")
+
+    def unmute(self) -> None:
+        vol = str(self._unmute_volume)
+        if self._run_adb("shell", "cmd", "media_session", "volume", "--set", vol, "--stream", "3"):
+            log("audio_ctrl", f"Unmuted: {self.name} (ADB, volume={vol})")
+
+
 class ChromecastDevice:
     """Mute/unmute a Chromecast device on the local network."""
 
@@ -183,7 +247,11 @@ class AudioController:
             dev_type = dev_cfg.get("type", "")
             dev_name = dev_cfg.get("name", "Unknown")
 
-            if dev_type == "chromecast":
+            if dev_type == "adb":
+                serial = dev_cfg.get("serial", "")
+                unmute_vol = int(dev_cfg.get("unmute_volume", 10))
+                self._devices.append(AdbDevice(dev_name, serial, unmute_vol))
+            elif dev_type == "chromecast":
                 self._devices.append(ChromecastDevice(dev_name))
             elif dev_type == "upnp":
                 location = dev_cfg.get("location", "")
@@ -267,7 +335,28 @@ class AudioController:
 
 def discover() -> None:
     """Discover audio devices on the local network and print results."""
-    print("\nScanning for audio devices on the local network...\n")
+    print("\nScanning for audio devices...\n")
+
+    # ADB devices
+    print("--- ADB devices (Android) ---")
+    devices = _adb_devices()
+    if devices:
+        for serial, model in devices:
+            print(f"  Name: {model}")
+            print(f"  Serial: {serial}")
+            print(f"  Type: adb")
+            print(f"  Config:")
+            print(f'    [[audio_control.devices]]')
+            print(f'    type = "adb"')
+            print(f'    name = "{model}"')
+            print()
+    else:
+        try:
+            subprocess.run(["adb", "version"], capture_output=True, timeout=3)
+            print("  (no devices connected — pair via Settings > Developer Options > Wireless debugging)")
+        except FileNotFoundError:
+            print("  adb not installed. Run: brew install android-platform-tools")
+    print()
 
     # Chromecast discovery
     print("--- Chromecast devices ---")
