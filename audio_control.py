@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -74,13 +75,13 @@ class CustomDevice:
 
     def __init__(self, name: str, mute_command: str, unmute_command: str) -> None:
         self.name = name
-        self._mute_cmd = mute_command
-        self._unmute_cmd = unmute_command
+        self._mute_cmd = shlex.split(mute_command)
+        self._unmute_cmd = shlex.split(unmute_command)
 
     def mute(self) -> None:
         try:
             subprocess.run(
-                self._mute_cmd, shell=True,
+                self._mute_cmd,
                 capture_output=True, timeout=10,
             )
             log("audio_ctrl", f"Muted: {self.name}")
@@ -90,7 +91,7 @@ class CustomDevice:
     def unmute(self) -> None:
         try:
             subprocess.run(
-                self._unmute_cmd, shell=True,
+                self._unmute_cmd,
                 capture_output=True, timeout=10,
             )
             log("audio_ctrl", f"Unmuted: {self.name}")

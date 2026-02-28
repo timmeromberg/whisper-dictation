@@ -325,9 +325,12 @@ class DictationApp:
 
     def _notify(self, message: str, title: str = "whisper-dic") -> None:
         """Show a macOS notification banner."""
+        # Escape backslashes and quotes to prevent AppleScript injection
+        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"')
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"')
         try:
             subprocess.Popen(
-                ["osascript", "-e", f'display notification "{message}" with title "{title}"'],
+                ["osascript", "-e", f'display notification "{safe_msg}" with title "{safe_title}"'],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
