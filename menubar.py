@@ -508,17 +508,10 @@ class DictationMenuBar(rumps.App):
         try:
             from ApplicationServices import AXIsProcessTrusted
             if not AXIsProcessTrusted():
-                result = rumps.alert(
-                    title="Accessibility Permission Required",
-                    message="whisper-dic needs Accessibility access for global hotkey listening and text pasting.\n\nOpen System Settings to grant it?",
-                    ok="Open Settings",
-                    cancel="Skip",
+                rumps.notification(
+                    "whisper-dic", "Accessibility Permission Required",
+                    "Open System Settings > Privacy & Security > Accessibility and add this app.",
                 )
-                if result == 1:
-                    from AppKit import NSWorkspace, NSURL
-                    NSWorkspace.sharedWorkspace().openURL_(
-                        NSURL.URLWithString_("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-                    )
         except ImportError:
             pass
 
@@ -530,17 +523,10 @@ class DictationMenuBar(rumps.App):
             stream.stop()
             stream.close()
         except Exception:
-            result = rumps.alert(
-                title="Microphone Permission Required",
-                message="whisper-dic needs Microphone access to record audio.\n\nOpen System Settings to grant it?",
-                ok="Open Settings",
-                cancel="Skip",
+            rumps.notification(
+                "whisper-dic", "Microphone Permission Required",
+                "Open System Settings > Privacy & Security > Microphone and add this app.",
             )
-            if result == 1:
-                from AppKit import NSWorkspace, NSURL
-                NSWorkspace.sharedWorkspace().openURL_(
-                    NSURL.URLWithString_("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-                )
 
     def _start_dictation(self) -> None:
         self._check_permissions()
