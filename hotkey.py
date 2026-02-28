@@ -25,8 +25,17 @@ KEY_MAP = {
 
 def _ctrl_is_pressed() -> bool:
     """Check if Control is physically held right now (Quartz flag check)."""
-    flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)
-    return bool(flags & Quartz.kCGEventFlagMaskControl)
+    for source in (
+        Quartz.kCGEventSourceStateHIDSystemState,
+        Quartz.kCGEventSourceStateCombinedSessionState,
+    ):
+        flags = Quartz.CGEventSourceFlagsState(source)
+        if flags & Quartz.kCGEventFlagMaskControl:
+            return True
+    return False
+
+
+_CTRL_KEYS = {keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
 
 
 class RightOptionHotkeyListener:
@@ -47,6 +56,7 @@ class RightOptionHotkeyListener:
 
         self._lock = threading.Lock()
         self._pressed = False
+        self._ctrl_held = False
         self._listener: Optional[keyboard.Listener] = None
 
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
@@ -63,6 +73,11 @@ class RightOptionHotkeyListener:
         return False
 
     def _handle_press(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
+        if key in _CTRL_KEYS:
+            with self._lock:
+                self._ctrl_held = True
+            return
+
         if not self._matches(key):
             return
 
@@ -76,17 +91,24 @@ class RightOptionHotkeyListener:
             self._on_hold_start()
 
     def _handle_release(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
+        if key in _CTRL_KEYS:
+            with self._lock:
+                self._ctrl_held = False
+            return
+
         if not self._matches(key):
             return
 
         should_fire = False
+        ctrl_held = False
         with self._lock:
             if self._pressed:
                 self._pressed = False
+                # Use event tracking OR Quartz flags — either is enough
+                ctrl_held = self._ctrl_held or _ctrl_is_pressed()
                 should_fire = True
 
         if should_fire:
-            ctrl_held = _ctrl_is_pressed()
             self._on_hold_end(ctrl_held)
 
     def start(self) -> None:
