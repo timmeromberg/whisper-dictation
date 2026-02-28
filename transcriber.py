@@ -74,7 +74,9 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
             data["language"] = self.language
 
         response = self._client.post(self.url, data=data, files=files)
-        response.raise_for_status()
+        if response.status_code != 200:
+            body = response.text[:300]
+            raise RuntimeError(f"HTTP {response.status_code}: {body}")
 
         payload = response.json()
         return str(payload.get("text", "")).strip()

@@ -309,7 +309,7 @@ class DictationApp:
         if config.whisper.language in self._languages:
             self._lang_index = self._languages.index(config.whisper.language)
 
-        self._last_cycle_time = 0.0
+        self._last_tap_time = 0.0
         self._stop_event = threading.Event()
         self._pipeline_lock = threading.Lock()
         self._threads_lock = threading.Lock()
@@ -470,9 +470,13 @@ class DictationApp:
 
         if result.duration_seconds < self.config.recording.min_duration:
             now = time.monotonic()
-            if len(self._languages) > 1 and (now - self._last_cycle_time) > 1.0:
-                self._last_cycle_time = now
-                self._cycle_language()
+            if len(self._languages) > 1:
+                elapsed = now - self._last_tap_time
+                self._last_tap_time = now
+                if elapsed < 1.0:
+                    # Double-tap detected — cycle language
+                    self._last_tap_time = 0.0  # reset so triple-tap doesn't cycle again
+                    self._cycle_language()
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
@@ -512,7 +516,7 @@ class DictationApp:
 
                 cleaned = cleaned.strip()
                 if not cleaned:
-                    log("pipeline", "Nothing to paste after cleanup.")
+                    log("pipeline", f"Empty after cleanup (original: '{transcript}')")
                     return
 
                 if command_mode:
@@ -574,6 +578,8 @@ class DictationApp:
 
         for thread in threads:
             thread.join(timeout=2.0)
+            if thread.is_alive():
+                log("shutdown", f"Warning: {thread.name} did not finish in time")
 
         self.transcriber.close()
         self.cleaner.close()

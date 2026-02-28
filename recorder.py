@@ -41,11 +41,19 @@ class Recorder:
         self._recording = False
         self._sample_count = 0
         self._started_at = 0.0
+        self._peak: float = 0.0
 
     @property
     def is_recording(self) -> bool:
         with self._lock:
             return self._recording
+
+    def read_peak(self) -> float:
+        """Read and reset peak amplitude (0.0-1.0 for float, 0-32768 for int16)."""
+        with self._lock:
+            peak = self._peak
+            self._peak = 0.0
+            return peak
 
     def _callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
         if status:
@@ -56,6 +64,8 @@ class Recorder:
                 return
             self._chunks.append(indata.copy())
             self._sample_count += frames
+            # Track peak amplitude for level metering
+            self._peak = max(self._peak, float(np.abs(indata).max()))
 
     def start(self) -> bool:
         with self._lock:

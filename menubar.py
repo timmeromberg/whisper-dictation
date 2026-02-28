@@ -35,6 +35,8 @@ class DictationMenuBar(rumps.App):
 
         self._app = DictationApp(self.config)
         self._app.on_state_change = self._on_state_change
+        self._is_recording = False
+        self._level_timer = rumps.Timer(self._update_level, 0.15)
 
         # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
@@ -102,14 +104,22 @@ class DictationMenuBar(rumps.App):
 
     # --- State callbacks ---
 
+    _LEVEL_BARS = ["\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"]
+
     def _on_state_change(self, state: str, detail: str) -> None:
         if state == "recording":
+            self._is_recording = True
             self.title = "\U0001f534"
             self._status_item.title = "Status: Recording..."
+            self._level_timer.start()
         elif state == "transcribing":
+            self._is_recording = False
+            self._level_timer.stop()
             self.title = "\u23f3"
             self._status_item.title = "Status: Transcribing..."
         elif state == "idle":
+            self._is_recording = False
+            self._level_timer.stop()
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
         elif state == "language_changed":
@@ -120,6 +130,15 @@ class DictationMenuBar(rumps.App):
             new_lang = self._app._languages[self._app._lang_index]
             for item in self._lang_menu.values():
                 item.state = 1 if f"({new_lang})" in item.title else 0
+
+    def _update_level(self, _timer) -> None:
+        if not self._is_recording:
+            return
+        peak = self._app.recorder.read_peak()
+        # int16 range: normalize to 0.0-1.0
+        normalized = min(peak / 32768.0, 1.0)
+        bar_index = min(int(normalized * len(self._LEVEL_BARS)), len(self._LEVEL_BARS) - 1)
+        self.title = f"\U0001f534{self._LEVEL_BARS[bar_index]}"
 
     # --- Setting actions ---
 
