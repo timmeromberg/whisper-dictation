@@ -21,6 +21,8 @@ languages = ["en", "nl"]
 timeout_seconds = 120.0
 # Vocabulary biasing — helps Whisper recognize domain-specific words
 # prompt = "Kotlin, PostgreSQL, whisper-dic"
+# If primary provider fails, try the other one
+failover = false
 
 [whisper.local]
 url = "http://localhost:2022/v1/audio/transcriptions"

@@ -27,7 +27,7 @@ from hotkey import KEY_MAP, HotkeyListener
 from log import log
 from paster import TextPaster
 from recorder import Recorder, RecordingResult
-from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
+from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber, create_transcriber_for
 
 LANG_NAMES = {
     "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
@@ -75,6 +75,7 @@ class WhisperConfig:
     languages: list[str] = field(default_factory=lambda: ["en"])
     timeout_seconds: float = 120.0
     prompt: str = ""
+    failover: bool = False
     local: WhisperLocalConfig = field(default_factory=WhisperLocalConfig)
     groq: WhisperGroqConfig = field(default_factory=WhisperGroqConfig)
 
@@ -166,6 +167,7 @@ def load_config(path: Path) -> AppConfig:
             languages=languages,
             timeout_seconds=float(whisper_data.get("timeout_seconds", 120.0)),
             prompt=str(whisper_data.get("prompt", "")),
+            failover=bool(whisper_data.get("failover", False)),
             local=WhisperLocalConfig(
                 url=str(
                     whisper_local_data.get(
@@ -538,6 +540,24 @@ class DictationApp:
                 else:
                     raise
 
+    def _try_failover(self, audio_bytes: bytes) -> str | None:
+        """Attempt transcription with the other provider. Returns text or None."""
+        primary = self.config.whisper.provider
+        fallback = "local" if primary == "groq" else "groq"
+        log("failover", f"Primary {primary} failed, trying {fallback}...")
+        try:
+            fb = create_transcriber_for(self.config.whisper, fallback)
+            try:
+                text = fb.transcribe(audio_bytes)
+                log("failover", f"Fallback {fallback} succeeded")
+                self._notify(f"Used {fallback} fallback ({primary} was down)")
+                return text
+            finally:
+                fb.close()
+        except Exception as fb_exc:
+            log("failover", f"Fallback {fallback} also failed: {fb_exc}")
+            return None
+
     @staticmethod
     def check_permissions() -> list[str]:
         """Check macOS permissions. Returns list of missing permission names."""
@@ -654,7 +674,17 @@ class DictationApp:
                 log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({size_kb:.0f} KB)...")
                 if self.on_state_change:
                     self.on_state_change("transcribing", "")
-                transcript = self._transcribe_with_retry(result.audio_bytes)
+                try:
+                    transcript = self._transcribe_with_retry(result.audio_bytes)
+                except Exception:
+                    if self.config.whisper.failover:
+                        fallback_text = self._try_failover(result.audio_bytes)
+                        if fallback_text is not None:
+                            transcript = fallback_text
+                        else:
+                            raise
+                    else:
+                        raise
                 log("pipeline", f"Transcript: '{transcript}'")
 
                 cleaned = transcript

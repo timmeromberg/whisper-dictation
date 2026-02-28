@@ -102,6 +102,13 @@ class DictationMenuBar(rumps.App):
             callback=self._toggle_audio_control,
         )
 
+        # --- Failover toggle ---
+        fo_on = self.config.whisper.failover
+        self._failover_item = rumps.MenuItem(
+            f"Failover: {'on' if fo_on else 'off'}",
+            callback=self._toggle_failover,
+        )
+
         # --- How to Use ---
         key_display = self.config.hotkey.key.replace("_", " ")
         self._help_menu = rumps.MenuItem("How to Use")
@@ -152,6 +159,7 @@ class DictationMenuBar(rumps.App):
             self._textcmds_item,
             self._autosend_item,
             self._audioctrl_item,
+            self._failover_item,
             None,
             self._build_recording_menu(),
             rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
@@ -370,6 +378,15 @@ class DictationMenuBar(rumps.App):
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
+    def _toggle_failover(self, _sender) -> None:
+        current = self.config.whisper.failover
+        new_val = not current
+        self._set_config("whisper.failover", "true" if new_val else "false")
+        self.config.whisper.failover = new_val
+        self._app.config.whisper.failover = new_val
+        self._failover_item.title = f"Failover: {'on' if new_val else 'off'}"
+        print(f"[menubar] Failover: {'on' if new_val else 'off'}")
+
     def _build_recording_menu(self) -> rumps.MenuItem:
         menu = rumps.MenuItem("Recording")
         self._min_dur_item = rumps.MenuItem(
@@ -549,6 +566,10 @@ class DictationMenuBar(rumps.App):
         if new_config.audio_control.enabled != old.audio_control.enabled:
             self._app.audio_controller._enabled = new_config.audio_control.enabled
             self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
+
+        if new_config.whisper.failover != old.whisper.failover:
+            self._app.config.whisper.failover = new_config.whisper.failover
+            self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
 
         rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
 
