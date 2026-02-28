@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import signal
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -57,6 +58,7 @@ class WhisperGroqConfig:
 class WhisperConfig:
     provider: str = "local"
     language: str = "en"
+    languages: list[str] = field(default_factory=lambda: ["en"])
     timeout_seconds: float = 120.0
     local: WhisperLocalConfig = field(default_factory=WhisperLocalConfig)
     groq: WhisperGroqConfig = field(default_factory=WhisperGroqConfig)
@@ -103,6 +105,15 @@ def load_config(path: Path) -> AppConfig:
     if provider not in {"local", "groq"}:
         provider = "local"
 
+    raw_languages = whisper_data.get("languages", None)
+    language = str(whisper_data.get("language", "en"))
+    if isinstance(raw_languages, list) and raw_languages:
+        languages = [str(lang) for lang in raw_languages]
+    else:
+        languages = [language]
+    if language not in languages:
+        languages.insert(0, language)
+
     return AppConfig(
         hotkey=HotkeyConfig(
             key=str(hotkey_data.get("key", "right_option")),
@@ -114,7 +125,8 @@ def load_config(path: Path) -> AppConfig:
         ),
         whisper=WhisperConfig(
             provider=provider,
-            language=str(whisper_data.get("language", "en")),
+            language=language,
+            languages=languages,
             timeout_seconds=float(whisper_data.get("timeout_seconds", 120.0)),
             local=WhisperLocalConfig(
                 url=str(
@@ -260,6 +272,12 @@ class DictationApp:
             key_name=config.hotkey.key,
         )
 
+        self._languages = list(config.whisper.languages)
+        self._lang_index = 0
+        # Set initial index to match active language
+        if config.whisper.language in self._languages:
+            self._lang_index = self._languages.index(config.whisper.language)
+
         self._stop_event = threading.Event()
         self._pipeline_lock = threading.Lock()
         self._threads_lock = threading.Lock()
@@ -268,6 +286,35 @@ class DictationApp:
     @property
     def stopped(self) -> bool:
         return self._stop_event.is_set()
+
+    def _notify(self, message: str, title: str = "whisper-dic") -> None:
+        """Show a macOS notification banner."""
+        try:
+            subprocess.Popen(
+                ["osascript", "-e", f'display notification "{message}" with title "{title}"'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    def _cycle_language(self) -> None:
+        """Cycle to the next language and update the transcriber."""
+        self._lang_index = (self._lang_index + 1) % len(self._languages)
+        new_lang = self._languages[self._lang_index]
+        self.transcriber.language = new_lang
+
+        LANG_NAMES = {
+            "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
+            "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
+            "ja": "Japanese", "zh": "Chinese", "ko": "Korean", "auto": "Auto-detect",
+            "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
+            "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
+        }
+        display = LANG_NAMES.get(new_lang, new_lang)
+        print(f"[language] Switched to {display} ({new_lang})")
+        self._notify(f"Language: {display}")
+        self._play_beep(1200.0)
 
     def _play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
@@ -321,10 +368,12 @@ class DictationApp:
         self._play_beep(self.config.audio_feedback.stop_frequency)
 
         if result.duration_seconds < self.config.recording.min_duration:
-            print(
-                f"[recording] Ignored short tap ({result.duration_seconds:.2f}s < "
-                f"{self.config.recording.min_duration:.2f}s)."
-            )
+            if len(self._languages) > 1:
+                self._cycle_language()
+            else:
+                print(
+                    f"[recording] Ignored short tap ({result.duration_seconds:.2f}s)."
+                )
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
@@ -380,7 +429,10 @@ class DictationApp:
             return 1
 
         self._listener.start()
-        print("[ready] Hold right Option to dictate. Release to transcribe and paste.")
+        key = self.config.hotkey.key.replace("_", " ")
+        lang_list = ", ".join(self._languages)
+        print(f"[ready] Hold {key} to dictate. Quick tap to cycle language.")
+        print(f"[ready] Languages: {lang_list} (active: {self._languages[self._lang_index]})")
 
         while not self.stopped:
             time.sleep(0.1)

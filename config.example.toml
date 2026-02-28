@@ -8,8 +8,10 @@ sample_rate = 16000
 
 [whisper]
 # Which provider to use: "local" or "groq"
-provider = "groq"
+provider = "local"
 language = "en"
+# Quick-tap the hotkey to cycle between these languages
+languages = ["en", "nl"]
 timeout_seconds = 120.0
 
 [whisper.local]
@@ -17,7 +19,7 @@ url = "http://localhost:2022/v1/audio/transcriptions"
 model = "large-v3"
 
 [whisper.groq]
-api_key = "YOUR_API_KEY_HERE"
+api_key = ""
 model = "whisper-large-v3"
 url = "https://api.groq.com/openai/v1/audio/transcriptions"
 

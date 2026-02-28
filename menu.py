@@ -91,6 +91,59 @@ def _prompt_for_groq_key() -> str | None:
     return value if value else None
 
 
+def _show_language_picker(current_languages: list[str]) -> list[str] | None:
+    """Multi-select language picker. Returns new language list or None if cancelled."""
+    selected = set(current_languages)
+
+    while True:
+        entries = []
+        for lang in LANGUAGE_OPTIONS:
+            marker = "✓" if lang in selected else " "
+            entries.append(f"  [{marker}] {lang}")
+        entries.append(_SEPARATOR)
+        entries.append("  ✔ Done")
+        entries.append("  ✕ Cancel")
+
+        title = _boxed_title("SELECT LANGUAGES") + "  Toggle with Enter. At least one required.\n\n"
+        sel = _show_menu(entries, title)
+
+        if sel is None or sel == len(LANGUAGE_OPTIONS) + 2:
+            return None
+
+        if sel == len(LANGUAGE_OPTIONS) + 1:
+            # Done
+            result = [lang for lang in LANGUAGE_OPTIONS if lang in selected]
+            return result if result else None
+
+        if sel < len(LANGUAGE_OPTIONS):
+            lang = LANGUAGE_OPTIONS[sel]
+            if lang in selected:
+                if len(selected) > 1:
+                    selected.remove(lang)
+            else:
+                selected.add(lang)
+
+
+def _write_languages(config_path: Path, languages: list[str]) -> None:
+    """Write the languages list directly to config.toml."""
+    text = config_path.read_text(encoding="utf-8")
+    import re
+    # Replace existing languages line
+    lang_toml = "[" + ", ".join(f'"{lang}"' for lang in languages) + "]"
+    pattern = re.compile(r"(?m)^(\s*languages\s*=\s*).*$")
+    if pattern.search(text):
+        text = pattern.sub(rf"\g<1>{lang_toml}", text)
+    else:
+        # Insert after language = line
+        text = re.sub(
+            r"(?m)^(language\s*=\s*.*)$",
+            rf"\1\nlanguages = {lang_toml}",
+            text,
+            count=1,
+        )
+    config_path.write_text(text, encoding="utf-8")
+
+
 def run_setup_menu(config_path: Path) -> str:
     """Run interactive settings menu. Returns 'start' or 'quit'."""
     load_config, set_config_value = _resolve_dictation_functions()
@@ -99,10 +152,12 @@ def run_setup_menu(config_path: Path) -> str:
         config = load_config(config_path)
         groq_status = "set" if config.whisper.groq.api_key.strip() else "not set"
 
+        langs_display = ", ".join(config.whisper.languages)
+
         title = _boxed_title("WHISPER-DIC SETTINGS") + "\n"
         entries = [
             _setting_line("Provider", config.whisper.provider),
-            _setting_line("Language", config.whisper.language),
+            _setting_line("Languages", langs_display),
             _setting_line("Hotkey", config.hotkey.key),
             _setting_line("Groq Key", groq_status),
             _SEPARATOR,
@@ -130,9 +185,11 @@ def run_setup_menu(config_path: Path) -> str:
             continue
 
         if selection == 1:
-            language = _show_choice_menu("SELECT LANGUAGE", LANGUAGE_OPTIONS, config.whisper.language)
-            if language is not None and language != config.whisper.language:
-                set_config_value(config_path, "whisper.language", language)
+            new_langs = _show_language_picker(config.whisper.languages)
+            if new_langs is not None and new_langs != config.whisper.languages:
+                _write_languages(config_path, new_langs)
+                # Set active language to first in list
+                set_config_value(config_path, "whisper.language", new_langs[0])
             continue
 
         if selection == 2:
