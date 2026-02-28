@@ -377,7 +377,13 @@ class DictationApp:
         if result is None:
             return
 
-        self._play_beep(self.config.audio_feedback.stop_frequency)
+        if auto_send:
+            # Double beep for auto-send: two quick high tones
+            self._play_beep(1100.0)
+            time.sleep(0.1)
+            self._play_beep(1100.0)
+        else:
+            self._play_beep(self.config.audio_feedback.stop_frequency)
 
         if result.duration_seconds < self.config.recording.min_duration:
             now = time.monotonic()
