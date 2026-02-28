@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from typing import Optional
 
@@ -36,6 +37,7 @@ def _ctrl_is_pressed() -> bool:
 
 
 _CTRL_KEYS = {keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
+_CTRL_WINDOW_SECONDS = 0.5  # Control must be held within this window of hotkey release
 
 
 class RightOptionHotkeyListener:
@@ -57,7 +59,7 @@ class RightOptionHotkeyListener:
         self._lock = threading.Lock()
         self._pressed = False
         self._ctrl_held = False
-        self._ctrl_seen_during_hold = False
+        self._ctrl_last_seen: float = 0.0  # monotonic timestamp of last ctrl press/hold
         self._listener: Optional[keyboard.Listener] = None
 
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
@@ -77,9 +79,7 @@ class RightOptionHotkeyListener:
         if key in _CTRL_KEYS:
             with self._lock:
                 self._ctrl_held = True
-                # If hotkey is already held, mark ctrl as seen during this hold
-                if self._pressed:
-                    self._ctrl_seen_during_hold = True
+                self._ctrl_last_seen = time.monotonic()
             return
 
         if not self._matches(key):
@@ -89,7 +89,6 @@ class RightOptionHotkeyListener:
         with self._lock:
             if not self._pressed:
                 self._pressed = True
-                self._ctrl_seen_during_hold = self._ctrl_held or _ctrl_is_pressed()
                 should_fire = True
 
         if should_fire:
@@ -105,21 +104,21 @@ class RightOptionHotkeyListener:
             return
 
         should_fire = False
-        ctrl_was_held = False
+        ctrl_recent = False
         with self._lock:
             if self._pressed:
                 self._pressed = False
-                # Was ctrl held at ANY point during this hold? That's enough.
-                ctrl_was_held = (
-                    self._ctrl_seen_during_hold
-                    or self._ctrl_held
+                now = time.monotonic()
+                # Control counts if: currently held, OR was held within the last 500ms
+                ctrl_recent = (
+                    self._ctrl_held
                     or _ctrl_is_pressed()
+                    or (now - self._ctrl_last_seen) < _CTRL_WINDOW_SECONDS
                 )
-                self._ctrl_seen_during_hold = False
                 should_fire = True
 
         if should_fire:
-            self._on_hold_end(ctrl_was_held)
+            self._on_hold_end(ctrl_recent)
 
     def start(self) -> None:
         with self._lock:
