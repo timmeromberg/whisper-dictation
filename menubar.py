@@ -206,6 +206,10 @@ class DictationMenuBar(rumps.App):
 
 
 def run_menubar(config_path: Path) -> int:
+    # Hide Python from Dock — menu bar only
+    from AppKit import NSApplication
+    NSApplication.sharedApplication().setActivationPolicy_(1)  # NSApplicationActivationPolicyAccessory
+
     app = DictationMenuBar(config_path)
 
     thread = threading.Thread(target=app._start_dictation, daemon=True)
