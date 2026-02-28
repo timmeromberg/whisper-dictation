@@ -23,6 +23,7 @@ from pynput import keyboard
 import commands
 from audio_control import AudioControlConfig, AudioController
 from cleaner import TextCleaner
+from history import TranscriptionHistory
 from hotkey import KEY_MAP, HotkeyListener
 from log import log
 from paster import TextPaster
@@ -362,6 +363,8 @@ class DictationApp:
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
         self.paster = TextPaster()
         self.audio_controller = AudioController(config.audio_control)
+
+        self.history = TranscriptionHistory()
 
         if config.custom_commands:
             commands.register_custom(config.custom_commands)
@@ -723,6 +726,7 @@ class DictationApp:
                     return
 
                 self.paster.paste(cleaned, auto_send=auto_send)
+                self.history.add(cleaned, self.active_language, result.duration_seconds)
                 log("pipeline", f"Pasted {len(cleaned)} chars (auto_send={auto_send}).")
                 if self.on_state_change:
                     self.on_state_change("idle", "")

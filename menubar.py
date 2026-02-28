@@ -148,6 +148,10 @@ class DictationMenuBar(rumps.App):
             text_cmds.add(item)
         self._help_menu.add(text_cmds)
 
+        # --- History submenu ---
+        self._history_menu = rumps.MenuItem("History")
+        self._rebuild_history_menu()
+
         # --- Build menu ---
         self.menu = [
             self._status_item,
@@ -161,6 +165,7 @@ class DictationMenuBar(rumps.App):
             self._audioctrl_item,
             self._failover_item,
             None,
+            self._history_menu,
             self._build_recording_menu(),
             rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
             None,
@@ -172,6 +177,50 @@ class DictationMenuBar(rumps.App):
             self._version_item(),
             rumps.MenuItem("Quit", callback=self._quit),
         ]
+
+    # --- History ---
+
+    def _rebuild_history_menu(self) -> None:
+        # rumps MenuItem._menu is None before the run loop starts,
+        # so we can only clear() after first render.
+        try:
+            self._history_menu.clear()
+        except AttributeError:
+            pass  # first call during __init__ — menu not yet attached
+
+        entries = self._app.history.entries()
+        if not entries:
+            item = rumps.MenuItem("No entries yet")
+            item.set_callback(None)
+            self._history_menu.add(item)
+            return
+
+        import time as _time
+        now = _time.time()
+        for entry in entries[:20]:
+            age = now - entry.timestamp
+            if age < 60:
+                ago = f"{int(age)}s ago"
+            elif age < 3600:
+                ago = f"{int(age / 60)}m ago"
+            else:
+                ago = f"{int(age / 3600)}h ago"
+            display = entry.text[:50] + ("..." if len(entry.text) > 50 else "")
+            item = rumps.MenuItem(f"{display}  ({ago})", callback=self._copy_history_entry)
+            item._history_text = entry.text
+            self._history_menu.add(item)
+
+        self._history_menu.add(None)
+        self._history_menu.add(rumps.MenuItem("Clear History", callback=self._clear_history))
+
+    def _copy_history_entry(self, sender) -> None:
+        import subprocess
+        subprocess.run(["pbcopy"], input=sender._history_text.encode(), check=True)
+        rumps.notification("whisper-dic", "Copied", sender._history_text[:80])
+
+    def _clear_history(self, _sender) -> None:
+        self._app.history.clear()
+        self._rebuild_history_menu()
 
     # --- Config helpers ---
 
@@ -200,6 +249,7 @@ class DictationMenuBar(rumps.App):
             self._level_timer.stop()
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
+            self._rebuild_history_menu()
         elif state == "language_changed":
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
