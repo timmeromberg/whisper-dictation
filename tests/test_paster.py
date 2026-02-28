@@ -5,17 +5,17 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 
-class TestFrontmostBundleId:
-    def test_returns_bundle_id(self) -> None:
-        with patch("paster.subprocess.run") as mock_run:
+class TestFrontmostAppId:
+    def test_returns_app_id(self) -> None:
+        with patch("compat._macos.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(stdout="com.apple.Terminal\n")
-            from paster import _frontmost_bundle_id
-            assert _frontmost_bundle_id() == "com.apple.Terminal"
+            from paster import frontmost_app_id
+            assert frontmost_app_id() == "com.apple.Terminal"
 
     def test_returns_empty_on_error(self) -> None:
-        with patch("paster.subprocess.run", side_effect=Exception("fail")):
-            from paster import _frontmost_bundle_id
-            assert _frontmost_bundle_id() == ""
+        with patch("compat._macos.subprocess.run", side_effect=Exception("fail")):
+            from paster import frontmost_app_id
+            assert frontmost_app_id() == ""
 
 
 class TestTextPaster:
@@ -46,8 +46,8 @@ class TestTextPaster:
         with (
             patch("paster.pyperclip"),
             patch("paster.time"),
-            patch("paster._frontmost_bundle_id", return_value="com.apple.Terminal"),
-            patch("paster._post_key") as mock_post,
+            patch("paster.frontmost_app_id", return_value="com.apple.Terminal"),
+            patch("paster.post_keycode") as mock_post,
         ):
             p.paste("test", auto_send=True)
             mock_post.assert_called_once()
@@ -58,8 +58,8 @@ class TestTextPaster:
         with (
             patch("paster.pyperclip"),
             patch("paster.time"),
-            patch("paster._frontmost_bundle_id", return_value="com.apple.Safari"),
-            patch("paster._post_key") as mock_post,
+            patch("paster.frontmost_app_id", return_value="com.apple.Safari"),
+            patch("paster.post_keycode") as mock_post,
         ):
             p.paste("test", auto_send=True)
             mock_post.assert_not_called()
