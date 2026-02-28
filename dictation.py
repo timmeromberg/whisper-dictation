@@ -354,6 +354,29 @@ class DictationApp:
         if self.on_state_change:
             self.on_state_change("language_changed", f"{display} ({new_lang})")
 
+    def _play_error_beep(self) -> None:
+        """Low descending double-buzz to signal an error."""
+        feedback = self.config.audio_feedback
+        if not feedback.enabled:
+            return
+
+        sample_rate = 44100
+        duration = 0.15
+        sample_count = int(sample_rate * duration)
+        timeline = np.linspace(0, duration, sample_count, endpoint=False)
+        # Descending buzz: 400Hz -> 200Hz
+        freqs = np.linspace(400, 200, sample_count)
+        tone = np.sin(2.0 * np.pi * freqs * timeline).astype(np.float32)
+        tone *= feedback.volume
+        # Two buzzes with a gap
+        gap = np.zeros(int(sample_rate * 0.08), dtype=np.float32)
+        signal = np.concatenate([tone, gap, tone])
+
+        try:
+            sd.play(signal, samplerate=sample_rate, blocking=False)
+        except Exception:
+            pass
+
     def _play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
         if not feedback.enabled:
@@ -453,7 +476,8 @@ class DictationApp:
     def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
         try:
             with self._pipeline_lock:
-                log("pipeline", "Transcribing...")
+                wav_size_kb = len(result.wav_bytes) / 1024
+                log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({wav_size_kb:.0f} KB)...")
                 if self.on_state_change:
                     self.on_state_change("transcribing", "")
                 transcript = self.transcriber.transcribe(result.wav_bytes)
@@ -490,6 +514,11 @@ class DictationApp:
                     self.on_state_change("idle", "")
         except Exception as exc:
             log("pipeline", f"Failed: {exc}")
+            # Audio + visual feedback so the user knows something went wrong
+            self._play_error_beep()
+            self._notify(f"Transcription failed: {exc}")
+            if self.on_state_change:
+                self.on_state_change("idle", "")
         finally:
             current = threading.current_thread()
             with self._threads_lock:
