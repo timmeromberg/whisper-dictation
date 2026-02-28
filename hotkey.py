@@ -9,11 +9,16 @@ from typing import Optional
 from pynput import keyboard
 
 KEY_MAP = {
+    "left_option": keyboard.Key.alt_l,
+    "alt_l": keyboard.Key.alt_l,
+    "left_alt": keyboard.Key.alt_l,
     "right_option": keyboard.Key.alt_r,
     "alt_r": keyboard.Key.alt_r,
     "right_alt": keyboard.Key.alt_r,
     "right_command": keyboard.Key.cmd_r,
     "right_shift": keyboard.Key.shift_r,
+    "left_command": keyboard.Key.cmd_l,
+    "left_shift": keyboard.Key.shift_l,
 }
 
 

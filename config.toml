@@ -1,5 +1,5 @@
 [hotkey]
-key = "right_option"
+key = "left_option"
 
 [recording]
 min_duration = 0.3
@@ -8,7 +8,7 @@ sample_rate = 16000
 
 [whisper]
 # Which provider to use: "local" or "groq"
-provider = "local"
+provider = "groq"
 language = "en"
 timeout_seconds = 120.0
 
@@ -17,7 +17,7 @@ url = "http://localhost:2022/v1/audio/transcriptions"
 model = "large-v3"
 
 [whisper.groq]
-api_key = ""
+api_key = "YOUR_API_KEY_HERE"
 model = "whisper-large-v3"
 url = "https://api.groq.com/openai/v1/audio/transcriptions"
 
