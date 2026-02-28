@@ -425,6 +425,10 @@ class DictationApp:
         if self.stopped:
             return
 
+        # Play start beep before muting so it's audible
+        self._play_beep(self.config.audio_feedback.start_frequency)
+        time.sleep(self.config.audio_feedback.duration_seconds + 0.02)
+
         # Mute audio devices before recording starts
         self.audio_controller.mute()
 
@@ -436,7 +440,6 @@ class DictationApp:
             return
 
         if started:
-            self._play_beep(self.config.audio_feedback.start_frequency)
             log("recording", "Started.")
             if self.on_state_change:
                 self.on_state_change("recording", "")
