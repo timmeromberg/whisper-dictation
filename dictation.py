@@ -367,8 +367,8 @@ class DictationApp:
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            log("notify", f"Notification failed: {exc}")
 
     def _cycle_language(self) -> None:
         """Cycle to the next language and update the transcriber."""
@@ -404,8 +404,8 @@ class DictationApp:
 
         try:
             sd.play(signal, samplerate=sample_rate, blocking=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            log("audio", f"Error beep failed: {exc}")
 
     def _play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
@@ -631,12 +631,20 @@ def _load_config_from_path(config_path: Path) -> AppConfig:
         if example.exists():
             import shutil
             shutil.copy2(example, config_path)
+            config_path.chmod(0o600)
             print(f"[setup] Created {config_path.name} from template. Edit it to set your preferences.")
         else:
             raise FileNotFoundError(
                 f"Config file not found: {config_path}\n"
                 f"Run: cp config.example.toml config.toml"
             )
+
+    # Fix permissions if config is world-readable (it may contain API keys)
+    mode = config_path.stat().st_mode & 0o777
+    if mode & 0o044:
+        config_path.chmod(0o600)
+        print(f"[security] Fixed {config_path.name} permissions (was {oct(mode)}, now 0600).")
+
     return load_config(config_path)
 
 

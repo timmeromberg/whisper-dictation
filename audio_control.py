@@ -35,7 +35,7 @@ class LocalMacDevice:
                 capture_output=True, text=True, timeout=5,
             )
             # Output: "output volume:69, input volume:50, alert volume:100, output muted:false"
-            parts = dict(p.strip().split(":") for p in r.stdout.strip().split(","))
+            parts = dict(p.strip().split(":", 1) for p in r.stdout.strip().split(","))
             self._was_muted = parts.get("output muted", "").strip() == "true"
             self._saved_volume = int(parts.get("output volume", "50").strip())
             log("audio_ctrl", f"Saved Mac volume: {self._saved_volume}, was_muted: {self._was_muted}")
