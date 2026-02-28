@@ -9,3 +9,4 @@ config.toml
 *.egg-info/
 dist/
 build/
+.claude/
