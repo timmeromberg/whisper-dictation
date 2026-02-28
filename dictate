@@ -1,0 +1,10 @@
+#!/bin/bash
+# System-wide dictation CLI
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/dictation.py" "$@"
