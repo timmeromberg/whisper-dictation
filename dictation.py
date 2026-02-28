@@ -419,7 +419,7 @@ class DictationApp:
         tone *= feedback.volume
 
         try:
-            sd.play(tone, samplerate=sample_rate, blocking=False)
+            sd.play(tone, samplerate=sample_rate, blocking=True)
         except Exception as exc:
             log("audio", f"Beep failed: {exc}")
 
@@ -468,11 +468,9 @@ class DictationApp:
             return
 
         # Play start beep before muting so it's audible
+        # play_beep uses blocking=True so the beep fully plays and
+        # PortAudio resources are released before we open the recorder
         self.play_beep(self.config.audio_feedback.start_frequency)
-        # Wait for the beep's output stream to fully finish and release
-        # PortAudio resources — avoids double-free crash when opening
-        # the recording input stream immediately after
-        sd.wait()
 
         # Mute audio devices before recording starts
         self.audio_controller.mute()
@@ -508,14 +506,11 @@ class DictationApp:
         if command_mode:
             # Triple short beep for command mode
             self.play_beep(1320.0)
-            time.sleep(0.08)
             self.play_beep(1320.0)
-            time.sleep(0.08)
             self.play_beep(1320.0)
         elif auto_send:
             # Double beep for auto-send
             self.play_beep(1100.0)
-            time.sleep(0.1)
             self.play_beep(1100.0)
         else:
             self.play_beep(self.config.audio_feedback.stop_frequency)
