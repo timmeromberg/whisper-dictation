@@ -7,9 +7,9 @@ import time
 from collections.abc import Callable
 from typing import Optional
 
-import Quartz
 from pynput import keyboard
 
+from compat import MASK_CONTROL, MASK_SHIFT, modifier_is_pressed
 from log import log
 
 KEY_MAP = {
@@ -24,18 +24,6 @@ KEY_MAP = {
     "left_command": keyboard.Key.cmd_l,
     "left_shift": keyboard.Key.shift_l,
 }
-
-
-def _modifier_is_pressed(mask: int) -> bool:
-    """Check if a modifier is physically held right now (Quartz flag check)."""
-    for source in (
-        Quartz.kCGEventSourceStateHIDSystemState,
-        Quartz.kCGEventSourceStateCombinedSessionState,
-    ):
-        flags = Quartz.CGEventSourceFlagsState(source)
-        if flags & mask:
-            return True
-    return False
 
 
 _CTRL_KEYS = {keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
@@ -89,10 +77,10 @@ class HotkeyListener:
         return False
 
     def _modifier_recent(self, held: bool, last_seen: float, mask: int, now: float) -> bool:
-        """Check if a modifier was active: currently held, Quartz says so, or within window."""
+        """Check if a modifier was active: currently held, OS says so, or within window."""
         return (
             held
-            or _modifier_is_pressed(mask)
+            or modifier_is_pressed(mask)
             or (now - last_seen) < _MODIFIER_WINDOW_SECONDS
         )
 
@@ -152,11 +140,11 @@ class HotkeyListener:
                 shift_delta = now - self._shift_last_seen
                 auto_send = self._modifier_recent(
                     self._ctrl_held, self._ctrl_last_seen,
-                    Quartz.kCGEventFlagMaskControl, now,
+                    MASK_CONTROL, now,
                 )
                 command_mode = self._modifier_recent(
                     self._shift_held, self._shift_last_seen,
-                    Quartz.kCGEventFlagMaskShift, now,
+                    MASK_SHIFT, now,
                 )
                 cd, sd = ctrl_delta, shift_delta
                 log("hotkey", f"Release: send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s")
