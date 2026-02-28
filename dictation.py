@@ -535,13 +535,10 @@ class DictationApp:
         if self.stopped:
             return
 
-        # Play start beep before muting so it's audible
-        # play_beep uses blocking=True so the beep fully plays and
-        # PortAudio resources are released before we open the recorder
+        # Play start beep before recording
         self.play_beep(self.config.audio_feedback.start_frequency)
-
-        # Mute audio devices before recording starts
-        self.audio_controller.mute()
+        # Brief delay for CoreAudio to fully release after afplay
+        time.sleep(0.05)
 
         try:
             started = self.recorder.start()
@@ -549,12 +546,14 @@ class DictationApp:
             log("recording", f"Failed to start stream: {exc}")
             self._play_error_beep()
             self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
-            self.audio_controller.unmute()
             if self.on_state_change:
                 self.on_state_change("idle", "")
             return
 
         if started:
+            # Mute after recording starts — avoids CoreAudio interference
+            # during PortAudio stream creation
+            self.audio_controller.mute()
             log("recording", "Started.")
             if self.on_state_change:
                 self.on_state_change("recording", "")
