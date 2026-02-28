@@ -8,8 +8,9 @@ from pathlib import Path
 
 import rumps
 
+from cli import _PLIST_PATH, command_install, command_uninstall
 from config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
-from dictation import _PLIST_PATH, DictationApp, command_install, command_uninstall
+from dictation import DictationApp
 from overlay import RecordingOverlay
 from transcriber import create_transcriber
 

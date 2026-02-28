@@ -29,14 +29,14 @@ else
 fi
 
 # Step 3: Startup test — app must start and stay alive for 3 seconds
-pkill -f "dictation.py menubar.*--config.*/tmp/smoke" 2>/dev/null || true
+pkill -f "cli.py menubar.*--config.*/tmp/smoke" 2>/dev/null || true
 sleep 0.5
 
 SMOKE_CONFIG="/tmp/smoke-test-whisper-dic.toml"
 cp "$SCRIPT_DIR/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null || true
 
 echo "[smoke] Starting menubar app..."
-"$PYTHON" "$SCRIPT_DIR/dictation.py" menubar --config "$SMOKE_CONFIG" >/dev/null 2>&1 &
+"$PYTHON" "$SCRIPT_DIR/cli.py" menubar --config "$SMOKE_CONFIG" >/dev/null 2>&1 &
 PID=$!
 
 sleep 3
@@ -142,9 +142,9 @@ fi
 
 # Step 6: CLI argument parsing test
 echo "[smoke] CLI test..."
-"$PYTHON" "$SCRIPT_DIR/dictation.py" --help >/dev/null 2>&1
-"$PYTHON" "$SCRIPT_DIR/dictation.py" status --help >/dev/null 2>&1
-"$PYTHON" "$SCRIPT_DIR/dictation.py" set --help >/dev/null 2>&1
+"$PYTHON" "$SCRIPT_DIR/cli.py" --help >/dev/null 2>&1
+"$PYTHON" "$SCRIPT_DIR/cli.py" status --help >/dev/null 2>&1
+"$PYTHON" "$SCRIPT_DIR/cli.py" set --help >/dev/null 2>&1
 echo "[smoke] CLI: passed"
 
 # Step 7: Text commands and cleaner coverage

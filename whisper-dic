@@ -15,4 +15,4 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 
-exec "$PYTHON" "$SCRIPT_DIR/dictation.py" "$@"
+exec "$PYTHON" "$SCRIPT_DIR/cli.py" "$@"
