@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import atexit
+import os
 import signal
 import subprocess
 from pathlib import Path
@@ -10,6 +12,33 @@ from pathlib import Path
 from config import AppConfig, _to_toml_literal, load_config, set_config_value
 from dictation import DictationApp
 from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
+
+_PID_FILE = Path("/tmp/whisper-dic.pid")
+
+
+def _check_single_instance() -> bool:
+    """Return True if no other instance is running. Writes PID file."""
+    if _PID_FILE.exists():
+        try:
+            pid = int(_PID_FILE.read_text().strip())
+            os.kill(pid, 0)  # check if process alive
+            print(f"[error] whisper-dic is already running (PID {pid}).")
+            print("[error] Stop it first, or remove /tmp/whisper-dic.pid if stale.")
+            return False
+        except (ProcessLookupError, ValueError):
+            pass  # stale PID file — overwrite
+
+    _PID_FILE.write_text(str(os.getpid()))
+    atexit.register(_cleanup_pid)
+    return True
+
+
+def _cleanup_pid() -> None:
+    try:
+        if _PID_FILE.exists() and _PID_FILE.read_text().strip() == str(os.getpid()):
+            _PID_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _load_config_from_path(config_path: Path) -> AppConfig:
@@ -155,6 +184,9 @@ def command_set(config_path: Path, key: str, value: str) -> int:
 
 
 def command_run(config_path: Path) -> int:
+    if not _check_single_instance():
+        return 1
+
     try:
         config = _load_config_from_path(config_path)
     except Exception as exc:
