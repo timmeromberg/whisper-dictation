@@ -842,6 +842,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser(
         "discover",
+        parents=[config_parent],
         help="Discover audio devices on the local network",
     )
     subparsers.add_parser(
@@ -878,7 +879,7 @@ def main() -> int:
         return command_set(config_path, args.key, args.value)
     if command == "discover":
         from audio_control import discover
-        discover()
+        discover(config_path)
         return 0
     if command == "install":
         return command_install()

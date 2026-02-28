@@ -333,89 +333,123 @@ class AudioController:
                 log("audio_ctrl", f"Network unmute error ({dev.name}): {exc}")
 
 
-def discover() -> None:
-    """Discover audio devices on the local network and print results."""
-    print("\nScanning for audio devices...\n")
+def _discover_all() -> list[dict]:
+    """Discover all audio devices and return as list of dicts."""
+    found: list[dict] = []
 
     # ADB devices
-    print("--- ADB devices (Android) ---")
-    devices = _adb_devices()
-    if devices:
-        for serial, model in devices:
-            print(f"  Name: {model}")
-            print(f"  Serial: {serial}")
-            print(f"  Type: adb")
-            print(f"  Config:")
-            print(f'    [[audio_control.devices]]')
-            print(f'    type = "adb"')
-            print(f'    name = "{model}"')
-            print()
-    else:
-        try:
-            subprocess.run(["adb", "version"], capture_output=True, timeout=3)
-            print("  (no devices connected — pair via Settings > Developer Options > Wireless debugging)")
-        except FileNotFoundError:
-            print("  adb not installed. Run: brew install android-platform-tools")
-    print()
+    for serial, model in _adb_devices():
+        found.append({"type": "adb", "name": model, "serial": serial})
 
-    # Chromecast discovery
-    print("--- Chromecast devices ---")
+    # Chromecast
     try:
         import pychromecast
         chromecasts, browser = pychromecast.get_chromecasts(timeout=8)
-        if chromecasts:
-            for cc in chromecasts:
-                print(f"  Name: {cc.name}")
-                print(f"  Type: chromecast")
-                print(f"  Model: {cc.model_name}")
-                print()
-        else:
-            print("  (none found)")
+        for cc in chromecasts:
+            found.append({"type": "chromecast", "name": cc.name, "model": cc.model_name})
         pychromecast.discovery.stop_discovery(browser)
     except ImportError:
-        print("  pychromecast not installed. Run: pip install pychromecast")
-    except Exception as exc:
-        print(f"  Discovery error: {exc}")
+        pass
+    except Exception:
+        pass
 
-    print()
-
-    # UPnP/DLNA discovery
-    print("--- UPnP/DLNA devices ---")
+    # UPnP/DLNA
     try:
         import asyncio
         from async_upnp_client.search import async_search
 
         async def _scan():
-            found = []
+            results = []
             async def _cb(headers):
                 location = headers.get("location", "")
                 server = headers.get("server", "")
                 st = headers.get("st", "")
                 if "RenderingControl" in st or "MediaRenderer" in st:
-                    found.append({"location": location, "server": server, "st": st})
-
+                    results.append({"location": location, "server": server})
             await async_search(_cb, timeout=8)
-            return found
+            return results
 
         loop = asyncio.new_event_loop()
         try:
-            results = loop.run_until_complete(_scan())
+            for r in loop.run_until_complete(_scan()):
+                found.append({"type": "upnp", "name": r["server"], "location": r["location"]})
         finally:
             loop.close()
-
-        if results:
-            for r in results:
-                print(f"  Location: {r['location']}")
-                print(f"  Server: {r['server']}")
-                print(f"  Type: upnp")
-                print()
-        else:
-            print("  (none found)")
     except ImportError:
-        print("  async-upnp-client not installed. Run: pip install async-upnp-client")
-    except Exception as exc:
-        print(f"  Discovery error: {exc}")
+        pass
+    except Exception:
+        pass
 
+    return found
+
+
+def _append_device_to_config(config_path, dev: dict) -> None:
+    """Append a device entry to the [audio_control] section of config.toml."""
+    from pathlib import Path
+    path = Path(config_path)
+    text = path.read_text(encoding="utf-8")
+
+    dev_type = dev["type"]
+    dev_name = dev["name"]
+
+    block = f'\n[[audio_control.devices]]\ntype = "{dev_type}"\nname = "{dev_name}"\n'
+
+    # Find the [audio_control] section and insert before the next section
+    import re
+    ac_match = re.search(r"(?m)^\[audio_control\]\s*$", text)
+    if ac_match is None:
+        # No [audio_control] section — append one
+        text = text.rstrip() + "\n\n[audio_control]\nenabled = true\nmute_local = true\n" + block
+    else:
+        # Find the next section header after [audio_control]
+        next_section = re.search(r"(?m)^\[[^\]]+\]\s*$", text[ac_match.end():])
+        if next_section:
+            insert_at = ac_match.end() + next_section.start()
+            text = text[:insert_at] + block + "\n" + text[insert_at:]
+        else:
+            text = text.rstrip() + block
+
+    path.write_text(text, encoding="utf-8")
+
+
+def discover(config_path=None) -> None:
+    """Discover audio devices and optionally add them to config."""
+    print("\nScanning for audio devices...\n")
+
+    found = _discover_all()
+
+    if not found:
+        print("No devices found.\n")
+        # Print hints
+        try:
+            subprocess.run(["adb", "version"], capture_output=True, timeout=3)
+            print("ADB is installed but no Android devices connected.")
+            print("Pair via: Settings > Developer Options > Wireless debugging")
+        except FileNotFoundError:
+            print("For Android: install adb (brew install android-platform-tools)")
+        print()
+        return
+
+    print(f"Found {len(found)} device(s):\n")
+    for i, dev in enumerate(found, 1):
+        print(f"  {i}. [{dev['type']}] {dev['name']}")
     print()
-    print("Add discovered devices to your config.toml [audio_control] section.")
-    print("See config.example.toml for examples.")
+
+    if config_path is None:
+        print("Run with --config to auto-add devices to your config.")
+        return
+
+    try:
+        answer = input("Add all discovered devices to config? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+
+    if answer in ("", "y", "yes"):
+        for dev in found:
+            _append_device_to_config(config_path, dev)
+            print(f"  Added: [{dev['type']}] {dev['name']}")
+        print(f"\nDone. {len(found)} device(s) added to config.")
+        print("Restart whisper-dic to pick up the changes.")
+    else:
+        print("No changes made.")
