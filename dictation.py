@@ -462,8 +462,11 @@ class DictationApp:
                     if commands.execute(cleaned):
                         if self.on_state_change:
                             self.on_state_change("idle", "")
-                        return
-                    print(f"[pipeline] No command match for '{cleaned}', pasting as text.")
+                    else:
+                        print(f"[command] No match for '{cleaned}', ignoring.")
+                        if self.on_state_change:
+                            self.on_state_change("idle", "")
+                    return
 
                 self.paster.paste(cleaned, auto_send=auto_send)
                 print(f"[pipeline] Pasted {len(cleaned)} chars.")
