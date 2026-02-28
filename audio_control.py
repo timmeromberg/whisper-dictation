@@ -7,7 +7,8 @@ import shlex
 import subprocess
 import threading
 from dataclasses import dataclass, field
-from typing import Protocol
+from pathlib import Path
+from typing import Any, Protocol
 
 from log import log
 
@@ -187,9 +188,9 @@ class ChromecastDevice:
 
     def __init__(self, name: str) -> None:
         self.name = name
-        self._cast = None
+        self._cast: Any = None
 
-    def _get_cast(self):
+    def _get_cast(self) -> Any:
         if self._cast is not None:
             return self._cast
         try:
@@ -423,7 +424,7 @@ def _discover_all() -> list[dict]:
     return found
 
 
-def _append_device_to_config(config_path, dev: dict) -> None:
+def _append_device_to_config(config_path: str | Path, dev: dict) -> None:
     """Append a device entry to the [audio_control] section of config.toml."""
     from pathlib import Path
     path = Path(config_path)
@@ -452,7 +453,7 @@ def _append_device_to_config(config_path, dev: dict) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def discover(config_path=None) -> None:
+def discover(config_path: str | Path | None = None) -> None:
     """Discover audio devices and optionally add them to config."""
     print("\nScanning for audio devices...\n")
 

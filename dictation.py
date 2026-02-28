@@ -223,10 +223,12 @@ class DictationApp:
 
     def _transcribe_with_retry(self, audio_bytes: bytes, max_attempts: int = 4) -> str:
         """Transcribe with retry on transient network errors (SSL, connection reset)."""
+        last_exc: Exception | None = None
         for attempt in range(1, max_attempts + 1):
             try:
                 return self.transcriber.transcribe(audio_bytes)
             except Exception as exc:
+                last_exc = exc
                 err_str = str(exc).lower()
                 is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
                 if is_transient and attempt < max_attempts:
@@ -235,6 +237,7 @@ class DictationApp:
                     time.sleep(wait)
                 else:
                     raise
+        raise RuntimeError("Transcription failed after retries") from last_exc
 
     def _try_failover(self, audio_bytes: bytes) -> str | None:
         """Attempt transcription with the other provider. Returns text or None."""

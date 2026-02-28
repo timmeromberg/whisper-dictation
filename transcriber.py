@@ -33,6 +33,8 @@ def _describe_http_error(response: httpx.Response) -> str:
 class WhisperTranscriber(ABC):
     """Base interface for OpenAI-compatible Whisper transcription clients."""
 
+    language: str
+
     @abstractmethod
     def health_check(self) -> bool:
         """Return True when the configured service is reachable."""

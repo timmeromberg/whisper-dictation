@@ -51,7 +51,8 @@ def _show_menu(entries: list[str], title: str, cursor_index: int = 0) -> int | N
         cycle_cursor=True,
         show_shortcut_hints=False,
     )
-    return menu.show()
+    result = menu.show()
+    return int(result) if result is not None else None
 
 
 def _show_choice_menu(menu_title: str, options: list[str], current_value: str) -> str | None:

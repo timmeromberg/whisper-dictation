@@ -5,6 +5,7 @@ from __future__ import annotations
 import signal
 import threading
 from pathlib import Path
+from typing import Any
 
 import rumps
 
@@ -209,12 +210,12 @@ class DictationMenuBar(rumps.App):
         self._history_menu.add(None)
         self._history_menu.add(rumps.MenuItem("Clear History", callback=self._clear_history))
 
-    def _copy_history_entry(self, sender) -> None:
+    def _copy_history_entry(self, sender: Any) -> None:
         import subprocess
         subprocess.run(["pbcopy"], input=sender._history_text.encode(), check=True)
         rumps.notification("whisper-dic", "Copied", sender._history_text[:80])
 
-    def _clear_history(self, _sender) -> None:
+    def _clear_history(self, _sender: Any) -> None:
         self._app.history.clear()
         self._rebuild_history_menu()
 
@@ -258,7 +259,7 @@ class DictationMenuBar(rumps.App):
             for item in self._lang_menu.values():
                 item.state = 1 if f"({new_lang})" in item.title else 0
 
-    def _periodic_health_check(self, _timer) -> None:
+    def _periodic_health_check(self, _timer: Any) -> None:
         def _run():
             ok = self._app.transcriber.health_check()
             if not ok and self._provider_healthy:
@@ -282,7 +283,7 @@ class DictationMenuBar(rumps.App):
                                    "Connection restored. Dictation is ready.")
         threading.Thread(target=_run, daemon=True).start()
 
-    def _update_level(self, _timer) -> None:
+    def _update_level(self, _timer: Any) -> None:
         if not self._is_recording:
             return
         peak = self._app.recorder.read_peak()
@@ -299,7 +300,7 @@ class DictationMenuBar(rumps.App):
 
     # --- Setting actions ---
 
-    def _switch_language(self, sender) -> None:
+    def _switch_language(self, sender: Any) -> None:
         # Extract lang code from "English (en)"
         lang = sender.title.split("(")[-1].rstrip(")")
         if lang == self._app.active_language:
@@ -312,7 +313,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("whisper.language", lang)
         print(f"[menubar] Language: {display} ({lang})")
 
-    def _switch_provider(self, sender) -> None:
+    def _switch_provider(self, sender: Any) -> None:
         provider = sender.title
         if provider == self.config.whisper.provider:
             return
@@ -347,7 +348,7 @@ class DictationMenuBar(rumps.App):
         self.config = load_config(self.config_path)
         return True
 
-    def _set_groq_key(self, _sender) -> None:
+    def _set_groq_key(self, _sender: Any) -> None:
         """Menu item callback to set/update Groq API key."""
         if self._prompt_groq_key():
             # If currently using groq, recreate transcriber with new key
@@ -368,7 +369,7 @@ class DictationMenuBar(rumps.App):
             rumps.notification("whisper-dic", "Connection Failed",
                                f"{provider} provider is unreachable. Check your settings.")
 
-    def _switch_hotkey(self, sender) -> None:
+    def _switch_hotkey(self, sender: Any) -> None:
         hk = sender._hotkey_value
         if hk == self.config.hotkey.key:
             return
@@ -380,7 +381,7 @@ class DictationMenuBar(rumps.App):
             item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
         print(f"[menubar] Hotkey: {hk}")
 
-    def _on_volume_slide(self, sender) -> None:
+    def _on_volume_slide(self, sender: Any) -> None:
         import time as _time
         pct = int(sender.value)
         vol = pct / 100.0
@@ -400,7 +401,7 @@ class DictationMenuBar(rumps.App):
 
         threading.Thread(target=_persist, daemon=True).start()
 
-    def _toggle_text_commands(self, _sender) -> None:
+    def _toggle_text_commands(self, _sender: Any) -> None:
         current = self.config.text_commands.enabled
         new_val = not current
         self._set_config("text_commands.enabled", "true" if new_val else "false")
@@ -409,7 +410,7 @@ class DictationMenuBar(rumps.App):
         self._textcmds_item.title = f"Text Commands: {'on' if new_val else 'off'}"
         print(f"[menubar] Text Commands: {'on' if new_val else 'off'}")
 
-    def _toggle_auto_send(self, _sender) -> None:
+    def _toggle_auto_send(self, _sender: Any) -> None:
         current = self.config.paste.auto_send
         new_val = not current
         self._set_config("paste.auto_send", "true" if new_val else "false")
@@ -418,7 +419,7 @@ class DictationMenuBar(rumps.App):
         self._autosend_item.title = f"Auto-Send: {'on' if new_val else 'off'}"
         print(f"[menubar] Auto-Send: {'on' if new_val else 'off'}")
 
-    def _toggle_audio_control(self, _sender) -> None:
+    def _toggle_audio_control(self, _sender: Any) -> None:
         current = self.config.audio_control.enabled
         new_val = not current
         self._set_config("audio_control.enabled", "true" if new_val else "false")
@@ -427,7 +428,7 @@ class DictationMenuBar(rumps.App):
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
-    def _toggle_failover(self, _sender) -> None:
+    def _toggle_failover(self, _sender: Any) -> None:
         current = self.config.whisper.failover
         new_val = not current
         self._set_config("whisper.failover", "true" if new_val else "false")
@@ -476,7 +477,7 @@ class DictationMenuBar(rumps.App):
             rumps.notification("whisper-dic", "Invalid Value", "Enter a number (e.g. 0.3).")
             return None
 
-    def _edit_min_duration(self, _sender) -> None:
+    def _edit_min_duration(self, _sender: Any) -> None:
         cur = self.config.recording.min_duration
         val = self._prompt_float("Min Duration", "Minimum recording duration in seconds:", cur)
         if val is not None:
@@ -485,7 +486,7 @@ class DictationMenuBar(rumps.App):
             self._app.config.recording.min_duration = val
             self._min_dur_item.title = f"Min Duration: {val}s"
 
-    def _edit_max_duration(self, _sender) -> None:
+    def _edit_max_duration(self, _sender: Any) -> None:
         cur = self.config.recording.max_duration
         val = self._prompt_float("Max Duration", "Maximum recording duration in seconds:", cur)
         if val is not None:
@@ -494,7 +495,7 @@ class DictationMenuBar(rumps.App):
             self._app.config.recording.max_duration = val
             self._max_dur_item.title = f"Max Duration: {val}s"
 
-    def _edit_timeout(self, _sender) -> None:
+    def _edit_timeout(self, _sender: Any) -> None:
         val = self._prompt_float("Timeout", "Transcription timeout in seconds:", self.config.whisper.timeout_seconds)
         if val is not None:
             self._set_config("whisper.timeout_seconds", str(val))
@@ -512,7 +513,7 @@ class DictationMenuBar(rumps.App):
         menu.add(self._installed_item)
         return menu
 
-    def _install_service(self, _sender) -> None:
+    def _install_service(self, _sender: Any) -> None:
         def _run():
             rc = command_install()
             if rc == 0:
@@ -524,7 +525,7 @@ class DictationMenuBar(rumps.App):
             self._installed_item.title = f"Installed: {'Yes' if _PLIST_PATH.exists() else 'No'}"
         threading.Thread(target=_run, daemon=True).start()
 
-    def _uninstall_service(self, _sender) -> None:
+    def _uninstall_service(self, _sender: Any) -> None:
         result = rumps.alert(
             title="Uninstall whisper-dic?",
             message="This will remove whisper-dic from login items. It won't auto-start anymore.",
@@ -552,7 +553,7 @@ class DictationMenuBar(rumps.App):
         item.set_callback(None)
         return item
 
-    def _check_status(self, _sender) -> None:
+    def _check_status(self, _sender: Any) -> None:
         def _run():
             provider = self.config.whisper.provider
             lang = self._app.active_language
@@ -564,7 +565,7 @@ class DictationMenuBar(rumps.App):
             )
         threading.Thread(target=_run, daemon=True).start()
 
-    def _view_logs(self, _sender) -> None:
+    def _view_logs(self, _sender: Any) -> None:
         log_path = Path.home() / "Library" / "Logs" / "whisper-dictation.log"
         if not log_path.exists():
             rumps.notification("whisper-dic", "No Logs", "No log file found yet.")
@@ -572,7 +573,7 @@ class DictationMenuBar(rumps.App):
         from AppKit import NSWorkspace
         NSWorkspace.sharedWorkspace().openFile_(str(log_path))
 
-    def _on_config_changed(self, new_config) -> None:
+    def _on_config_changed(self, new_config: Any) -> None:
         """Called from watcher thread when config.toml changes externally."""
         from log import log
         log("config-watch", "Config changed externally, reloading...")
@@ -624,7 +625,7 @@ class DictationMenuBar(rumps.App):
 
         rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
 
-    def _run_wizard(self, _timer=None) -> None:
+    def _run_wizard(self, _timer: Any = None) -> None:
         """First-run setup wizard — guides through provider, API key, hotkey."""
         if _timer is not None:
             _timer.stop()
@@ -710,7 +711,7 @@ class DictationMenuBar(rumps.App):
         thread = threading.Thread(target=self._start_dictation, daemon=True)
         thread.start()
 
-    def _quit(self, _sender) -> None:
+    def _quit(self, _sender: Any) -> None:
         self._config_watcher.stop()
         self._app.stop()
         rumps.quit_application()
@@ -788,7 +789,7 @@ def run_menubar(config_path: Path) -> int:
         thread = threading.Thread(target=app._start_dictation, daemon=True)
         thread.start()
 
-    def _handle_signal(signum: int, _frame) -> None:
+    def _handle_signal(signum: int, _frame: Any) -> None:
         app._app.stop()
         rumps.quit_application()
 

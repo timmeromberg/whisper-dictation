@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 from AppKit import (
     NSBezierPath,
@@ -83,14 +84,15 @@ class RecordingOverlay:
         """Hide the dot. Safe to call from any thread."""
         callAfter(self._hide)
 
-    def _show(self, color) -> None:
+    def _show(self, color: Any) -> None:
         """Main-thread: create window if needed, set color, show."""
         self._ensure_window()
         if self._dot is None:
             return
         self._dot._color = color
         self._dot.setNeedsDisplay_(True)
-        self._window.orderFront_(None)
+        if self._window is not None:
+            self._window.orderFront_(None)
 
     def _hide(self) -> None:
         """Main-thread: hide window."""

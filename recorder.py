@@ -6,7 +6,7 @@ import io
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import sounddevice as sd
@@ -55,7 +55,7 @@ class Recorder:
             self._peak = 0.0
             return peak
 
-    def _callback(self, indata: np.ndarray, frames: int, time_info, status) -> None:
+    def _callback(self, indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
         if status:
             print(f"[recorder] stream status: {status}")
 

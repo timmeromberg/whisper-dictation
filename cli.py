@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from config import AppConfig, _to_toml_literal, load_config, set_config_value
 from dictation import DictationApp
@@ -200,7 +201,7 @@ def command_run(config_path: Path) -> int:
         print(f"Failed to initialize app: {exc}")
         return 1
 
-    def _handle_signal(signum: int, _frame) -> None:
+    def _handle_signal(signum: int, _frame: Any) -> None:
         try:
             name = signal.Signals(signum).name
         except ValueError:
