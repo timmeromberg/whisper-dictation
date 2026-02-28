@@ -63,10 +63,11 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
         files = {
             "file": ("dictation.wav", wav_bytes, "audio/wav"),
         }
-        data = {
+        data: dict[str, str] = {
             "model": self.model,
-            "language": self.language,
         }
+        if self.language and self.language != "auto":
+            data["language"] = self.language
 
         response = self._client.post(self.url, data=data, files=files)
         response.raise_for_status()
