@@ -160,5 +160,103 @@ echo "[smoke] CLI test..."
 "$PYTHON" "$SCRIPT_DIR/dictation.py" set --help >/dev/null 2>&1
 echo "[smoke] CLI: passed"
 
+# Step 7: Text commands and cleaner coverage
+echo "[smoke] Text commands test..."
+"$PYTHON" -c "
+from cleaner import TextCleaner
+
+c = TextCleaner(text_commands=True)
+
+# Punctuation commands
+cases = [
+    ('Hello period', 'Hello.'),
+    ('Hello comma world', 'Hello, world'),
+    ('Hello question mark', 'Hello?'),
+    ('Hello exclamation mark', 'Hello!'),
+    ('Hello exclamation point', 'Hello!'),
+    ('Hello semicolon world', 'Hello; world'),
+    ('Hello colon world', 'Hello: world'),
+    ('Hello full stop', 'Hello.'),
+]
+for inp, expected in cases:
+    got = c.clean(inp)
+    assert got == expected, f'{inp!r} => {got!r}, expected {expected!r}'
+
+# Formatting commands
+assert '\n\n' in c.clean('Hello new paragraph world')
+assert '\n' in c.clean('Hello new line world')
+assert '\t' in c.clean('Hello tab world')
+
+# Filler removal
+fillers = ['um', 'uh', 'ah', 'erm', 'hmm', 'basically', 'literally', 'actually']
+for f in fillers:
+    cleaned = c.clean(f'Hello {f} world')
+    assert f not in cleaned.lower(), f'Filler {f!r} not removed from {cleaned!r}'
+
+# Multi-word fillers
+assert 'you know' not in c.clean('Hello you know world').lower()
+assert 'I mean' not in c.clean('Hello I mean world')
+assert 'sort of' not in c.clean('Hello sort of world').lower()
+assert 'kind of' not in c.clean('Hello kind of world').lower()
+
+# Repeated word removal
+assert c.clean('I I think') == 'I think'
+assert c.clean('the the world') == 'The world'
+
+# Empty / whitespace input
+assert c.clean('') == ''
+assert c.clean('   ') == '   '
+
+# Text commands disabled
+c_no_cmds = TextCleaner(text_commands=False)
+assert 'period' in c_no_cmds.clean('Hello period').lower()
+
+c.close()
+c_no_cmds.close()
+print('[smoke] Text commands: passed (all cases)')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: text commands test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
+# Step 8: Config edge cases
+echo "[smoke] Config test..."
+"$PYTHON" -c "
+import os, tempfile, tomllib
+from pathlib import Path
+os.chdir('$SCRIPT_DIR')
+from dictation import load_config
+
+# Default config loads without error
+config = load_config(Path('$SMOKE_CONFIG'))
+assert config.hotkey.key is not None, 'Hotkey key is None'
+assert config.recording.sample_rate > 0, 'Invalid sample rate'
+assert config.recording.min_duration > 0, 'Invalid min_duration'
+assert config.recording.max_duration > config.recording.min_duration, 'max <= min'
+assert config.whisper.provider in ('local', 'groq'), f'Unknown provider: {config.whisper.provider}'
+print(f'  Default config: OK (provider={config.whisper.provider}, hotkey={config.hotkey.key})')
+
+# Minimal config (empty file) loads with sane defaults
+minimal = tempfile.NamedTemporaryFile(suffix='.toml', mode='w', delete=False)
+minimal.write('')
+minimal.close()
+config2 = load_config(Path(minimal.name))
+assert config2.hotkey.key is not None, 'Empty config: no default hotkey'
+assert config2.recording.sample_rate > 0, 'Empty config: no default sample rate'
+os.unlink(minimal.name)
+print(f'  Empty config: OK (defaults applied)')
+
+print('[smoke] Config: passed')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: config test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
 rm -f "$SMOKE_CONFIG"
 echo "[smoke] All checks passed."
