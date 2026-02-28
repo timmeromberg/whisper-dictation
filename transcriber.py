@@ -56,11 +56,13 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
         language: str,
         model: str,
         timeout_seconds: float,
+        prompt: str = "",
         headers: dict[str, str] | None = None,
     ) -> None:
         self.url = url
         self.language = language
         self.model = model
+        self.prompt = prompt
         self._client = httpx.Client(
             timeout=timeout_seconds,
             headers=headers or {},
@@ -88,6 +90,8 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
         }
         if self.language and self.language != "auto":
             data["language"] = self.language
+        if self.prompt:
+            data["prompt"] = self.prompt
 
         response = self._client.post(self.url, data=data, files=files)
         if response.status_code != 200:
@@ -109,12 +113,14 @@ class LocalWhisperTranscriber(_HTTPWhisperTranscriber):
         language: str = "en",
         model: str = DEFAULT_LOCAL_MODEL,
         timeout_seconds: float = 120.0,
+        prompt: str = "",
     ) -> None:
         super().__init__(
             url=url,
             language=language,
             model=model,
             timeout_seconds=timeout_seconds,
+            prompt=prompt,
         )
 
 
@@ -128,6 +134,7 @@ class GroqWhisperTranscriber(_HTTPWhisperTranscriber):
         language: str = "en",
         model: str = DEFAULT_GROQ_MODEL,
         timeout_seconds: float = 120.0,
+        prompt: str = "",
     ) -> None:
         headers: dict[str, str] = {}
         if api_key.strip():
@@ -138,6 +145,7 @@ class GroqWhisperTranscriber(_HTTPWhisperTranscriber):
             language=language,
             model=model,
             timeout_seconds=timeout_seconds,
+            prompt=prompt,
             headers=headers,
         )
 
@@ -148,6 +156,7 @@ def create_transcriber(config: Any) -> WhisperTranscriber:
     provider = str(getattr(config, "provider", "local")).strip().lower()
     language = str(getattr(config, "language", "en"))
     timeout_seconds = float(getattr(config, "timeout_seconds", 120.0))
+    prompt = str(getattr(config, "prompt", ""))
 
     if provider == "local":
         local_cfg = getattr(config, "local", None)
@@ -158,6 +167,7 @@ def create_transcriber(config: Any) -> WhisperTranscriber:
             language=language,
             model=model,
             timeout_seconds=timeout_seconds,
+            prompt=prompt,
         )
 
     if provider == "groq":
@@ -171,6 +181,7 @@ def create_transcriber(config: Any) -> WhisperTranscriber:
             language=language,
             model=model,
             timeout_seconds=timeout_seconds,
+            prompt=prompt,
         )
 
     raise ValueError(f"Unsupported whisper provider '{provider}'. Expected 'local' or 'groq'.")

@@ -74,6 +74,7 @@ class WhisperConfig:
     language: str = "en"
     languages: list[str] = field(default_factory=lambda: ["en"])
     timeout_seconds: float = 120.0
+    prompt: str = ""
     local: WhisperLocalConfig = field(default_factory=WhisperLocalConfig)
     groq: WhisperGroqConfig = field(default_factory=WhisperGroqConfig)
 
@@ -164,6 +165,7 @@ def load_config(path: Path) -> AppConfig:
             language=language,
             languages=languages,
             timeout_seconds=float(whisper_data.get("timeout_seconds", 120.0)),
+            prompt=str(whisper_data.get("prompt", "")),
             local=WhisperLocalConfig(
                 url=str(
                     whisper_local_data.get(
