@@ -6,13 +6,19 @@ System-wide hold-to-dictate for macOS. Hold a key, speak, release — your words
 
 - **Hold-to-dictate** — hold a hotkey to record, release to transcribe and paste
 - **Voice commands** — hold Option + Shift, say "copy", "paste", "undo", "screenshot", etc.
+- **Custom voice commands** — map any spoken phrase to a keyboard shortcut via `[custom_commands]`
 - **Auto-send** — hold Option + Ctrl to auto-press Return after pasting (for chat/terminal)
-- **Multi-language** — quick-tap the hotkey to cycle between configured languages
+- **Multi-language** — double-tap the hotkey to cycle between configured languages
 - **Text commands** — say "period", "new line", "question mark" for punctuation
 - **Filler removal** — automatically strips "um", "uh", "you know", etc.
+- **Provider failover** — automatically tries the other provider when the primary fails
+- **Whisper prompt** — bias transcription toward domain-specific vocabulary
+- **Persistent history** — transcription history saved across sessions
+- **Actionable errors** — error notifications tell you what to fix, not just what failed
 - **Auto-mute** — mute Mac speakers, Android devices, Chromecasts during recording
 - **Menu bar app** — shows recording status and mic level, switch settings without restart
 - **Auto-start** — install as login item with automatic crash recovery
+- **Config validation** — invalid values are clamped to sane defaults with warnings
 
 ## Quick Start
 
@@ -29,6 +35,9 @@ git clone https://github.com/timmeromberg/whisper-dictation.git
 cd whisper-dictation
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+
+# Alternative: editable install
+.venv/bin/pip install -e .
 ```
 
 ### 3. Configure
@@ -87,7 +96,7 @@ Hold **Left Option**, speak, release. Your words should appear at the cursor.
 | **Option** | Dictate — transcribe and paste |
 | **Option + Ctrl** | Dictate + send — paste and press Return |
 | **Option + Shift** | Voice command — execute instead of paste |
-| **Quick tap Option** | Cycle language |
+| **Double-tap Option** | Cycle language |
 
 ### Voice Commands
 
@@ -173,12 +182,30 @@ url = "http://localhost:2022/v1/audio/transcriptions"
 model = "large-v3"
 ```
 
+### Failover
+
+Automatically try the other provider when the primary fails:
+
+```toml
+[whisper]
+failover = true
+```
+
+### Whisper Prompt
+
+Bias transcription toward specific vocabulary (technical terms, names, etc.):
+
+```toml
+[whisper]
+prompt = "whisper-dic, macOS, Groq, PyAudio"
+```
+
 ### Languages
 
 ```toml
 [whisper]
 language = "en"
-languages = ["en", "nl", "de"]  # quick-tap cycles through these
+languages = ["en", "nl", "de"]  # double-tap cycles through these
 ```
 
 ### Audio Feedback
@@ -219,6 +246,20 @@ name = "My Device"
 mute_command = "some-command --mute"
 unmute_command = "some-command --unmute"
 ```
+
+### Custom Voice Commands
+
+Map any spoken phrase to a keyboard shortcut:
+
+```toml
+[custom_commands]
+"zoom in" = "cmd+="
+"zoom out" = "cmd+-"
+"next tab" = "ctrl+tab"
+"close window" = "cmd+w"
+```
+
+Use with Option + Shift (voice command mode).
 
 ## Auto-Start at Login
 
@@ -274,7 +315,9 @@ Click the icon to switch language, provider, hotkey, beep volume, or quit.
 ```
 whisper-dictation/
 ├── whisper-dic              # entry point (bash wrapper)
-├── dictation.py             # main app, CLI, config
+├── cli.py                   # CLI commands, argparse, main()
+├── config.py                # config loading, validation, live-reload
+├── dictation.py             # core hold-to-dictate engine
 ├── menubar.py               # menu bar UI
 ├── recorder.py              # microphone capture
 ├── transcriber.py           # Whisper API clients
@@ -282,9 +325,13 @@ whisper-dictation/
 ├── commands.py              # voice command table
 ├── cleaner.py               # text cleanup
 ├── paster.py                # clipboard + paste
+├── history.py               # persistent transcription history
+├── overlay.py               # floating status overlay
 ├── audio_control.py         # device muting
 ├── log.py                   # logging
 ├── menu.py                  # setup TUI
+├── tests/                   # pytest test suite
+├── pyproject.toml           # project config (ruff, pytest)
 ├── config.example.toml      # config template
 ├── config.toml              # your config (gitignored)
 └── requirements.txt         # dependencies
