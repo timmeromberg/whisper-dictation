@@ -12,12 +12,18 @@ from log import log
 VK_RETURN = 36
 
 _VK = {
-    "a": 0, "b": 11, "c": 8, "d": 2, "f": 3, "n": 45, "p": 35,
-    "s": 1, "v": 9, "x": 7, "z": 6,
+    "a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3, "g": 5,
+    "h": 4, "i": 34, "j": 38, "k": 40, "l": 37, "m": 46, "n": 45,
+    "o": 31, "p": 35, "q": 12, "r": 15, "s": 1, "t": 17, "u": 32,
+    "v": 9, "w": 13, "x": 7, "y": 16, "z": 6,
+    "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23,
+    "6": 22, "7": 26, "8": 28, "9": 25,
     "return": 36, "tab": 48, "escape": 53, "delete": 51,
     "space": 49, "up": 126, "down": 125, "left": 123, "right": 124,
-    "3": 20, "4": 21,
+    "-": 27, "=": 24, "[": 33, "]": 30, "\\": 42, ";": 41,
+    "'": 39, ",": 43, ".": 47, "/": 44, "`": 50,
 }
+_FLAG_CTRL = Quartz.kCGEventFlagMaskControl
 
 _FLAG_CMD = Quartz.kCGEventFlagMaskCommand
 _FLAG_SHIFT = Quartz.kCGEventFlagMaskShift
@@ -59,8 +65,6 @@ _COMMANDS: dict[str, tuple[int, int]] = {
     "escape": (_VK["escape"], 0),
 }
 
-# Add missing key codes
-_VK["w"] = 13
 _COMMANDS["close tab"] = (_VK["w"], _FLAG_CMD)
 _COMMANDS["close window"] = (_VK["w"], _FLAG_CMD)
 _COMMANDS["new window"] = (_VK["n"], _FLAG_CMD)
@@ -150,3 +154,42 @@ def execute(text: str) -> bool:
 def list_commands() -> list[str]:
     """Return sorted list of available command names."""
     return sorted(_COMMANDS.keys())
+
+
+_MODIFIER_MAP = {
+    "cmd": _FLAG_CMD, "command": _FLAG_CMD,
+    "ctrl": _FLAG_CTRL, "control": _FLAG_CTRL,
+    "shift": _FLAG_SHIFT,
+    "alt": _FLAG_ALT, "option": _FLAG_ALT,
+}
+
+
+def _parse_shortcut(shortcut: str) -> tuple[int, int]:
+    """Parse a shortcut string like 'cmd+shift+z' into (vk, flags)."""
+    parts = [p.strip().lower() for p in shortcut.split("+")]
+    if not parts:
+        raise ValueError(f"Empty shortcut: {shortcut!r}")
+
+    key_name = parts[-1]
+    if key_name not in _VK:
+        raise ValueError(f"Unknown key {key_name!r}. Available: {', '.join(sorted(_VK))}")
+
+    flags = 0
+    for mod in parts[:-1]:
+        if mod not in _MODIFIER_MAP:
+            raise ValueError(f"Unknown modifier {mod!r}. Available: {', '.join(sorted(_MODIFIER_MAP))}")
+        flags |= _MODIFIER_MAP[mod]
+
+    return _VK[key_name], flags
+
+
+def register_custom(custom_commands: dict[str, str]) -> None:
+    """Register custom voice commands from config."""
+    for phrase, shortcut in custom_commands.items():
+        try:
+            vk, flags = _parse_shortcut(shortcut)
+            normalized = phrase.strip().lower()
+            _COMMANDS[normalized] = (vk, flags)
+            log("command", f"Registered custom: '{normalized}' -> {shortcut}")
+        except ValueError as exc:
+            log("command", f"Invalid custom command '{phrase}': {exc}")

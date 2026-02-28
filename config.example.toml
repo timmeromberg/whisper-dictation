@@ -67,6 +67,14 @@ mute_local = true
 # mute_command = "some-command --mute"
 # unmute_command = "some-command --unmute"
 
+# [custom_commands]
+# Add your own voice commands: phrase = "modifier+key"
+# Modifiers: cmd, ctrl, shift, alt (combine with +)
+# "switch tab" = "ctrl+tab"
+# "zoom in" = "cmd+="
+# "zoom out" = "cmd+-"
+# "refresh" = "cmd+r"
+
 [audio_feedback]
 enabled = true
 start_frequency = 880    # Hz — beep when recording starts

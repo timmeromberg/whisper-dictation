@@ -108,6 +108,7 @@ class AppConfig:
     whisper: WhisperConfig
     audio_feedback: AudioFeedbackConfig
     audio_control: AudioControlConfig = field(default_factory=AudioControlConfig)
+    custom_commands: dict[str, str] = field(default_factory=dict)
 
 
 def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
@@ -132,6 +133,7 @@ def load_config(path: Path) -> AppConfig:
     whisper_groq_data = _section(data, "whisper.groq")
     feedback_data = _section(data, "audio_feedback")
     audio_control_data = _section(data, "audio_control")
+    custom_commands_data = _section(data, "custom_commands")
 
     provider = str(whisper_data.get("provider", "local")).strip().lower()
     if provider not in {"local", "groq"}:
@@ -200,6 +202,7 @@ def load_config(path: Path) -> AppConfig:
             mute_local=bool(audio_control_data.get("mute_local", True)),
             devices=list(audio_control_data.get("devices", [])),
         ),
+        custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
     )
 
 
@@ -359,6 +362,9 @@ class DictationApp:
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
         self.paster = TextPaster()
         self.audio_controller = AudioController(config.audio_control)
+
+        if config.custom_commands:
+            commands.register_custom(config.custom_commands)
 
         self._listener = HotkeyListener(
             on_hold_start=self._on_hold_start,
