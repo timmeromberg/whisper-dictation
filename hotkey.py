@@ -43,7 +43,7 @@ _SHIFT_KEYS = {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r}
 _MODIFIER_WINDOW_SECONDS = 0.5  # Modifier must be active within this window of hotkey release
 
 
-class RightOptionHotkeyListener:
+class HotkeyListener:
     """Listens for hold/release of the hotkey and ignores key-repeat noise."""
 
     def __init__(

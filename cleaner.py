@@ -78,22 +78,8 @@ _TEXT_COMMAND_RES = [(re.compile(p, re.IGNORECASE), r) for p, r in _TEXT_COMMAND
 class TextCleaner:
     """Remove filler words and clean up transcription artifacts using regex."""
 
-    def __init__(self, text_commands: bool = True, **_kwargs) -> None:
+    def __init__(self, text_commands: bool = True) -> None:
         self.text_commands = text_commands
-
-    def health_check(self) -> bool:
-        return True
-
-    def prewarm(self, **_kwargs) -> bool:
-        return True
-
-    @property
-    def enabled(self) -> bool:
-        return True
-
-    @enabled.setter
-    def enabled(self, _value: bool) -> None:
-        pass
 
     def clean(self, text: str) -> str:
         if not text.strip():

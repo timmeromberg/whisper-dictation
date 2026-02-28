@@ -20,7 +20,7 @@ from pynput import keyboard
 import commands
 from audio_control import AudioControlConfig, AudioController
 from cleaner import TextCleaner
-from hotkey import KEY_MAP, RightOptionHotkeyListener
+from hotkey import KEY_MAP, HotkeyListener
 from log import log
 from paster import TextPaster
 
@@ -42,7 +42,7 @@ if hasattr(keyboard.Key, "shift_r"):
 
 @dataclass
 class HotkeyConfig:
-    key: str = "right_option"
+    key: str = "left_option"
 
 
 @dataclass
@@ -305,7 +305,7 @@ class DictationApp:
         self.paster = TextPaster()
         self.audio_controller = AudioController(config.audio_control)
 
-        self._listener = RightOptionHotkeyListener(
+        self._listener = HotkeyListener(
             on_hold_start=self._on_hold_start,
             on_hold_end=self._on_hold_end,
             key_name=config.hotkey.key,
@@ -349,7 +349,7 @@ class DictationApp:
         self.transcriber.language = lang
 
     @property
-    def listener(self) -> RightOptionHotkeyListener:
+    def listener(self) -> HotkeyListener:
         return self._listener
 
     def start_listener(self) -> None:
@@ -543,13 +543,12 @@ class DictationApp:
                 log("pipeline", f"Transcript: '{transcript}'")
 
                 cleaned = transcript
-                if self.cleaner.enabled:
-                    try:
-                        log("pipeline", "Cleaning transcript...")
-                        cleaned = self.cleaner.clean(transcript)
-                    except Exception as exc:
-                        log("pipeline", f"Cleanup failed, using raw transcript: {exc}")
-                        cleaned = transcript
+                try:
+                    log("pipeline", "Cleaning transcript...")
+                    cleaned = self.cleaner.clean(transcript)
+                except Exception as exc:
+                    log("pipeline", f"Cleanup failed, using raw transcript: {exc}")
+                    cleaned = transcript
 
                 cleaned = cleaned.strip()
                 if not cleaned:
