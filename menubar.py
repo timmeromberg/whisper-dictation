@@ -756,9 +756,10 @@ class DictationMenuBar(rumps.App):
 
 
 def run_menubar(config_path: Path) -> int:
-    from cli import _check_single_instance
+    from cli import _check_single_instance, _rotate_log_if_needed
     if not _check_single_instance():
         return 1
+    _rotate_log_if_needed()
 
     # Hide Python from Dock — menu bar only
     from AppKit import NSApplication

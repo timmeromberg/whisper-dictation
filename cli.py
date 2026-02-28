@@ -186,6 +186,7 @@ def command_set(config_path: Path, key: str, value: str) -> int:
 def command_run(config_path: Path) -> int:
     if not _check_single_instance():
         return 1
+    _rotate_log_if_needed()
 
     try:
         config = _load_config_from_path(config_path)
@@ -249,6 +250,21 @@ def command_setup(config_path: Path) -> int:
 _PLIST_LABEL = "com.whisper.dictation"
 _PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
 _LOG_PATH = str(Path.home() / "Library" / "Logs" / "whisper-dictation.log")
+_LOG_MAX_BYTES = 100 * 1024  # 100 KB
+_LOG_KEEP_LINES = 1000
+
+
+def _rotate_log_if_needed() -> None:
+    """Truncate log file to last N lines if it exceeds size threshold."""
+    log_path = Path(_LOG_PATH)
+    try:
+        if not log_path.exists() or log_path.stat().st_size <= _LOG_MAX_BYTES:
+            return
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        log_path.write_text("\n".join(lines[-_LOG_KEEP_LINES:]) + "\n", encoding="utf-8")
+        print(f"[log] Rotated log ({len(lines)} -> {_LOG_KEEP_LINES} lines)")
+    except Exception:
+        pass  # non-fatal
 
 
 def _generate_plist() -> str:
