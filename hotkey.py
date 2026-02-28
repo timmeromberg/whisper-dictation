@@ -8,10 +8,17 @@ from typing import Optional
 
 from pynput import keyboard
 
+# macOS Fn/Globe key — virtual keycode 63 (kVK_Function)
+_FN_KEYCODE = keyboard.KeyCode.from_vk(63)
+
 KEY_MAP = {
     "right_option": keyboard.Key.alt_r,
     "alt_r": keyboard.Key.alt_r,
     "right_alt": keyboard.Key.alt_r,
+    "right_command": keyboard.Key.cmd_r,
+    "right_shift": keyboard.Key.shift_r,
+    "fn": _FN_KEYCODE,
+    "globe": _FN_KEYCODE,
 }
 
 
@@ -36,7 +43,18 @@ class RightOptionHotkeyListener:
         self._listener: Optional[keyboard.Listener] = None
 
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
-        return key == self._target_key
+        if key == self._target_key:
+            return True
+        # KeyCode vk comparison for special keys like Fn/Globe
+        if (
+            isinstance(key, keyboard.KeyCode)
+            and isinstance(self._target_key, keyboard.KeyCode)
+            and key.vk is not None
+            and self._target_key.vk is not None
+            and key.vk == self._target_key.vk
+        ):
+            return True
+        return False
 
     def _handle_press(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
         if not self._matches(key):

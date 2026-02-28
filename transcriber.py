@@ -45,7 +45,11 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
         self.url = url
         self.language = language
         self.model = model
-        self._client = httpx.Client(timeout=timeout_seconds, headers=headers or {})
+        self._client = httpx.Client(
+            timeout=timeout_seconds,
+            headers=headers or {},
+            transport=httpx.HTTPTransport(retries=3),
+        )
 
     def health_check(self) -> bool:
         parts = urlsplit(self.url)
