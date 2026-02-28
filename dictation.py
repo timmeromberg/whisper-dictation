@@ -370,7 +370,7 @@ class DictationApp:
         if config.whisper.language in self._languages:
             self._lang_index = self._languages.index(config.whisper.language)
 
-        self._last_cycle_time = 0.0
+        self._last_tap_time = 0.0
         self._lang_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._pipeline_lock = threading.Lock()
@@ -616,9 +616,11 @@ class DictationApp:
 
         if result.duration_seconds < self.config.recording.min_duration:
             now = time.monotonic()
-            if len(self._languages) > 1 and (now - self._last_cycle_time) > 1.0:
-                self._last_cycle_time = now
+            if len(self._languages) > 1 and (now - self._last_tap_time) < 0.5:
+                self._last_tap_time = 0.0
                 self._cycle_language()
+            else:
+                self._last_tap_time = now
             if self.on_state_change:
                 self.on_state_change("idle", "")
             return
@@ -712,7 +714,7 @@ class DictationApp:
         lang_list = ", ".join(self.languages)
         log("ready", f"Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
         log("ready", f"Hold {key} + Shift for voice commands.")
-        log("ready", "Quick tap to cycle language.")
+        log("ready", "Double-tap to cycle language.")
         log("ready", f"Languages: {lang_list} (active: {self.active_language})")
 
         while not self.stopped:

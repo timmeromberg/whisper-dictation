@@ -109,7 +109,7 @@ class DictationMenuBar(rumps.App):
             f"Hold {key_display} — dictate",
             f"Hold {key_display} + Ctrl — dictate + send",
             f"Hold {key_display} + Shift — voice command",
-            f"Quick-tap {key_display} — cycle language",
+            f"Double-tap {key_display} — cycle language",
         ]:
             item = rumps.MenuItem(label)
             item.set_callback(None)
@@ -679,7 +679,7 @@ class DictationMenuBar(rumps.App):
         self._config_watcher.start()
         key = self.config.hotkey.key.replace("_", " ")
         rumps.notification("whisper-dic", "Ready",
-                           f"Hold {key} to dictate. Tap to cycle language.")
+                           f"Hold {key} to dictate. Double-tap to cycle language.")
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
 
 

@@ -16,7 +16,7 @@ sample_rate = 16000
 # Local: run a whisper.cpp server first (see https://github.com/ggerganov/whisper.cpp)
 provider = "local"
 language = "en"
-# Quick-tap the hotkey to cycle between these languages
+# Double-tap the hotkey to cycle between these languages
 languages = ["en", "nl"]
 timeout_seconds = 120.0
 # Vocabulary biasing — helps Whisper recognize domain-specific words
