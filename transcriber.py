@@ -136,8 +136,8 @@ def create_transcriber(config: Any) -> WhisperTranscriber:
 
     if provider == "local":
         local_cfg = getattr(config, "local", None)
-        url = str(getattr(local_cfg, "url", DEFAULT_LOCAL_URL))
-        model = str(getattr(local_cfg, "model", DEFAULT_LOCAL_MODEL))
+        url = str(getattr(local_cfg, "url", DEFAULT_LOCAL_URL)) if local_cfg else DEFAULT_LOCAL_URL
+        model = str(getattr(local_cfg, "model", DEFAULT_LOCAL_MODEL)) if local_cfg else DEFAULT_LOCAL_MODEL
         return LocalWhisperTranscriber(
             url=url,
             language=language,
@@ -147,9 +147,9 @@ def create_transcriber(config: Any) -> WhisperTranscriber:
 
     if provider == "groq":
         groq_cfg = getattr(config, "groq", None)
-        api_key = str(getattr(groq_cfg, "api_key", ""))
-        url = str(getattr(groq_cfg, "url", DEFAULT_GROQ_URL))
-        model = str(getattr(groq_cfg, "model", DEFAULT_GROQ_MODEL))
+        api_key = str(getattr(groq_cfg, "api_key", "")) if groq_cfg else ""
+        url = str(getattr(groq_cfg, "url", DEFAULT_GROQ_URL)) if groq_cfg else DEFAULT_GROQ_URL
+        model = str(getattr(groq_cfg, "model", DEFAULT_GROQ_MODEL)) if groq_cfg else DEFAULT_GROQ_MODEL
         return GroqWhisperTranscriber(
             api_key=api_key,
             url=url,

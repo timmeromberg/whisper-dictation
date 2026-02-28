@@ -440,8 +440,8 @@ def _append_device_to_config(config_path, dev: dict) -> None:
     path = Path(config_path)
     text = path.read_text(encoding="utf-8")
 
-    dev_type = dev["type"]
-    dev_name = dev["name"]
+    dev_type = dev["type"].replace("\\", "\\\\").replace('"', '\\"')
+    dev_name = dev["name"].replace("\\", "\\\\").replace('"', '\\"')
 
     block = f'\n[[audio_control.devices]]\ntype = "{dev_type}"\nname = "{dev_name}"\n'
 

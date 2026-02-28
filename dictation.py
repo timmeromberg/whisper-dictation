@@ -325,14 +325,15 @@ class DictationApp:
 
     def _notify(self, message: str, title: str = "whisper-dic") -> None:
         """Show a macOS notification banner."""
-        # Escape backslashes and quotes to prevent AppleScript injection
-        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"')
-        safe_title = title.replace("\\", "\\\\").replace('"', '\\"')
+        # Escape backslashes, quotes, and backticks to prevent AppleScript injection
+        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("`", "'")
+        safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("`", "'")
         try:
-            subprocess.Popen(
+            subprocess.run(
                 ["osascript", "-e", f'display notification "{safe_msg}" with title "{safe_title}"'],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                check=False,
             )
         except Exception:
             pass
@@ -413,12 +414,14 @@ class DictationApp:
 
     def startup_health_checks(self) -> bool:
         provider = self.config.whisper.provider
+        if provider == "groq" and not self.config.whisper.groq.api_key.strip():
+            log("startup", "Groq API key is empty. Set it via: whisper-dic set whisper.groq.api_key YOUR_KEY")
+            return False
         log("startup", f"Checking Whisper provider ({provider})...")
         if not self.transcriber.health_check():
             log("startup", "Whisper provider is unreachable. Exiting.")
             return False
         log("startup", "Whisper provider is reachable.")
-        log("startup", "Regex-based filler removal enabled.")
         return True
 
     def _on_hold_start(self) -> None:
