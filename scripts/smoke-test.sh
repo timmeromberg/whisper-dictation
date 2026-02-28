@@ -259,5 +259,130 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Step 9: Error path test — transcriber failure doesn't crash the app
+echo "[smoke] Error path test..."
+"$PYTHON" -c "
+import sys, os, time
+os.chdir('$SCRIPT_DIR')
+from pathlib import Path
+from dictation import DictationApp, load_config
+
+config = load_config(Path('$SMOKE_CONFIG'))
+config.audio_feedback.volume = 0.0
+
+app = DictationApp(config)
+app.paster.paste = lambda text, auto_send=False: None
+
+states = []
+app.on_state_change = lambda state, text: states.append((state, text))
+
+# Make transcriber raise an exception
+def _fail(audio_bytes, **kw):
+    raise RuntimeError('Simulated transcription failure')
+app.transcriber.transcribe = _fail
+
+app._on_hold_start()
+time.sleep(0.5)
+app._on_hold_end()
+time.sleep(2.0)
+
+state_names = [s[0] for s in states]
+assert 'recording' in state_names, f'Never entered recording: {state_names}'
+assert 'idle' in state_names, f'Never returned to idle after error: {state_names}'
+assert not app.stopped, 'App stopped unexpectedly'
+
+app.stop()
+print('[smoke] Error path: passed')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: error path test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
+# Step 10: Auto-send flow test
+echo "[smoke] Auto-send test..."
+"$PYTHON" -c "
+import sys, os, time
+os.chdir('$SCRIPT_DIR')
+from pathlib import Path
+from dictation import DictationApp, load_config
+
+config = load_config(Path('$SMOKE_CONFIG'))
+config.audio_feedback.volume = 0.0
+config.paste.auto_send = True
+
+app = DictationApp(config)
+
+paste_calls = []
+def mock_paste(text, auto_send=False):
+    paste_calls.append({'text': text, 'auto_send': auto_send})
+app.paster.paste = mock_paste
+
+app.transcriber.transcribe = lambda audio_bytes, **kw: 'hello world'
+
+app._on_hold_start()
+time.sleep(0.5)
+app._on_hold_end()
+time.sleep(2.0)
+
+assert len(paste_calls) > 0, f'Paster.paste was never called'
+assert paste_calls[0]['auto_send'] is True, f'auto_send not True: {paste_calls[0]}'
+print(f'  Paste called with auto_send={paste_calls[0][\"auto_send\"]}')
+
+app.stop()
+print('[smoke] Auto-send: passed')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: auto-send test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
+# Step 11: Provider switch test
+echo "[smoke] Provider switch test..."
+"$PYTHON" -c "
+import sys, os, shutil, tempfile
+os.chdir('$SCRIPT_DIR')
+from pathlib import Path
+from dictation import DictationApp, load_config, set_config_value
+from transcriber import create_transcriber, LocalWhisperTranscriber, GroqWhisperTranscriber
+
+tmp = tempfile.NamedTemporaryFile(suffix='.toml', delete=False)
+tmp.close()
+shutil.copy2('$SMOKE_CONFIG', tmp.name)
+cfg_path = Path(tmp.name)
+
+config = load_config(cfg_path)
+assert config.whisper.provider == 'local'
+t1 = create_transcriber(config.whisper)
+assert isinstance(t1, LocalWhisperTranscriber), f'Expected Local, got {type(t1)}'
+t1.close()
+
+set_config_value(cfg_path, 'whisper.provider', 'groq')
+set_config_value(cfg_path, 'whisper.groq.api_key', 'test-key-smoke')
+config2 = load_config(cfg_path)
+t2 = create_transcriber(config2.whisper)
+assert isinstance(t2, GroqWhisperTranscriber), f'Expected Groq, got {type(t2)}'
+t2.close()
+
+set_config_value(cfg_path, 'whisper.provider', 'local')
+config3 = load_config(cfg_path)
+t3 = create_transcriber(config3.whisper)
+assert isinstance(t3, LocalWhisperTranscriber), f'Expected Local after switch back, got {type(t3)}'
+t3.close()
+
+os.unlink(tmp.name)
+print('[smoke] Provider switch: passed')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: provider switch test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
 rm -f "$SMOKE_CONFIG"
 echo "[smoke] All checks passed."
