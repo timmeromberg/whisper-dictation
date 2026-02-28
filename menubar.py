@@ -135,8 +135,14 @@ class DictationMenuBar(rumps.App):
         if not self._is_recording:
             return
         peak = self._app.recorder.read_peak()
-        # int16 range: normalize to 0.0-1.0
-        normalized = min(peak / 32768.0, 1.0)
+        # Use log scale: normal speech (~500-5000) should fill most of the meter
+        import math
+        if peak > 0:
+            db = 20.0 * math.log10(peak / 32768.0)  # dBFS, 0 = max, negative = quieter
+            # Map -60 dBFS..0 dBFS to 0.0..1.0 (speech is typically -30 to -10 dBFS)
+            normalized = max(0.0, min(1.0, (db + 60.0) / 60.0))
+        else:
+            normalized = 0.0
         bar_index = min(int(normalized * len(self._LEVEL_BARS)), len(self._LEVEL_BARS) - 1)
         self.title = f"\U0001f534{self._LEVEL_BARS[bar_index]}"
 
