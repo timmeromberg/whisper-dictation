@@ -10,3 +10,5 @@ config.toml
 dist/
 build/
 .claude/
+CLAUDE.md
+AGENTS.md
