@@ -496,10 +496,31 @@ def discover(config_path=None) -> None:
         return
 
     if answer in ("", "y", "yes"):
+        # Read existing config to skip duplicates
+        existing = set()
+        try:
+            import tomllib
+            with open(config_path, "rb") as f:
+                cfg = tomllib.load(f)
+            for d in cfg.get("audio_control", {}).get("devices", []):
+                existing.add((d.get("type", ""), d.get("name", "")))
+        except Exception:
+            pass
+
+        added = 0
         for dev in found:
+            key = (dev["type"], dev["name"])
+            if key in existing:
+                print(f"  Skipped (already in config): [{dev['type']}] {dev['name']}")
+                continue
             _append_device_to_config(config_path, dev)
             print(f"  Added: [{dev['type']}] {dev['name']}")
-        print(f"\nDone. {len(found)} device(s) added to config.")
-        print("Restart whisper-dic to pick up the changes.")
+            added += 1
+
+        if added:
+            print(f"\nDone. {added} device(s) added to config.")
+            print("Restart whisper-dic to pick up the changes.")
+        else:
+            print("\nAll discovered devices already in config.")
     else:
         print("No changes made.")
