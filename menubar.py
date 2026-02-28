@@ -146,6 +146,7 @@ class DictationMenuBar(rumps.App):
             self._autosend_item,
             self._audioctrl_item,
             None,
+            self._build_recording_menu(),
             rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
             None,
             rumps.MenuItem("Check Status", callback=self._check_status),
@@ -322,6 +323,70 @@ class DictationMenuBar(rumps.App):
         self._app.audio_controller._enabled = new_val
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
+
+    def _build_recording_menu(self) -> rumps.MenuItem:
+        menu = rumps.MenuItem("Recording")
+        self._min_dur_item = rumps.MenuItem(
+            f"Min Duration: {self.config.recording.min_duration}s",
+            callback=self._edit_min_duration,
+        )
+        self._max_dur_item = rumps.MenuItem(
+            f"Max Duration: {self.config.recording.max_duration}s",
+            callback=self._edit_max_duration,
+        )
+        self._timeout_item = rumps.MenuItem(
+            f"Timeout: {self.config.whisper.timeout_seconds}s",
+            callback=self._edit_timeout,
+        )
+        menu.add(self._min_dur_item)
+        menu.add(self._max_dur_item)
+        menu.add(self._timeout_item)
+        return menu
+
+    def _prompt_float(self, title: str, message: str, current: float) -> float | None:
+        """Prompt for a float value. Returns None if cancelled or invalid."""
+        response = rumps.Window(
+            title=title,
+            message=message,
+            default_text=str(current),
+            ok="Save",
+            cancel="Cancel",
+        ).run()
+        if not response.clicked:
+            return None
+        try:
+            val = float(response.text.strip())
+            if val <= 0:
+                rumps.notification("whisper-dic", "Invalid Value", "Must be a positive number.")
+                return None
+            return val
+        except ValueError:
+            rumps.notification("whisper-dic", "Invalid Value", "Enter a number (e.g. 0.3).")
+            return None
+
+    def _edit_min_duration(self, _sender) -> None:
+        val = self._prompt_float("Min Duration", "Minimum recording duration in seconds:", self.config.recording.min_duration)
+        if val is not None:
+            set_config_value(self.config_path, "recording.min_duration", str(val))
+            self.config.recording.min_duration = val
+            self._app.config.recording.min_duration = val
+            self._min_dur_item.title = f"Min Duration: {val}s"
+
+    def _edit_max_duration(self, _sender) -> None:
+        val = self._prompt_float("Max Duration", "Maximum recording duration in seconds:", self.config.recording.max_duration)
+        if val is not None:
+            set_config_value(self.config_path, "recording.max_duration", str(val))
+            self.config.recording.max_duration = val
+            self._app.config.recording.max_duration = val
+            self._max_dur_item.title = f"Max Duration: {val}s"
+
+    def _edit_timeout(self, _sender) -> None:
+        val = self._prompt_float("Timeout", "Transcription timeout in seconds:", self.config.whisper.timeout_seconds)
+        if val is not None:
+            set_config_value(self.config_path, "whisper.timeout_seconds", str(val))
+            self.config.whisper.timeout_seconds = val
+            self._app.config.whisper.timeout_seconds = val
+            self._timeout_item.title = f"Timeout: {val}s"
 
     def _version_item(self) -> rumps.MenuItem:
         version_file = Path(__file__).with_name("VERSION")
