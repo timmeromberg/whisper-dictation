@@ -520,6 +520,9 @@ class DictationApp:
                 self.on_state_change("idle", "")
             return
 
+        # Config auto-send applies to all dictations (Ctrl modifier is per-press)
+        auto_send = auto_send or self.config.paste.auto_send
+
         worker = threading.Thread(
             target=self._run_pipeline,
             args=(result, auto_send, command_mode),

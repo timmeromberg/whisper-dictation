@@ -81,6 +81,20 @@ class DictationMenuBar(rumps.App):
             callback=self._toggle_text_commands,
         )
 
+        # --- Auto-Send toggle ---
+        as_on = self.config.paste.auto_send
+        self._autosend_item = rumps.MenuItem(
+            f"Auto-Send: {'on' if as_on else 'off'}",
+            callback=self._toggle_auto_send,
+        )
+
+        # --- Audio Control toggle ---
+        ac_on = self.config.audio_control.enabled
+        self._audioctrl_item = rumps.MenuItem(
+            f"Audio Control: {'on' if ac_on else 'off'}",
+            callback=self._toggle_audio_control,
+        )
+
         # --- How to Use ---
         key_display = self.config.hotkey.key.replace("_", " ")
         self._help_menu = rumps.MenuItem("How to Use")
@@ -129,6 +143,8 @@ class DictationMenuBar(rumps.App):
             self._hotkey_menu,
             self._volume_menu,
             self._textcmds_item,
+            self._autosend_item,
+            self._audioctrl_item,
             None,
             self._help_menu,
             None,
@@ -245,6 +261,24 @@ class DictationMenuBar(rumps.App):
         self._app.cleaner.text_commands = new_val
         self._textcmds_item.title = f"Text Commands: {'on' if new_val else 'off'}"
         print(f"[menubar] Text Commands: {'on' if new_val else 'off'}")
+
+    def _toggle_auto_send(self, _sender) -> None:
+        current = self.config.paste.auto_send
+        new_val = not current
+        set_config_value(self.config_path, "paste.auto_send", "true" if new_val else "false")
+        self.config.paste.auto_send = new_val
+        self._app.config.paste.auto_send = new_val
+        self._autosend_item.title = f"Auto-Send: {'on' if new_val else 'off'}"
+        print(f"[menubar] Auto-Send: {'on' if new_val else 'off'}")
+
+    def _toggle_audio_control(self, _sender) -> None:
+        current = self.config.audio_control.enabled
+        new_val = not current
+        set_config_value(self.config_path, "audio_control.enabled", "true" if new_val else "false")
+        self.config.audio_control.enabled = new_val
+        self._app.audio_controller._enabled = new_val
+        self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
+        print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
     def _quit(self, _sender) -> None:
         self._app.stop()
