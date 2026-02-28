@@ -5,21 +5,21 @@ key = "right_option"
 min_duration = 0.3
 max_duration = 300.0
 sample_rate = 16000
-channels = 1
-dtype = "int16"
 
 [whisper]
-url = "http://localhost:2022/v1/audio/transcriptions"
+# Which provider to use: "local" or "groq"
+provider = "local"
 language = "en"
-model = "large-v3"
 timeout_seconds = 120.0
 
-[ollama]
-enabled = true
-url = "http://localhost:11434/api/generate"
-model = "qwen2.5:0.5b"
-timeout_seconds = 60.0
-prewarm_prompt = "Ready."
+[whisper.local]
+url = "http://localhost:2022/v1/audio/transcriptions"
+model = "large-v3"
+
+[whisper.groq]
+api_key = ""
+model = "whisper-large-v3"
+url = "https://api.groq.com/openai/v1/audio/transcriptions"
 
 [audio_feedback]
 enabled = true

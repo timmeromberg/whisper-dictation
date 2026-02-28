@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import re
 import signal
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from cleaner import TextCleaner
 from hotkey import RightOptionHotkeyListener
 from paster import TextPaster
 from recorder import Recorder, RecordingResult
-from transcriber import WhisperTranscriber
+from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
 
 @dataclass
@@ -31,25 +32,28 @@ class RecordingConfig:
     min_duration: float = 0.3
     max_duration: float = 300.0
     sample_rate: int = 16000
-    channels: int = 1
-    dtype: str = "int16"
+
+
+@dataclass
+class WhisperLocalConfig:
+    url: str = "http://localhost:2022/v1/audio/transcriptions"
+    model: str = "large-v3"
+
+
+@dataclass
+class WhisperGroqConfig:
+    api_key: str = ""
+    model: str = "whisper-large-v3"
+    url: str = "https://api.groq.com/openai/v1/audio/transcriptions"
 
 
 @dataclass
 class WhisperConfig:
-    url: str = "http://localhost:2022/v1/audio/transcriptions"
+    provider: str = "local"
     language: str = "en"
-    model: str = "large-v3"
     timeout_seconds: float = 120.0
-
-
-@dataclass
-class OllamaConfig:
-    enabled: bool = True
-    url: str = "http://localhost:11434/api/generate"
-    model: str = "qwen2.5:0.5b"
-    timeout_seconds: float = 60.0
-    prewarm_prompt: str = "Ready."
+    local: WhisperLocalConfig = field(default_factory=WhisperLocalConfig)
+    groq: WhisperGroqConfig = field(default_factory=WhisperGroqConfig)
 
 
 @dataclass
@@ -66,13 +70,16 @@ class AppConfig:
     hotkey: HotkeyConfig
     recording: RecordingConfig
     whisper: WhisperConfig
-    ollama: OllamaConfig
     audio_feedback: AudioFeedbackConfig
 
 
 def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
-    raw = data.get(name, {})
-    return raw if isinstance(raw, dict) else {}
+    cursor: Any = data
+    for part in name.split("."):
+        if not isinstance(cursor, dict):
+            return {}
+        cursor = cursor.get(part, {})
+    return cursor if isinstance(cursor, dict) else {}
 
 
 def load_config(path: Path) -> AppConfig:
@@ -82,8 +89,13 @@ def load_config(path: Path) -> AppConfig:
     hotkey_data = _section(data, "hotkey")
     recording_data = _section(data, "recording")
     whisper_data = _section(data, "whisper")
-    ollama_data = _section(data, "ollama")
+    whisper_local_data = _section(data, "whisper.local")
+    whisper_groq_data = _section(data, "whisper.groq")
     feedback_data = _section(data, "audio_feedback")
+
+    provider = str(whisper_data.get("provider", "local")).strip().lower()
+    if provider not in {"local", "groq"}:
+        provider = "local"
 
     return AppConfig(
         hotkey=HotkeyConfig(
@@ -93,21 +105,30 @@ def load_config(path: Path) -> AppConfig:
             min_duration=float(recording_data.get("min_duration", 0.3)),
             max_duration=float(recording_data.get("max_duration", 300.0)),
             sample_rate=int(recording_data.get("sample_rate", 16000)),
-            channels=int(recording_data.get("channels", 1)),
-            dtype=str(recording_data.get("dtype", "int16")),
         ),
         whisper=WhisperConfig(
-            url=str(whisper_data.get("url", "http://localhost:2022/v1/audio/transcriptions")),
+            provider=provider,
             language=str(whisper_data.get("language", "en")),
-            model=str(whisper_data.get("model", "large-v3")),
             timeout_seconds=float(whisper_data.get("timeout_seconds", 120.0)),
-        ),
-        ollama=OllamaConfig(
-            enabled=bool(ollama_data.get("enabled", True)),
-            url=str(ollama_data.get("url", "http://localhost:11434/api/generate")),
-            model=str(ollama_data.get("model", "qwen2.5:0.5b")),
-            timeout_seconds=float(ollama_data.get("timeout_seconds", 60.0)),
-            prewarm_prompt=str(ollama_data.get("prewarm_prompt", "Ready.")),
+            local=WhisperLocalConfig(
+                url=str(
+                    whisper_local_data.get(
+                        "url",
+                        "http://localhost:2022/v1/audio/transcriptions",
+                    )
+                ),
+                model=str(whisper_local_data.get("model", "large-v3")),
+            ),
+            groq=WhisperGroqConfig(
+                api_key=str(whisper_groq_data.get("api_key", "")),
+                model=str(whisper_groq_data.get("model", "whisper-large-v3")),
+                url=str(
+                    whisper_groq_data.get(
+                        "url",
+                        "https://api.groq.com/openai/v1/audio/transcriptions",
+                    )
+                ),
+            ),
         ),
         audio_feedback=AudioFeedbackConfig(
             enabled=bool(feedback_data.get("enabled", True)),
@@ -119,21 +140,111 @@ def load_config(path: Path) -> AppConfig:
     )
 
 
+def _to_toml_literal(raw_value: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        return '""'
+
+    if (value.startswith('"') and value.endswith('"')) or (
+        value.startswith("'") and value.endswith("'")
+    ):
+        return value
+
+    lowered = value.lower()
+    if lowered in {"true", "false"}:
+        return lowered
+
+    if re.fullmatch(r"[+-]?\d+", value):
+        return str(int(value))
+
+    float_like = re.fullmatch(r"[+-]?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?", value)
+    sci_like = re.fullmatch(r"[+-]?\d+[eE][+-]?\d+", value)
+    if float_like or sci_like:
+        try:
+            float(value)
+            return value
+        except ValueError:
+            pass
+
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _find_section_span(text: str, section: str) -> tuple[int, int] | None:
+    header_re = re.compile(rf"(?m)^\[{re.escape(section)}\]\s*$")
+    header_match = header_re.search(text)
+    if header_match is None:
+        return None
+
+    body_start = header_match.end()
+    next_header = re.compile(r"(?m)^\[[^\]\n]+\]\s*$").search(text, body_start)
+    body_end = next_header.start() if next_header else len(text)
+    return body_start, body_end
+
+
+def _set_key_in_block(block: str, key: str, value_literal: str) -> str:
+    key_re = re.compile(rf"(?m)^(\s*{re.escape(key)}\s*=\s*).*$")
+    key_match = key_re.search(block)
+    if key_match is not None:
+        return (
+            block[: key_match.start()]
+            + f"{key_match.group(1)}{value_literal}"
+            + block[key_match.end() :]
+        )
+
+    trailing_ws = re.search(r"[ \t\r\n]*\Z", block)
+    insert_at = trailing_ws.start() if trailing_ws is not None else len(block)
+    prefix = block[:insert_at]
+    suffix = block[insert_at:]
+
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+
+    return prefix + f"{key} = {value_literal}\n" + suffix
+
+
+def set_config_value(config_path: Path, dotted_key: str, raw_value: str) -> None:
+    parts = dotted_key.split(".")
+    if not parts or any(not part.strip() for part in parts):
+        raise ValueError(f"Invalid key path '{dotted_key}'.")
+
+    key = parts[-1].strip()
+    section = ".".join(part.strip() for part in parts[:-1])
+    value_literal = _to_toml_literal(raw_value)
+
+    text = config_path.read_text(encoding="utf-8")
+
+    if section:
+        section_span = _find_section_span(text, section)
+        if section_span is None:
+            if text and not text.endswith("\n"):
+                text += "\n"
+            if text and not text.endswith("\n\n"):
+                text += "\n"
+            text += f"[{section}]\n{key} = {value_literal}\n"
+        else:
+            block_start, block_end = section_span
+            section_block = text[block_start:block_end]
+            updated_block = _set_key_in_block(section_block, key, value_literal)
+            text = text[:block_start] + updated_block + text[block_end:]
+    else:
+        first_section = re.compile(r"(?m)^\[[^\]\n]+\]\s*$").search(text)
+        root_end = first_section.start() if first_section else len(text)
+        root_block = text[:root_end]
+        updated_root = _set_key_in_block(root_block, key, value_literal)
+        text = updated_root + text[root_end:]
+
+    config_path.write_text(text, encoding="utf-8")
+
+
 class DictationApp:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
 
         self.recorder = Recorder(
             sample_rate=config.recording.sample_rate,
-            channels=config.recording.channels,
-            dtype=config.recording.dtype,
         )
-        self.transcriber = WhisperTranscriber(
-            url=config.whisper.url,
-            language=config.whisper.language,
-            model=config.whisper.model,
-            timeout_seconds=config.whisper.timeout_seconds,
-        )
+        self.transcriber = create_transcriber(config.whisper)
         self.cleaner = TextCleaner()
         self.paster = TextPaster()
 
@@ -169,11 +280,12 @@ class DictationApp:
             print(f"[audio] beep failed: {exc}")
 
     def startup_health_checks(self) -> bool:
-        print("[startup] Checking Whisper server...")
+        provider = self.config.whisper.provider
+        print(f"[startup] Checking Whisper provider ({provider})...")
         if not self.transcriber.health_check():
-            print("[startup] Whisper is unreachable at configured URL. Exiting.")
+            print("[startup] Whisper provider is unreachable. Exiting.")
             return False
-        print("[startup] Whisper is reachable.")
+        print("[startup] Whisper provider is reachable.")
 
         print("[startup] Regex-based filler removal enabled.")
         return True
@@ -290,27 +402,140 @@ class DictationApp:
         print("[shutdown] Complete.")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="System-wide hold-to-dictate tool")
-    parser.add_argument(
-        "--config",
-        default=str(Path(__file__).with_name("config.toml")),
-        help="Path to config.toml",
-    )
-    args = parser.parse_args()
-
-    config_path = Path(args.config).expanduser().resolve()
+def _load_config_from_path(config_path: Path) -> AppConfig:
     if not config_path.exists():
-        print(f"Config file not found: {config_path}")
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    return load_config(config_path)
+
+
+def _print_status(config_path: Path, config: AppConfig) -> None:
+    print(f"[status] Config: {config_path}")
+    print(f"[status] hotkey.key = {config.hotkey.key}")
+    print(
+        "[status] recording = "
+        f"min_duration={config.recording.min_duration}, "
+        f"max_duration={config.recording.max_duration}, "
+        f"sample_rate={config.recording.sample_rate}"
+    )
+    print(
+        "[status] whisper = "
+        f"provider={config.whisper.provider}, "
+        f"language={config.whisper.language}, "
+        f"timeout_seconds={config.whisper.timeout_seconds}"
+    )
+    print(
+        "[status] whisper.local = "
+        f"url={config.whisper.local.url}, model={config.whisper.local.model}"
+    )
+    print(
+        "[status] whisper.groq = "
+        f"url={config.whisper.groq.url}, model={config.whisper.groq.model}, "
+        f"api_key={'set' if config.whisper.groq.api_key.strip() else 'missing'}"
+    )
+
+
+def _check_endpoint_reachability(config: AppConfig) -> tuple[bool, bool, bool]:
+    local = LocalWhisperTranscriber(
+        url=config.whisper.local.url,
+        language=config.whisper.language,
+        model=config.whisper.local.model,
+        timeout_seconds=config.whisper.timeout_seconds,
+    )
+    groq = GroqWhisperTranscriber(
+        api_key=config.whisper.groq.api_key,
+        url=config.whisper.groq.url,
+        language=config.whisper.language,
+        model=config.whisper.groq.model,
+        timeout_seconds=config.whisper.timeout_seconds,
+    )
+    current = create_transcriber(config.whisper)
+
+    try:
+        local_ok = local.health_check()
+        groq_ok = groq.health_check()
+        current_ok = current.health_check()
+    finally:
+        local.close()
+        groq.close()
+        current.close()
+
+    return local_ok, groq_ok, current_ok
+
+
+def command_status(config_path: Path) -> int:
+    try:
+        config = _load_config_from_path(config_path)
+    except Exception as exc:
+        print(exc)
+        return 1
+
+    _print_status(config_path, config)
+
+    local_ok, groq_ok, current_ok = _check_endpoint_reachability(config)
+
+    print(f"[status] local endpoint reachable: {'yes' if local_ok else 'no'}")
+    print(f"[status] groq endpoint reachable: {'yes' if groq_ok else 'no'}")
+    print(
+        f"[status] active provider ({config.whisper.provider}) reachable: "
+        f"{'yes' if current_ok else 'no'}"
+    )
+
+    return 0
+
+
+def command_provider(config_path: Path, provider: str | None) -> int:
+    try:
+        config = _load_config_from_path(config_path)
+    except Exception as exc:
+        print(exc)
+        return 1
+
+    if provider is None:
+        print(config.whisper.provider)
+        return 0
+
+    if provider == "groq" and not config.whisper.groq.api_key.strip():
+        try:
+            entered_key = input("Groq API key missing. Enter API key (leave blank to cancel): ").strip()
+        except EOFError:
+            entered_key = ""
+
+        if not entered_key:
+            print("[config] Provider unchanged because no API key was provided.")
+            return 1
+
+        set_config_value(config_path, "whisper.groq.api_key", entered_key)
+        print("[config] Stored whisper.groq.api_key.")
+
+    set_config_value(config_path, "whisper.provider", provider)
+    print(f"[config] whisper.provider set to '{provider}'.")
+    return 0
+
+
+def command_set(config_path: Path, key: str, value: str) -> int:
+    try:
+        _load_config_from_path(config_path)
+        set_config_value(config_path, key, value)
+    except Exception as exc:
+        print(f"Failed to set '{key}': {exc}")
+        return 1
+
+    print(f"[config] Set {key} = {_to_toml_literal(value)}")
+    return 0
+
+
+def command_run(config_path: Path) -> int:
+    try:
+        config = _load_config_from_path(config_path)
+    except Exception as exc:
+        print(exc)
         return 1
 
     try:
-        config = load_config(config_path)
+        app = DictationApp(config)
     except Exception as exc:
-        print(f"Failed to load config: {exc}")
+        print(f"Failed to initialize app: {exc}")
         return 1
-
-    app = DictationApp(config)
 
     def _handle_signal(signum: int, _frame) -> None:
         try:
@@ -330,6 +555,75 @@ def main() -> int:
         return 0
     finally:
         app.stop()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument(
+        "--config",
+        default=str(Path(__file__).with_name("config.toml")),
+        help="Path to config.toml",
+    )
+
+    parser = argparse.ArgumentParser(
+        description="System-wide hold-to-dictate tool",
+        parents=[config_parent],
+    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser(
+        "run",
+        parents=[config_parent],
+        help="Start dictation",
+    )
+
+    subparsers.add_parser(
+        "status",
+        parents=[config_parent],
+        help="Show current config and endpoint reachability",
+    )
+
+    provider_parser = subparsers.add_parser(
+        "provider",
+        parents=[config_parent],
+        help="Show or set the whisper provider",
+    )
+    provider_parser.add_argument(
+        "provider",
+        nargs="?",
+        choices=["local", "groq"],
+        help="Provider to set",
+    )
+
+    set_parser = subparsers.add_parser(
+        "set",
+        parents=[config_parent],
+        help="Set a config key (for example whisper.groq.api_key sk-xxx)",
+    )
+    set_parser.add_argument("key", help="Dotted key path, for example whisper.language")
+    set_parser.add_argument("value", help="Value to set")
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    config_path = Path(args.config).expanduser().resolve()
+    command = args.command or "run"
+
+    if command == "run":
+        return command_run(config_path)
+    if command == "status":
+        return command_status(config_path)
+    if command == "provider":
+        return command_provider(config_path, args.provider)
+    if command == "set":
+        return command_set(config_path, args.key, args.value)
+
+    parser.print_help()
+    return 1
 
 
 if __name__ == "__main__":
