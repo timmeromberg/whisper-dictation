@@ -1,4 +1,4 @@
-"""Global right-Option hotkey listener."""
+"""Global hotkey listener."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Optional
 
+import Quartz
 from pynput import keyboard
 
 KEY_MAP = {
@@ -22,13 +23,19 @@ KEY_MAP = {
 }
 
 
+def _ctrl_is_pressed() -> bool:
+    """Check if Control is physically held right now (Quartz flag check)."""
+    flags = Quartz.CGEventSourceFlagsState(Quartz.kCGEventSourceStateHIDSystemState)
+    return bool(flags & Quartz.kCGEventFlagMaskControl)
+
+
 class RightOptionHotkeyListener:
-    """Listens for hold/release of right Option and ignores key-repeat noise."""
+    """Listens for hold/release of the hotkey and ignores key-repeat noise."""
 
     def __init__(
         self,
         on_hold_start: Callable[[], None],
-        on_hold_end: Callable[[], None],
+        on_hold_end: Callable[[bool], None],
         key_name: str = "right_option",
     ) -> None:
         if key_name not in KEY_MAP:
@@ -45,7 +52,6 @@ class RightOptionHotkeyListener:
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
         if key == self._target_key:
             return True
-        # KeyCode vk comparison for special keys like Fn/Globe
         if (
             isinstance(key, keyboard.KeyCode)
             and isinstance(self._target_key, keyboard.KeyCode)
@@ -80,7 +86,8 @@ class RightOptionHotkeyListener:
                 should_fire = True
 
         if should_fire:
-            self._on_hold_end()
+            ctrl_held = _ctrl_is_pressed()
+            self._on_hold_end(ctrl_held)
 
     def start(self) -> None:
         with self._lock:

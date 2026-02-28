@@ -60,13 +60,12 @@ def _frontmost_bundle_id() -> str:
 class TextPaster:
     """Copy text to clipboard and issue Cmd+V."""
 
-    def __init__(self, paste_delay_seconds: float = 0.05, auto_send: bool = False) -> None:
+    def __init__(self, paste_delay_seconds: float = 0.05) -> None:
         self.paste_delay_seconds = paste_delay_seconds
-        self.auto_send = auto_send
         self._keyboard = Controller()
         self._lock = threading.Lock()
 
-    def paste(self, text: str) -> None:
+    def paste(self, text: str, auto_send: bool = False) -> None:
         text = text.strip()
         if not text:
             return
@@ -78,6 +77,6 @@ class TextPaster:
                 self._keyboard.press("v")
                 self._keyboard.release("v")
 
-            if self.auto_send and _frontmost_bundle_id() in _TERMINAL_BUNDLES:
-                    time.sleep(0.3)
-                    _post_key(_VK_RETURN)
+            if auto_send and _frontmost_bundle_id() in _TERMINAL_BUNDLES:
+                time.sleep(0.3)
+                _post_key(_VK_RETURN)

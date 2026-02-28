@@ -274,7 +274,7 @@ class DictationApp:
         )
         self.transcriber = create_transcriber(config.whisper)
         self.cleaner = TextCleaner()
-        self.paster = TextPaster(auto_send=config.paste.auto_send)
+        self.paster = TextPaster()
 
         self._listener = RightOptionHotkeyListener(
             on_hold_start=self._on_hold_start,
@@ -369,7 +369,7 @@ class DictationApp:
             self._play_beep(self.config.audio_feedback.start_frequency)
             print("[recording] Started.")
 
-    def _on_hold_end(self) -> None:
+    def _on_hold_end(self, auto_send: bool = False) -> None:
         if self.stopped:
             return
 
@@ -395,7 +395,7 @@ class DictationApp:
 
         worker = threading.Thread(
             target=self._run_pipeline,
-            args=(result,),
+            args=(result, auto_send),
             daemon=True,
             name="dictation-pipeline",
         )
@@ -405,7 +405,7 @@ class DictationApp:
 
         worker.start()
 
-    def _run_pipeline(self, result: RecordingResult) -> None:
+    def _run_pipeline(self, result: RecordingResult, auto_send: bool = False) -> None:
         try:
             with self._pipeline_lock:
                 print("[pipeline] Transcribing...")
@@ -425,7 +425,7 @@ class DictationApp:
                     print("[pipeline] Nothing to paste after cleanup.")
                     return
 
-                self.paster.paste(cleaned)
+                self.paster.paste(cleaned, auto_send=auto_send)
                 print(f"[pipeline] Pasted {len(cleaned)} chars.")
         except Exception as exc:
             print(f"[pipeline] Failed: {exc}")
@@ -441,7 +441,8 @@ class DictationApp:
         self._listener.start()
         key = self.config.hotkey.key.replace("_", " ")
         lang_list = ", ".join(self._languages)
-        print(f"[ready] Hold {key} to dictate. Quick tap to cycle language.")
+        print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
+        print(f"[ready] Quick tap to cycle language.")
         print(f"[ready] Languages: {lang_list} (active: {self._languages[self._lang_index]})")
 
         while not self.stopped:
