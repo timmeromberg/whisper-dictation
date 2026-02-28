@@ -552,6 +552,92 @@ class DictationMenuBar(rumps.App):
 
         rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
 
+    def _run_wizard(self, _timer=None) -> None:
+        """First-run setup wizard — guides through provider, API key, hotkey."""
+        if _timer is not None:
+            _timer.stop()
+
+        # Step 1: Provider
+        response = rumps.Window(
+            title="Welcome to whisper-dic!",
+            message=(
+                "Choose your speech-to-text provider:\n\n"
+                "  groq  — Cloud, fast, free tier (recommended)\n"
+                "  local — Offline, needs whisper.cpp server\n\n"
+                "Type 'groq' or 'local':"
+            ),
+            default_text="groq",
+            ok="Next",
+            cancel="Skip Setup",
+        ).run()
+
+        if response.clicked:
+            provider = response.text.strip().lower()
+            if provider not in ("groq", "local"):
+                provider = "groq"
+            self._set_config("whisper.provider", provider)
+
+            # Step 2: API key (groq only)
+            if provider == "groq":
+                key_response = rumps.Window(
+                    title="Groq API Key",
+                    message="Get a free key at console.groq.com\nPaste it below:",
+                    default_text="",
+                    ok="Next",
+                    cancel="Skip",
+                    secure=True,
+                ).run()
+                if key_response.clicked and key_response.text.strip():
+                    self._set_config("whisper.groq.api_key", key_response.text.strip())
+
+            # Step 3: Hotkey
+            hotkey_response = rumps.Window(
+                title="Choose Hotkey",
+                message=(
+                    "Which key triggers dictation?\n\n"
+                    "Options: left option, right option,\n"
+                    "left command, right command,\n"
+                    "left shift, right shift\n\n"
+                    "Type the key name:"
+                ),
+                default_text="left option",
+                ok="Finish",
+                cancel="Use Default",
+            ).run()
+            if hotkey_response.clicked and hotkey_response.text.strip():
+                hk = hotkey_response.text.strip().lower().replace(" ", "_")
+                if hk in HOTKEY_OPTIONS:
+                    self._set_config("hotkey.key", hk)
+
+        # Reload config and start
+        self._reload_after_wizard()
+
+    def _reload_after_wizard(self) -> None:
+        """Reload config with wizard choices and start dictation."""
+        self.config = load_config(self.config_path)
+        self._app.config = self.config
+
+        # Update transcriber
+        self._app.transcriber.close()
+        self._app.transcriber = create_transcriber(self.config.whisper)
+
+        # Update listener key
+        self._app._listener.set_key(self.config.hotkey.key)
+
+        # Update menus
+        self._provider_menu.title = f"Provider: {self.config.whisper.provider}"
+        for item in self._provider_menu.values():
+            item.state = 1 if item.title == self.config.whisper.provider else 0
+
+        hk = self.config.hotkey.key
+        self._hotkey_menu.title = f"Hotkey: {hk.replace('_', ' ')}"
+        for item in self._hotkey_menu.values():
+            item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
+
+        # Start dictation
+        thread = threading.Thread(target=self._start_dictation, daemon=True)
+        thread.start()
+
     def _quit(self, _sender) -> None:
         self._config_watcher.stop()
         self._app.stop()
@@ -602,10 +688,28 @@ def run_menubar(config_path: Path) -> int:
     from AppKit import NSApplication
     NSApplication.sharedApplication().setActivationPolicy_(1)  # NSApplicationActivationPolicyAccessory
 
+    # Ensure config exists — copy template on first run
+    first_run = False
+    if not config_path.exists():
+        example = config_path.parent / "config.example.toml"
+        if example.exists():
+            import shutil
+            shutil.copy2(example, config_path)
+            config_path.chmod(0o600)
+            first_run = True
+        else:
+            print(f"[error] No config template at {example}")
+            return 1
+
     app = DictationMenuBar(config_path)
 
-    thread = threading.Thread(target=app._start_dictation, daemon=True)
-    thread.start()
+    if first_run:
+        # Schedule wizard on main thread after run loop starts
+        wizard_timer = rumps.Timer(app._run_wizard, 0.5)
+        wizard_timer.start()
+    else:
+        thread = threading.Thread(target=app._start_dictation, daemon=True)
+        thread.start()
 
     def _handle_signal(signum: int, _frame) -> None:
         app._app.stop()
