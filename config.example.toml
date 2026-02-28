@@ -29,6 +29,27 @@ auto_send = false
 [text_commands]
 enabled = true
 
+[audio_control]
+# Auto-mute audio devices during recording
+enabled = false
+mute_local = true
+
+# Network devices (run 'whisper-dic discover' to find available devices)
+# [[audio_control.devices]]
+# type = "chromecast"
+# name = "Living Room Speaker"
+
+# [[audio_control.devices]]
+# type = "upnp"
+# name = "Samsung TV"
+# location = "http://192.168.1.100:49152/description.xml"
+
+# [[audio_control.devices]]
+# type = "custom"
+# name = "Android Tablet"
+# mute_command = "adb -s 192.168.1.50:5555 shell media volume --set 0 --stream 3"
+# unmute_command = "adb -s 192.168.1.50:5555 shell media volume --set 10 --stream 3"
+
 [audio_feedback]
 enabled = true
 start_frequency = 880

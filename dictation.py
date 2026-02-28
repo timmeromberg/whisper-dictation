@@ -18,6 +18,7 @@ import tomllib
 from pynput import keyboard
 
 import commands
+from audio_control import AudioControlConfig, AudioController
 from cleaner import TextCleaner
 from hotkey import KEY_MAP, RightOptionHotkeyListener
 from log import log
@@ -93,6 +94,7 @@ class AppConfig:
     text_commands: TextCommandsConfig
     whisper: WhisperConfig
     audio_feedback: AudioFeedbackConfig
+    audio_control: AudioControlConfig = field(default_factory=AudioControlConfig)
 
 
 def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
@@ -116,6 +118,7 @@ def load_config(path: Path) -> AppConfig:
     whisper_local_data = _section(data, "whisper.local")
     whisper_groq_data = _section(data, "whisper.groq")
     feedback_data = _section(data, "audio_feedback")
+    audio_control_data = _section(data, "audio_control")
 
     provider = str(whisper_data.get("provider", "local")).strip().lower()
     if provider not in {"local", "groq"}:
@@ -176,6 +179,11 @@ def load_config(path: Path) -> AppConfig:
             stop_frequency=float(feedback_data.get("stop_frequency", 660.0)),
             duration_seconds=float(feedback_data.get("duration_seconds", 0.08)),
             volume=float(feedback_data.get("volume", 0.2)),
+        ),
+        audio_control=AudioControlConfig(
+            enabled=bool(audio_control_data.get("enabled", False)),
+            mute_local=bool(audio_control_data.get("mute_local", True)),
+            devices=list(audio_control_data.get("devices", [])),
         ),
     )
 
@@ -287,6 +295,7 @@ class DictationApp:
         self.transcriber = create_transcriber(config.whisper)
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
         self.paster = TextPaster()
+        self.audio_controller = AudioController(config.audio_control)
 
         self._listener = RightOptionHotkeyListener(
             on_hold_start=self._on_hold_start,
@@ -375,10 +384,14 @@ class DictationApp:
         if self.stopped:
             return
 
+        # Mute audio devices before recording starts
+        self.audio_controller.mute()
+
         try:
             started = self.recorder.start()
         except Exception as exc:
             log("recording", f"Failed to start stream: {exc}")
+            self.audio_controller.unmute()
             return
 
         if started:
@@ -392,6 +405,10 @@ class DictationApp:
             return
 
         result = self.recorder.stop()
+
+        # Unmute audio devices after recording stops
+        self.audio_controller.unmute()
+
         if result is None:
             return
 
@@ -824,6 +841,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run with menu bar icon",
     )
     subparsers.add_parser(
+        "discover",
+        help="Discover audio devices on the local network",
+    )
+    subparsers.add_parser(
         "install",
         help="Install as login item (start at login, auto-restart)",
     )
@@ -855,6 +876,10 @@ def main() -> int:
         return command_provider(config_path, args.provider)
     if command == "set":
         return command_set(config_path, args.key, args.value)
+    if command == "discover":
+        from audio_control import discover
+        discover()
+        return 0
     if command == "install":
         return command_install()
     if command == "uninstall":
