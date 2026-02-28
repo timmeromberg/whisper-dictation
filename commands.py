@@ -46,6 +46,28 @@ _COMMANDS["new window"] = (_VK["n"], _FLAG_CMD)
 _COMMANDS["print"] = (_VK["p"], _FLAG_CMD)
 _COMMANDS["bold"] = (_VK["b"], _FLAG_CMD)
 
+# Aliases for common Whisper mishearings
+_ALIASES: dict[str, str] = {
+    "peace": "paste",
+    "paced": "paste",
+    "based": "paste",
+    "face": "paste",
+    "tub": "tab",
+    "tap": "tab",
+    "on do": "undo",
+    "and do": "undo",
+    "safe": "save",
+    "say": "save",
+    "copie": "copy",
+    "coffee": "copy",
+    "caught": "cut",
+    "cup": "cut",
+    "escaped": "escape",
+    "deletes": "delete",
+    "read do": "redo",
+    "redo it": "redo",
+}
+
 
 def _post_key(vk: int, flags: int = 0) -> None:
     """Post a key event with optional modifier flags via CGEvent."""
@@ -69,6 +91,8 @@ def execute(text: str) -> bool:
     # Strip trailing punctuation that Whisper might add
     normalized = normalized.rstrip(".!?,;:")
 
+    # Check aliases first, then direct match
+    normalized = _ALIASES.get(normalized, normalized)
     entry = _COMMANDS.get(normalized)
     if entry is None:
         return False
