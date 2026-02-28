@@ -9,8 +9,8 @@ from pathlib import Path
 import rumps
 
 from dictation import (
-    DictationApp, LANG_NAMES, load_config, set_config_value, create_transcriber,
-    command_install, command_uninstall, _PLIST_PATH,
+    DictationApp, ConfigWatcher, LANG_NAMES, load_config, set_config_value,
+    create_transcriber, command_install, command_uninstall, _PLIST_PATH,
 )
 
 PROVIDER_OPTIONS = ["local", "groq"]
@@ -34,6 +34,7 @@ class DictationMenuBar(rumps.App):
         self._health_timer = rumps.Timer(self._periodic_health_check, 60)
         self._provider_healthy = True
         self._health_notified = False
+        self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
 
         # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
@@ -164,6 +165,13 @@ class DictationMenuBar(rumps.App):
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
+    # --- Config helpers ---
+
+    def _set_config(self, key: str, value: str) -> None:
+        """Write a config value and mark the write to avoid reload loop."""
+        set_config_value(self.config_path, key, value)
+        self._config_watcher.mark_written()
+
     # --- State callbacks ---
 
     _LEVEL_BARS = ["\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"]
@@ -244,7 +252,7 @@ class DictationMenuBar(rumps.App):
         self._lang_menu.title = f"Language: {display}"
         for item in self._lang_menu.values():
             item.state = 1 if sender.title == item.title else 0
-        set_config_value(self.config_path, "whisper.language", lang)
+        self._set_config("whisper.language", lang)
         print(f"[menubar] Language: {display} ({lang})")
 
     def _switch_provider(self, sender) -> None:
@@ -254,7 +262,7 @@ class DictationMenuBar(rumps.App):
         if provider == "groq" and not self.config.whisper.groq.api_key.strip():
             if not self._prompt_groq_key():
                 return
-        set_config_value(self.config_path, "whisper.provider", provider)
+        self._set_config("whisper.provider", provider)
         self.config = load_config(self.config_path)
         # Recreate transcriber with new provider
         self._app.transcriber.close()
@@ -278,7 +286,7 @@ class DictationMenuBar(rumps.App):
         ).run()
         if not response.clicked or not response.text.strip():
             return False
-        set_config_value(self.config_path, "whisper.groq.api_key", response.text.strip())
+        self._set_config("whisper.groq.api_key", response.text.strip())
         self.config = load_config(self.config_path)
         return True
 
@@ -307,7 +315,7 @@ class DictationMenuBar(rumps.App):
         hk = sender._hotkey_value
         if hk == self.config.hotkey.key:
             return
-        set_config_value(self.config_path, "hotkey.key", hk)
+        self._set_config("hotkey.key", hk)
         self.config.hotkey.key = hk
         self._app.listener.set_key(hk)
         self._hotkey_menu.title = f"Hotkey: {hk.replace('_', ' ')}"
@@ -329,7 +337,7 @@ class DictationMenuBar(rumps.App):
         def _persist():
             _time.sleep(0.3)
             if self._volume_last_change == now:
-                set_config_value(self.config_path, "audio_feedback.volume", str(vol))
+                self._set_config("audio_feedback.volume", str(vol))
                 self._app.play_beep(self._app.config.audio_feedback.start_frequency)
                 print(f"[menubar] Volume: {pct}%")
 
@@ -338,7 +346,7 @@ class DictationMenuBar(rumps.App):
     def _toggle_text_commands(self, _sender) -> None:
         current = self.config.text_commands.enabled
         new_val = not current
-        set_config_value(self.config_path, "text_commands.enabled", "true" if new_val else "false")
+        self._set_config("text_commands.enabled", "true" if new_val else "false")
         self.config.text_commands.enabled = new_val
         self._app.cleaner.text_commands = new_val
         self._textcmds_item.title = f"Text Commands: {'on' if new_val else 'off'}"
@@ -347,7 +355,7 @@ class DictationMenuBar(rumps.App):
     def _toggle_auto_send(self, _sender) -> None:
         current = self.config.paste.auto_send
         new_val = not current
-        set_config_value(self.config_path, "paste.auto_send", "true" if new_val else "false")
+        self._set_config("paste.auto_send", "true" if new_val else "false")
         self.config.paste.auto_send = new_val
         self._app.config.paste.auto_send = new_val
         self._autosend_item.title = f"Auto-Send: {'on' if new_val else 'off'}"
@@ -356,7 +364,7 @@ class DictationMenuBar(rumps.App):
     def _toggle_audio_control(self, _sender) -> None:
         current = self.config.audio_control.enabled
         new_val = not current
-        set_config_value(self.config_path, "audio_control.enabled", "true" if new_val else "false")
+        self._set_config("audio_control.enabled", "true" if new_val else "false")
         self.config.audio_control.enabled = new_val
         self._app.audio_controller._enabled = new_val
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
@@ -405,7 +413,7 @@ class DictationMenuBar(rumps.App):
     def _edit_min_duration(self, _sender) -> None:
         val = self._prompt_float("Min Duration", "Minimum recording duration in seconds:", self.config.recording.min_duration)
         if val is not None:
-            set_config_value(self.config_path, "recording.min_duration", str(val))
+            self._set_config("recording.min_duration", str(val))
             self.config.recording.min_duration = val
             self._app.config.recording.min_duration = val
             self._min_dur_item.title = f"Min Duration: {val}s"
@@ -413,7 +421,7 @@ class DictationMenuBar(rumps.App):
     def _edit_max_duration(self, _sender) -> None:
         val = self._prompt_float("Max Duration", "Maximum recording duration in seconds:", self.config.recording.max_duration)
         if val is not None:
-            set_config_value(self.config_path, "recording.max_duration", str(val))
+            self._set_config("recording.max_duration", str(val))
             self.config.recording.max_duration = val
             self._app.config.recording.max_duration = val
             self._max_dur_item.title = f"Max Duration: {val}s"
@@ -421,7 +429,7 @@ class DictationMenuBar(rumps.App):
     def _edit_timeout(self, _sender) -> None:
         val = self._prompt_float("Timeout", "Transcription timeout in seconds:", self.config.whisper.timeout_seconds)
         if val is not None:
-            set_config_value(self.config_path, "whisper.timeout_seconds", str(val))
+            self._set_config("whisper.timeout_seconds", str(val))
             self.config.whisper.timeout_seconds = val
             self._app.config.whisper.timeout_seconds = val
             self._timeout_item.title = f"Timeout: {val}s"
@@ -496,7 +504,56 @@ class DictationMenuBar(rumps.App):
         from AppKit import NSWorkspace
         NSWorkspace.sharedWorkspace().openFile_(str(log_path))
 
+    def _on_config_changed(self, new_config) -> None:
+        """Called from watcher thread when config.toml changes externally."""
+        from log import log
+        log("config-watch", "Config changed externally, reloading...")
+        old = self.config
+        self.config = new_config
+
+        if new_config.whisper.provider != old.whisper.provider:
+            self._app.transcriber.close()
+            self._app.transcriber = create_transcriber(new_config.whisper)
+            self._provider_menu.title = f"Provider: {new_config.whisper.provider}"
+            for item in self._provider_menu.values():
+                item.state = 1 if item.title == new_config.whisper.provider else 0
+
+        if new_config.whisper.language != old.whisper.language:
+            self._app.set_language(new_config.whisper.language)
+            display = LANG_NAMES.get(new_config.whisper.language, new_config.whisper.language)
+            self._lang_menu.title = f"Language: {display}"
+            for item in self._lang_menu.values():
+                lang_code = item.title.split("(")[-1].rstrip(")") if "(" in item.title else ""
+                item.state = 1 if lang_code == new_config.whisper.language else 0
+
+        if new_config.hotkey.key != old.hotkey.key:
+            self._app._listener.set_key(new_config.hotkey.key)
+            self._hotkey_menu.title = f"Hotkey: {new_config.hotkey.key.replace('_', ' ')}"
+            for item in self._hotkey_menu.values():
+                item.state = 1 if getattr(item, "_hotkey_value", None) == new_config.hotkey.key else 0
+
+        if new_config.audio_feedback.volume != old.audio_feedback.volume:
+            self._app.config.audio_feedback.volume = new_config.audio_feedback.volume
+            pct = int(new_config.audio_feedback.volume * 100)
+            self._volume_menu.title = f"Volume: {pct}%"
+            self._volume_slider.value = pct
+
+        if new_config.paste.auto_send != old.paste.auto_send:
+            self._app.config.paste.auto_send = new_config.paste.auto_send
+            self._autosend_item.title = f"Auto-Send: {'on' if new_config.paste.auto_send else 'off'}"
+
+        if new_config.text_commands.enabled != old.text_commands.enabled:
+            self._app.cleaner.text_commands = new_config.text_commands.enabled
+            self._textcmds_item.title = f"Text Commands: {'on' if new_config.text_commands.enabled else 'off'}"
+
+        if new_config.audio_control.enabled != old.audio_control.enabled:
+            self._app.audio_controller._enabled = new_config.audio_control.enabled
+            self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
+
+        rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
+
     def _quit(self, _sender) -> None:
+        self._config_watcher.stop()
         self._app.stop()
         rumps.quit_application()
 
@@ -533,6 +590,7 @@ class DictationMenuBar(rumps.App):
 
         self._app.start_listener()
         self._health_timer.start()
+        self._config_watcher.start()
         key = self.config.hotkey.key.replace("_", " ")
         rumps.notification("whisper-dic", "Ready",
                            f"Hold {key} to dictate. Tap to cycle language.")

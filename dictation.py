@@ -296,6 +296,54 @@ def set_config_value(config_path: Path, dotted_key: str, raw_value: str) -> None
     config_path.write_text(text, encoding="utf-8")
 
 
+class ConfigWatcher:
+    """Polls config file mtime and triggers reload on external changes."""
+
+    def __init__(self, config_path: Path, on_change: Callable[[AppConfig], None], interval: float = 5.0) -> None:
+        self._path = config_path
+        self._on_change = on_change
+        self._interval = interval
+        self._last_mtime: float = self._get_mtime()
+        self._last_write_time: float = 0.0
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def _get_mtime(self) -> float:
+        try:
+            return self._path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def mark_written(self) -> None:
+        """Call after writing to config ourselves to avoid reload loop."""
+        self._last_write_time = time.monotonic()
+        self._last_mtime = self._get_mtime()
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._poll, daemon=True, name="config-watcher")
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+
+    def _poll(self) -> None:
+        while not self._stop_event.wait(self._interval):
+            mtime = self._get_mtime()
+            if mtime != self._last_mtime:
+                self._last_mtime = mtime
+                if time.monotonic() - self._last_write_time < 2.0:
+                    continue
+                try:
+                    new_config = load_config(self._path)
+                    self._on_change(new_config)
+                except Exception as exc:
+                    log("config-watch", f"Reload failed: {exc}")
+
+
 class DictationApp:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
