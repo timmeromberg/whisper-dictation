@@ -393,6 +393,21 @@ class DictationApp:
         except Exception as exc:
             log("audio", f"Beep failed: {exc}")
 
+    def _transcribe_with_retry(self, wav_bytes: bytes, max_attempts: int = 3) -> str:
+        """Transcribe with retry on transient network errors (SSL, connection reset)."""
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return self.transcriber.transcribe(wav_bytes)
+            except Exception as exc:
+                err_str = str(exc).lower()
+                is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
+                if is_transient and attempt < max_attempts:
+                    wait = attempt * 0.5
+                    log("pipeline", f"Transient error (attempt {attempt}/{max_attempts}): {exc}, retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    raise
+
     def startup_health_checks(self) -> bool:
         provider = self.config.whisper.provider
         log("startup", f"Checking Whisper provider ({provider})...")
@@ -480,7 +495,7 @@ class DictationApp:
                 log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({wav_size_kb:.0f} KB)...")
                 if self.on_state_change:
                     self.on_state_change("transcribing", "")
-                transcript = self.transcriber.transcribe(result.wav_bytes)
+                transcript = self._transcribe_with_retry(result.wav_bytes)
                 log("pipeline", f"Transcript: '{transcript}'")
 
                 cleaned = transcript
