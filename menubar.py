@@ -148,8 +148,11 @@ class DictationMenuBar(rumps.App):
             None,
             rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
             None,
-            self._help_menu,
+            rumps.MenuItem("Check Status", callback=self._check_status),
+            rumps.MenuItem("View Logs", callback=self._view_logs),
             None,
+            self._help_menu,
+            self._version_item(),
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
@@ -319,6 +322,33 @@ class DictationMenuBar(rumps.App):
         self._app.audio_controller._enabled = new_val
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
+
+    def _version_item(self) -> rumps.MenuItem:
+        version_file = Path(__file__).with_name("VERSION")
+        version = version_file.read_text().strip() if version_file.exists() else "?"
+        item = rumps.MenuItem(f"Version: {version}")
+        item.set_callback(None)
+        return item
+
+    def _check_status(self, _sender) -> None:
+        def _run():
+            provider = self.config.whisper.provider
+            lang = self._app.active_language
+            ok = self._app.transcriber.health_check()
+            status = "reachable" if ok else "UNREACHABLE"
+            rumps.notification(
+                "whisper-dic", f"Provider: {provider} ({status})",
+                f"Language: {lang} | Hotkey: {self.config.hotkey.key.replace('_', ' ')}",
+            )
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _view_logs(self, _sender) -> None:
+        log_path = Path.home() / "Library" / "Logs" / "whisper-dictation.log"
+        if not log_path.exists():
+            rumps.notification("whisper-dic", "No Logs", "No log file found yet.")
+            return
+        from AppKit import NSWorkspace
+        NSWorkspace.sharedWorkspace().openFile_(str(log_path))
 
     def _quit(self, _sender) -> None:
         self._app.stop()
