@@ -14,12 +14,18 @@ from typing import Any
 import numpy as np
 import sounddevice as sd
 import tomllib
+from pynput import keyboard
 
 from cleaner import TextCleaner
-from hotkey import RightOptionHotkeyListener
+from hotkey import KEY_MAP, RightOptionHotkeyListener
 from paster import TextPaster
 from recorder import Recorder, RecordingResult
 from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
+
+if hasattr(keyboard.Key, "cmd_r"):
+    KEY_MAP.setdefault("right_command", keyboard.Key.cmd_r)
+if hasattr(keyboard.Key, "shift_r"):
+    KEY_MAP.setdefault("right_shift", keyboard.Key.shift_r)
 
 
 @dataclass
@@ -557,6 +563,33 @@ def command_run(config_path: Path) -> int:
         app.stop()
 
 
+def command_setup(config_path: Path) -> int:
+    try:
+        _load_config_from_path(config_path)
+    except Exception as exc:
+        print(exc)
+        return 1
+
+    try:
+        from menu import run_setup_menu
+    except Exception as exc:
+        print(f"Failed to load setup menu: {exc}")
+        return 1
+
+    try:
+        action = run_setup_menu(config_path)
+    except KeyboardInterrupt:
+        print()
+        return 0
+    except Exception as exc:
+        print(f"Setup failed: {exc}")
+        return 1
+
+    if action == "start":
+        return command_run(config_path)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     config_parent = argparse.ArgumentParser(add_help=False)
     config_parent.add_argument(
@@ -575,6 +608,11 @@ def build_parser() -> argparse.ArgumentParser:
         "run",
         parents=[config_parent],
         help="Start dictation",
+    )
+    subparsers.add_parser(
+        "setup",
+        parents=[config_parent],
+        help="Open interactive setup menu",
     )
 
     subparsers.add_parser(
@@ -615,6 +653,8 @@ def main() -> int:
 
     if command == "run":
         return command_run(config_path)
+    if command == "setup":
+        return command_setup(config_path)
     if command == "status":
         return command_status(config_path)
     if command == "provider":
