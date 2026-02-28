@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import atexit
 import io
-import subprocess
 import tempfile
 import threading
 import time
@@ -18,6 +17,9 @@ from pynput import keyboard
 import commands
 from audio_control import AudioController
 from cleaner import TextCleaner
+from compat import check_accessibility
+from compat import notify as _platform_notify
+from compat import play_wav_file as _platform_play
 from config import LANG_NAMES, AppConfig
 from history import TranscriptionHistory
 from hotkey import KEY_MAP, HotkeyListener
@@ -110,19 +112,8 @@ class DictationApp:
         self._listener.start()
 
     def _notify(self, message: str, title: str = "whisper-dic") -> None:
-        """Show a macOS notification banner."""
-        # Escape backslashes, quotes, and backticks to prevent AppleScript injection
-        safe_msg = message.replace("\\", "\\\\").replace('"', '\\"').replace("`", "'")
-        safe_title = title.replace("\\", "\\\\").replace('"', '\\"').replace("`", "'")
-        try:
-            subprocess.run(
-                ["osascript", "-e", f'display notification "{safe_msg}" with title "{safe_title}"'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-        except Exception as exc:
-            log("notify", f"Notification failed: {exc}")
+        """Show a platform notification banner."""
+        _platform_notify(message, title)
 
     def _cycle_language(self) -> None:
         """Cycle to the next language and update the transcriber."""
@@ -202,7 +193,7 @@ class DictationApp:
 
     @staticmethod
     def _play_wav(samples: np.ndarray, sample_rate: int) -> None:
-        """Play audio samples via macOS afplay, avoiding PortAudio entirely."""
+        """Play audio samples via platform audio player."""
         int_samples = (samples * 32767).astype(np.int16)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as w:
@@ -215,9 +206,7 @@ class DictationApp:
         tmp.write(buf.getvalue())
         tmp.close()
         try:
-            subprocess.run(["afplay", tmp.name], timeout=5)
-        except Exception as exc:
-            log("audio", f"Beep failed: {exc}")
+            _platform_play(tmp.name)
         finally:
             Path(tmp.name).unlink(missing_ok=True)
 
@@ -259,16 +248,8 @@ class DictationApp:
 
     @staticmethod
     def check_permissions() -> list[str]:
-        """Check macOS permissions. Returns list of missing permission names."""
-        missing = []
-        try:
-            from ApplicationServices import AXIsProcessTrusted
-            if not AXIsProcessTrusted():
-                missing.append("Accessibility")
-        except ImportError:
-            pass
-        # Microphone permission is checked naturally on first recording attempt
-        return missing
+        """Check platform permissions. Returns list of missing permission names."""
+        return check_accessibility()
 
     def startup_health_checks(self) -> bool:
         provider = self.config.whisper.provider
