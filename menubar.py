@@ -186,12 +186,12 @@ class DictationMenuBar(rumps.App):
         if hk == self.config.hotkey.key:
             return
         set_config_value(self.config_path, "hotkey.key", hk)
+        self.config.hotkey.key = hk
+        self._app._listener.set_key(hk)
         self._hotkey_menu.title = f"Hotkey: {hk.replace('_', ' ')}"
         for item in self._hotkey_menu.values():
             item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
-        rumps.notification("whisper-dic", "Hotkey Changed",
-                           f"Restart whisper-dic to use: {hk.replace('_', ' ')}")
-        print(f"[menubar] Hotkey: {hk} (restart required)")
+        print(f"[menubar] Hotkey: {hk}")
 
     def _switch_volume(self, sender) -> None:
         vol = sender._vol_value

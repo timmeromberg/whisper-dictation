@@ -56,6 +56,7 @@ class RightOptionHotkeyListener:
             raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(KEY_MAP)}")
 
         self._target_key = KEY_MAP[key_name]
+        self._key_name = key_name
         self._on_hold_start = on_hold_start
         self._on_hold_end = on_hold_end
 
@@ -66,6 +67,13 @@ class RightOptionHotkeyListener:
         self._shift_held = False
         self._shift_last_seen: float = 0.0
         self._listener: Optional[keyboard.Listener] = None
+
+    def set_key(self, key_name: str) -> None:
+        """Change the hotkey at runtime (no restart needed)."""
+        if key_name not in KEY_MAP:
+            raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(KEY_MAP)}")
+        self._target_key = KEY_MAP[key_name]
+        self._key_name = key_name
 
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
         if key == self._target_key:
