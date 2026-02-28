@@ -448,14 +448,7 @@ class DictationApp:
                 missing.append("Accessibility")
         except ImportError:
             pass
-        try:
-            import sounddevice as _sd
-            stream = _sd.InputStream(samplerate=16000, channels=1, dtype="int16")
-            stream.start()
-            stream.stop()
-            stream.close()
-        except Exception:
-            missing.append("Microphone")
+        # Microphone permission is checked naturally on first recording attempt
         return missing
 
     def startup_health_checks(self) -> bool:

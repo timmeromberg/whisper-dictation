@@ -515,19 +515,6 @@ class DictationMenuBar(rumps.App):
         except ImportError:
             pass
 
-        # Check Microphone
-        try:
-            import sounddevice as sd
-            stream = sd.InputStream(samplerate=16000, channels=1, dtype="int16")
-            stream.start()
-            stream.stop()
-            stream.close()
-        except Exception:
-            rumps.notification(
-                "whisper-dic", "Microphone Permission Required",
-                "Open System Settings > Privacy & Security > Microphone and add this app.",
-            )
-
     def _start_dictation(self) -> None:
         self._check_permissions()
 
