@@ -24,20 +24,21 @@ KEY_MAP = {
 }
 
 
-def _ctrl_is_pressed() -> bool:
-    """Check if Control is physically held right now (Quartz flag check)."""
+def _modifier_is_pressed(mask: int) -> bool:
+    """Check if a modifier is physically held right now (Quartz flag check)."""
     for source in (
         Quartz.kCGEventSourceStateHIDSystemState,
         Quartz.kCGEventSourceStateCombinedSessionState,
     ):
         flags = Quartz.CGEventSourceFlagsState(source)
-        if flags & Quartz.kCGEventFlagMaskControl:
+        if flags & mask:
             return True
     return False
 
 
 _CTRL_KEYS = {keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
-_CTRL_WINDOW_SECONDS = 0.5  # Control must be held within this window of hotkey release
+_SHIFT_KEYS = {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r}
+_MODIFIER_WINDOW_SECONDS = 0.5  # Modifier must be active within this window of hotkey release
 
 
 class RightOptionHotkeyListener:
@@ -46,7 +47,7 @@ class RightOptionHotkeyListener:
     def __init__(
         self,
         on_hold_start: Callable[[], None],
-        on_hold_end: Callable[[bool], None],
+        on_hold_end: Callable[[bool, bool], None],
         key_name: str = "right_option",
     ) -> None:
         if key_name not in KEY_MAP:
@@ -59,7 +60,9 @@ class RightOptionHotkeyListener:
         self._lock = threading.Lock()
         self._pressed = False
         self._ctrl_held = False
-        self._ctrl_last_seen: float = 0.0  # monotonic timestamp of last ctrl press/hold
+        self._ctrl_last_seen: float = 0.0
+        self._shift_held = False
+        self._shift_last_seen: float = 0.0
         self._listener: Optional[keyboard.Listener] = None
 
     def _matches(self, key: keyboard.KeyCode | keyboard.Key | None) -> bool:
@@ -75,11 +78,25 @@ class RightOptionHotkeyListener:
             return True
         return False
 
+    def _modifier_recent(self, held: bool, last_seen: float, mask: int, now: float) -> bool:
+        """Check if a modifier was active: currently held, Quartz says so, or within window."""
+        return (
+            held
+            or _modifier_is_pressed(mask)
+            or (now - last_seen) < _MODIFIER_WINDOW_SECONDS
+        )
+
     def _handle_press(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
         if key in _CTRL_KEYS:
             with self._lock:
                 self._ctrl_held = True
                 self._ctrl_last_seen = time.monotonic()
+            return
+
+        if key in _SHIFT_KEYS:
+            with self._lock:
+                self._shift_held = True
+                self._shift_last_seen = time.monotonic()
             return
 
         if not self._matches(key):
@@ -101,25 +118,34 @@ class RightOptionHotkeyListener:
                 self._ctrl_last_seen = time.monotonic()
             return
 
+        if key in _SHIFT_KEYS:
+            with self._lock:
+                self._shift_held = False
+                self._shift_last_seen = time.monotonic()
+            return
+
         if not self._matches(key):
             return
 
         should_fire = False
-        ctrl_recent = False
+        auto_send = False
+        command_mode = False
         with self._lock:
             if self._pressed:
                 self._pressed = False
                 now = time.monotonic()
-                # Control counts if: currently held, OR was active within the last 500ms
-                ctrl_recent = (
-                    self._ctrl_held
-                    or _ctrl_is_pressed()
-                    or (now - self._ctrl_last_seen) < _CTRL_WINDOW_SECONDS
+                auto_send = self._modifier_recent(
+                    self._ctrl_held, self._ctrl_last_seen,
+                    Quartz.kCGEventFlagMaskControl, now,
+                )
+                command_mode = self._modifier_recent(
+                    self._shift_held, self._shift_last_seen,
+                    Quartz.kCGEventFlagMaskShift, now,
                 )
                 should_fire = True
 
         if should_fire:
-            self._on_hold_end(ctrl_recent)
+            self._on_hold_end(auto_send, command_mode)
 
     def start(self) -> None:
         with self._lock:

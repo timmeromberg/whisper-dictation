@@ -17,6 +17,7 @@ import sounddevice as sd
 import tomllib
 from pynput import keyboard
 
+import commands
 from cleaner import TextCleaner
 from hotkey import KEY_MAP, RightOptionHotkeyListener
 from paster import TextPaster
@@ -386,7 +387,7 @@ class DictationApp:
             if self.on_state_change:
                 self.on_state_change("recording", "")
 
-    def _on_hold_end(self, auto_send: bool = False) -> None:
+    def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
         if self.stopped:
             return
 
@@ -394,8 +395,15 @@ class DictationApp:
         if result is None:
             return
 
-        if auto_send:
-            # Double beep for auto-send: two quick high tones
+        if command_mode:
+            # Triple short beep for command mode
+            self._play_beep(1320.0)
+            time.sleep(0.08)
+            self._play_beep(1320.0)
+            time.sleep(0.08)
+            self._play_beep(1320.0)
+        elif auto_send:
+            # Double beep for auto-send
             self._play_beep(1100.0)
             time.sleep(0.1)
             self._play_beep(1100.0)
@@ -418,7 +426,7 @@ class DictationApp:
 
         worker = threading.Thread(
             target=self._run_pipeline,
-            args=(result, auto_send),
+            args=(result, auto_send, command_mode),
             daemon=True,
             name="dictation-pipeline",
         )
@@ -428,7 +436,7 @@ class DictationApp:
 
         worker.start()
 
-    def _run_pipeline(self, result: RecordingResult, auto_send: bool = False) -> None:
+    def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
         try:
             with self._pipeline_lock:
                 print("[pipeline] Transcribing...")
@@ -450,6 +458,13 @@ class DictationApp:
                     print("[pipeline] Nothing to paste after cleanup.")
                     return
 
+                if command_mode:
+                    if commands.execute(cleaned):
+                        if self.on_state_change:
+                            self.on_state_change("idle", "")
+                        return
+                    print(f"[pipeline] No command match for '{cleaned}', pasting as text.")
+
                 self.paster.paste(cleaned, auto_send=auto_send)
                 print(f"[pipeline] Pasted {len(cleaned)} chars.")
                 if self.on_state_change:
@@ -469,6 +484,7 @@ class DictationApp:
         key = self.config.hotkey.key.replace("_", " ")
         lang_list = ", ".join(self._languages)
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
+        print(f"[ready] Hold {key} + Shift for voice commands.")
         print(f"[ready] Quick tap to cycle language.")
         print(f"[ready] Languages: {lang_list} (active: {self._languages[self._lang_index]})")
 
