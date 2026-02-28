@@ -37,124 +37,22 @@ class DictationMenuBar(rumps.App):
         self._health_notified = False
         self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
         self._overlay = RecordingOverlay()
+        self._volume_last_change = 0.0
 
-        # --- Status (read-only) ---
         self._status_item = rumps.MenuItem("Status: Idle")
         self._status_item.set_callback(None)
 
-        # --- Language submenu ---
-        active_lang = self._app.active_language
-        display = LANG_NAMES.get(active_lang, active_lang)
-        self._lang_menu = rumps.MenuItem(f"Language: {display}")
-        for lang in self._app.languages:
-            name = LANG_NAMES.get(lang, lang)
-            item = rumps.MenuItem(f"{name} ({lang})", callback=self._switch_language)
-            if lang == active_lang:
-                item.state = 1
-            self._lang_menu.add(item)
-
-        # --- Provider submenu ---
-        self._provider_menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
-        for p in PROVIDER_OPTIONS:
-            item = rumps.MenuItem(p, callback=self._switch_provider)
-            if p == self.config.whisper.provider:
-                item.state = 1
-            self._provider_menu.add(item)
-
-        # --- Hotkey submenu ---
-        current_key = self.config.hotkey.key
-        self._hotkey_menu = rumps.MenuItem(f"Hotkey: {current_key.replace('_', ' ')}")
-        for hk in HOTKEY_OPTIONS:
-            item = rumps.MenuItem(hk.replace("_", " "), callback=self._switch_hotkey)
-            item._hotkey_value = hk
-            if hk == current_key:
-                item.state = 1
-            self._hotkey_menu.add(item)
-
-        # --- Volume slider ---
-        vol_pct = int(self.config.audio_feedback.volume * 100)
-        self._volume_menu = rumps.MenuItem(f"Volume: {vol_pct}%")
-        self._volume_slider = rumps.SliderMenuItem(
-            value=vol_pct,
-            min_value=0,
-            max_value=100,
-            callback=self._on_volume_slide,
+        self._lang_menu = self._build_language_menu()
+        self._provider_menu = self._build_provider_menu()
+        self._hotkey_menu = self._build_hotkey_menu()
+        self._volume_menu, self._volume_slider = self._build_volume_menu()
+        self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item = (
+            self._build_toggle_items()
         )
-        self._volume_menu.add(self._volume_slider)
-        self._volume_last_change = 0.0
-
-        # --- Text Commands toggle ---
-        tc_on = self.config.text_commands.enabled
-        self._textcmds_item = rumps.MenuItem(
-            f"Text Commands: {'on' if tc_on else 'off'}",
-            callback=self._toggle_text_commands,
-        )
-
-        # --- Auto-Send toggle ---
-        as_on = self.config.paste.auto_send
-        self._autosend_item = rumps.MenuItem(
-            f"Auto-Send: {'on' if as_on else 'off'}",
-            callback=self._toggle_auto_send,
-        )
-
-        # --- Audio Control toggle ---
-        ac_on = self.config.audio_control.enabled
-        self._audioctrl_item = rumps.MenuItem(
-            f"Audio Control: {'on' if ac_on else 'off'}",
-            callback=self._toggle_audio_control,
-        )
-
-        # --- Failover toggle ---
-        fo_on = self.config.whisper.failover
-        self._failover_item = rumps.MenuItem(
-            f"Failover: {'on' if fo_on else 'off'}",
-            callback=self._toggle_failover,
-        )
-
-        # --- How to Use ---
-        key_display = self.config.hotkey.key.replace("_", " ")
-        self._help_menu = rumps.MenuItem("How to Use")
-        for label in [
-            f"Hold {key_display} — dictate",
-            f"Hold {key_display} + Ctrl — dictate + send",
-            f"Hold {key_display} + Shift — voice command",
-            f"Double-tap {key_display} — cycle language",
-        ]:
-            item = rumps.MenuItem(label)
-            item.set_callback(None)
-            self._help_menu.add(item)
-
-        # Voice commands submenu inside Help
-        voice_cmds = rumps.MenuItem("Voice Commands")
-        for label in [
-            "copy / cut / paste / select all",
-            "undo / redo / save / find",
-            "delete / enter / tab / escape",
-            "screenshot / bold / new tab",
-        ]:
-            item = rumps.MenuItem(label)
-            item.set_callback(None)
-            voice_cmds.add(item)
-        self._help_menu.add(voice_cmds)
-
-        # Text commands submenu inside Help
-        text_cmds = rumps.MenuItem("Text Commands (say these)")
-        for label in [
-            "period / comma / question mark",
-            "new line / new paragraph",
-            "open quote / close quote",
-            "colon / semicolon / dash",
-        ]:
-            item = rumps.MenuItem(label)
-            item.set_callback(None)
-            text_cmds.add(item)
-        self._help_menu.add(text_cmds)
-
-        # --- History submenu ---
+        self._help_menu = self._build_help_menu()
         self._history_menu = rumps.MenuItem("History")
         self._rebuild_history_menu()
 
-        # --- Build menu ---
         self.menu = [
             self._status_item,
             None,
@@ -179,6 +77,102 @@ class DictationMenuBar(rumps.App):
             self._version_item(),
             rumps.MenuItem("Quit", callback=self._quit),
         ]
+
+    def _build_language_menu(self) -> rumps.MenuItem:
+        active_lang = self._app.active_language
+        display = LANG_NAMES.get(active_lang, active_lang)
+        menu = rumps.MenuItem(f"Language: {display}")
+        for lang in self._app.languages:
+            name = LANG_NAMES.get(lang, lang)
+            item = rumps.MenuItem(f"{name} ({lang})", callback=self._switch_language)
+            if lang == active_lang:
+                item.state = 1
+            menu.add(item)
+        return menu
+
+    def _build_provider_menu(self) -> rumps.MenuItem:
+        menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
+        for p in PROVIDER_OPTIONS:
+            item = rumps.MenuItem(p, callback=self._switch_provider)
+            if p == self.config.whisper.provider:
+                item.state = 1
+            menu.add(item)
+        return menu
+
+    def _build_hotkey_menu(self) -> rumps.MenuItem:
+        current_key = self.config.hotkey.key
+        menu = rumps.MenuItem(f"Hotkey: {current_key.replace('_', ' ')}")
+        for hk in HOTKEY_OPTIONS:
+            item = rumps.MenuItem(hk.replace("_", " "), callback=self._switch_hotkey)
+            item._hotkey_value = hk
+            if hk == current_key:
+                item.state = 1
+            menu.add(item)
+        return menu
+
+    def _build_volume_menu(self) -> tuple[rumps.MenuItem, rumps.SliderMenuItem]:
+        vol_pct = int(self.config.audio_feedback.volume * 100)
+        menu = rumps.MenuItem(f"Volume: {vol_pct}%")
+        slider = rumps.SliderMenuItem(
+            value=vol_pct, min_value=0, max_value=100,
+            callback=self._on_volume_slide,
+        )
+        menu.add(slider)
+        return menu, slider
+
+    def _build_toggle_items(self) -> tuple[rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem]:
+        tc_on = self.config.text_commands.enabled
+        textcmds = rumps.MenuItem(f"Text Commands: {'on' if tc_on else 'off'}", callback=self._toggle_text_commands)
+
+        as_on = self.config.paste.auto_send
+        autosend = rumps.MenuItem(f"Auto-Send: {'on' if as_on else 'off'}", callback=self._toggle_auto_send)
+
+        ac_on = self.config.audio_control.enabled
+        audioctrl = rumps.MenuItem(f"Audio Control: {'on' if ac_on else 'off'}", callback=self._toggle_audio_control)
+
+        fo_on = self.config.whisper.failover
+        failover = rumps.MenuItem(f"Failover: {'on' if fo_on else 'off'}", callback=self._toggle_failover)
+
+        return textcmds, autosend, audioctrl, failover
+
+    def _build_help_menu(self) -> rumps.MenuItem:
+        key_display = self.config.hotkey.key.replace("_", " ")
+        menu = rumps.MenuItem("How to Use")
+        for label in [
+            f"Hold {key_display} — dictate",
+            f"Hold {key_display} + Ctrl — dictate + send",
+            f"Hold {key_display} + Shift — voice command",
+            f"Double-tap {key_display} — cycle language",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            menu.add(item)
+
+        voice_cmds = rumps.MenuItem("Voice Commands")
+        for label in [
+            "copy / cut / paste / select all",
+            "undo / redo / save / find",
+            "delete / enter / tab / escape",
+            "screenshot / bold / new tab",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            voice_cmds.add(item)
+        menu.add(voice_cmds)
+
+        text_cmds = rumps.MenuItem("Text Commands (say these)")
+        for label in [
+            "period / comma / question mark",
+            "new line / new paragraph",
+            "open quote / close quote",
+            "colon / semicolon / dash",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            text_cmds.add(item)
+        menu.add(text_cmds)
+
+        return menu
 
     # --- History ---
 
