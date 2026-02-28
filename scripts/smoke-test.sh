@@ -100,56 +100,41 @@ fi
 
 # Step 5: Dictation flow test — simulate hold-to-dictate via DictationApp
 echo "[smoke] Dictation flow test..."
-"$PYTHON" -c "
+FLOW_OUT=$("$PYTHON" -c "
 import sys, os, time, threading
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
 from dictation import DictationApp, load_config
 
 config = load_config(Path('$SMOKE_CONFIG'))
-# Disable audio feedback to keep it quiet
 config.audio_feedback.volume = 0.0
 
 app = DictationApp(config)
-
-# Mock paster to prevent actual Cmd+V into the terminal
 app.paster.paste = lambda text, auto_send=False: None
 
-# Track state changes
 states = []
 app.on_state_change = lambda state, text: states.append((state, text))
 
-# Simulate hold start (starts recording)
 app._on_hold_start()
 assert app.recorder._stream is not None, 'Recorder stream not started'
-print('  Hold start: recording active')
-
 time.sleep(0.5)
 
-# Simulate hold end (stops recording, triggers pipeline)
-# Patch transcriber to avoid real API call — return canned text
 app.transcriber.transcribe = lambda audio_bytes, **kw: 'smoke test hello world'
 app._on_hold_end()
-
-# Wait briefly for pipeline thread to finish
 time.sleep(1.0)
 
-# Verify pipeline ran (state should have gone through transcribing → idle)
 state_names = [s[0] for s in states]
 assert 'recording' in state_names, f'Never entered recording state: {state_names}'
 assert 'idle' in state_names, f'Never returned to idle: {state_names}'
-print(f'  Hold end: states = {state_names}')
-
-# Verify the cleaned text was produced (pasting will fail without accessibility, that's OK)
-final_texts = [s[1] for s in states if s[1]]
-print(f'  Pipeline output: {final_texts}')
 
 app.stop()
-print('[smoke] Dictation flow: passed')
-" 2>&1
-
-if [ $? -ne 0 ]; then
+print('OK')
+" 2>&1)
+if echo "$FLOW_OUT" | grep -q "^OK$"; then
+  echo "[smoke] Dictation flow: passed (recording → transcribing → idle)"
+else
   echo "[smoke] FAIL: dictation flow test failed"
+  echo "$FLOW_OUT"
   rm -f "$SMOKE_CONFIG"
   exit 1
 fi
@@ -261,7 +246,7 @@ fi
 
 # Step 9: Error path test — transcriber failure doesn't crash the app
 echo "[smoke] Error path test..."
-"$PYTHON" -c "
+ERROR_OUT=$("$PYTHON" -c "
 import sys, os, time
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
@@ -292,8 +277,16 @@ assert 'idle' in state_names, f'Never returned to idle after error: {state_names
 assert not app.stopped, 'App stopped unexpectedly'
 
 app.stop()
-print('[smoke] Error path: passed')
-" 2>&1
+print('OK')
+" 2>&1)
+if echo "$ERROR_OUT" | grep -q "^OK$"; then
+  echo "[smoke] Error path: passed (error caught, app recovered)"
+else
+  echo "[smoke] FAIL: error path test failed"
+  echo "$ERROR_OUT"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
 
 if [ $? -ne 0 ]; then
   echo "[smoke] FAIL: error path test failed"
@@ -303,7 +296,7 @@ fi
 
 # Step 10: Auto-send flow test
 echo "[smoke] Auto-send test..."
-"$PYTHON" -c "
+SEND_OUT=$("$PYTHON" -c "
 import sys, os, time
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
@@ -329,14 +322,15 @@ time.sleep(2.0)
 
 assert len(paste_calls) > 0, f'Paster.paste was never called'
 assert paste_calls[0]['auto_send'] is True, f'auto_send not True: {paste_calls[0]}'
-print(f'  Paste called with auto_send={paste_calls[0][\"auto_send\"]}')
 
 app.stop()
-print('[smoke] Auto-send: passed')
-" 2>&1
-
-if [ $? -ne 0 ]; then
+print('OK')
+" 2>&1)
+if echo "$SEND_OUT" | grep -q "^OK$"; then
+  echo "[smoke] Auto-send: passed (auto_send=True propagated to paster)"
+else
   echo "[smoke] FAIL: auto-send test failed"
+  echo "$SEND_OUT"
   rm -f "$SMOKE_CONFIG"
   exit 1
 fi
