@@ -7,4 +7,12 @@ while [ -L "$SOURCE" ]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-exec "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/dictation.py" "$@"
+PYTHON="$SCRIPT_DIR/.venv/bin/python"
+
+if [ ! -x "$PYTHON" ]; then
+  echo "Error: Virtual environment not found at $SCRIPT_DIR/.venv"
+  echo "Run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  exit 1
+fi
+
+exec "$PYTHON" "$SCRIPT_DIR/dictation.py" "$@"

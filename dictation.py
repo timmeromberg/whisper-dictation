@@ -627,7 +627,16 @@ class DictationApp:
 
 def _load_config_from_path(config_path: Path) -> AppConfig:
     if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
+        example = config_path.parent / "config.example.toml"
+        if example.exists():
+            import shutil
+            shutil.copy2(example, config_path)
+            print(f"[setup] Created {config_path.name} from template. Edit it to set your preferences.")
+        else:
+            raise FileNotFoundError(
+                f"Config file not found: {config_path}\n"
+                f"Run: cp config.example.toml config.toml"
+            )
     return load_config(config_path)
 
 
