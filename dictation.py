@@ -439,6 +439,36 @@ class DictationApp:
         if self.on_state_change:
             self.on_state_change("language_changed", f"{display} ({new_lang})")
 
+    def _actionable_error(self, exc: Exception) -> str:
+        """Map an exception to an actionable user-facing message."""
+        err = str(exc).lower()
+        provider = self.config.whisper.provider
+
+        if any(s in err for s in ["connect", "refused", "unreachable", "resolve"]):
+            if provider == "local":
+                return "Whisper server unreachable. Is your whisper.cpp server running?"
+            return f"Cannot reach {provider}. Check your internet connection."
+
+        if "timeout" in err or "timed out" in err:
+            return "Transcription timed out. Try a shorter recording or increase timeout in settings."
+
+        if "401" in err or "api key" in err:
+            return "API key invalid or expired. Update via menu bar \u2192 Groq API Key."
+
+        if "429" in err or "rate limit" in err:
+            return "Rate limit hit. Wait a moment, or switch to local provider."
+
+        if "ssl" in err or "certificate" in err:
+            return "SSL error. Check your internet connection or try again."
+
+        if "413" in err or "too large" in err:
+            return "Recording too large for provider. Try a shorter recording."
+
+        if "500" in err or "502" in err or "503" in err or "server error" in err:
+            return f"{provider} server error. The provider may be temporarily down."
+
+        return f"Transcription failed: {str(exc)[:100]}"
+
     def _play_error_beep(self) -> None:
         """Low descending double-buzz to signal an error."""
         feedback = self.config.audio_feedback
@@ -660,17 +690,8 @@ class DictationApp:
                     self.on_state_change("idle", "")
         except Exception as exc:
             log("pipeline", f"Failed: {exc}")
-            # Audio + visual feedback so the user knows something went wrong
             self._play_error_beep()
-            err_str = str(exc).lower()
-            if any(s in err_str for s in ["connect", "refused", "unreachable", "resolve"]):
-                provider = self.config.whisper.provider
-                if provider == "local":
-                    self._notify("Whisper server unreachable. Is your whisper.cpp server running?")
-                else:
-                    self._notify(f"Cannot reach {provider}. Check your internet connection.")
-            else:
-                self._notify(f"Transcription failed: {exc}")
+            self._notify(self._actionable_error(exc))
             if self.on_state_change:
                 self.on_state_change("idle", "")
         finally:
