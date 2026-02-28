@@ -43,10 +43,10 @@ class DictationMenuBar(rumps.App):
         self._status_item.set_callback(None)
 
         # --- Language submenu ---
-        active_lang = self._app._languages[self._app._lang_index]
+        active_lang = self._app.active_language
         display = LANG_NAMES.get(active_lang, active_lang)
         self._lang_menu = rumps.MenuItem(f"Language: {display}")
-        for lang in self._app._languages:
+        for lang in self._app.languages:
             name = LANG_NAMES.get(lang, lang)
             item = rumps.MenuItem(f"{name} ({lang})", callback=self._switch_language)
             if lang == active_lang:
@@ -127,7 +127,7 @@ class DictationMenuBar(rumps.App):
             self._status_item.title = "Status: Idle"
             self._lang_menu.title = f"Language: {detail}"
             # Update checkmarks
-            new_lang = self._app._languages[self._app._lang_index]
+            new_lang = self._app.active_language
             for item in self._lang_menu.values():
                 item.state = 1 if f"({new_lang})" in item.title else 0
 
@@ -151,11 +151,9 @@ class DictationMenuBar(rumps.App):
     def _switch_language(self, sender) -> None:
         # Extract lang code from "English (en)"
         lang = sender.title.split("(")[-1].rstrip(")")
-        if lang == self._app._languages[self._app._lang_index]:
+        if lang == self._app.active_language:
             return
-        if lang in self._app._languages:
-            self._app._lang_index = self._app._languages.index(lang)
-        self._app.transcriber.language = lang
+        self._app.set_language(lang)
         display = LANG_NAMES.get(lang, lang)
         self._lang_menu.title = f"Language: {display}"
         for item in self._lang_menu.values():
@@ -187,7 +185,7 @@ class DictationMenuBar(rumps.App):
             return
         set_config_value(self.config_path, "hotkey.key", hk)
         self.config.hotkey.key = hk
-        self._app._listener.set_key(hk)
+        self._app.listener.set_key(hk)
         self._hotkey_menu.title = f"Hotkey: {hk.replace('_', ' ')}"
         for item in self._hotkey_menu.values():
             item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
@@ -225,7 +223,7 @@ class DictationMenuBar(rumps.App):
                                "Whisper provider is unreachable.")
             return
 
-        self._app._listener.start()
+        self._app.start_listener()
         key = self.config.hotkey.key.replace("_", " ")
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
 

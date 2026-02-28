@@ -310,6 +310,7 @@ class DictationApp:
             self._lang_index = self._languages.index(config.whisper.language)
 
         self._last_cycle_time = 0.0
+        self._lang_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._pipeline_lock = threading.Lock()
         self._threads_lock = threading.Lock()
@@ -322,6 +323,29 @@ class DictationApp:
     @property
     def stopped(self) -> bool:
         return self._stop_event.is_set()
+
+    @property
+    def active_language(self) -> str:
+        with self._lang_lock:
+            return self._languages[self._lang_index]
+
+    @property
+    def languages(self) -> list[str]:
+        with self._lang_lock:
+            return list(self._languages)
+
+    def set_language(self, lang: str) -> None:
+        with self._lang_lock:
+            if lang in self._languages:
+                self._lang_index = self._languages.index(lang)
+        self.transcriber.language = lang
+
+    @property
+    def listener(self) -> RightOptionHotkeyListener:
+        return self._listener
+
+    def start_listener(self) -> None:
+        self._listener.start()
 
     def _notify(self, message: str, title: str = "whisper-dic") -> None:
         """Show a macOS notification banner."""
@@ -340,8 +364,9 @@ class DictationApp:
 
     def _cycle_language(self) -> None:
         """Cycle to the next language and update the transcriber."""
-        self._lang_index = (self._lang_index + 1) % len(self._languages)
-        new_lang = self._languages[self._lang_index]
+        with self._lang_lock:
+            self._lang_index = (self._lang_index + 1) % len(self._languages)
+            new_lang = self._languages[self._lang_index]
         self.transcriber.language = new_lang
 
         LANG_NAMES = {
@@ -554,11 +579,11 @@ class DictationApp:
 
         self._listener.start()
         key = self.config.hotkey.key.replace("_", " ")
-        lang_list = ", ".join(self._languages)
+        lang_list = ", ".join(self.languages)
         log("ready", f"Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
         log("ready", f"Hold {key} + Shift for voice commands.")
         log("ready", f"Quick tap to cycle language.")
-        log("ready", f"Languages: {lang_list} (active: {self._languages[self._lang_index]})")
+        log("ready", f"Languages: {lang_list} (active: {self.active_language})")
 
         while not self.stopped:
             time.sleep(0.1)
