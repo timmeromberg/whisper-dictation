@@ -12,7 +12,7 @@ from simple_term_menu import TerminalMenu
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
-HOTKEY_OPTIONS = ["right_option", "fn", "right_command", "right_shift"]
+HOTKEY_OPTIONS = ["right_option", "right_command", "right_shift"]
 
 _BOX_WIDTH = 34
 _SEPARATOR = "  " + ("─" * 32)

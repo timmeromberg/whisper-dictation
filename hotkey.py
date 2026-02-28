@@ -8,17 +8,12 @@ from typing import Optional
 
 from pynput import keyboard
 
-# macOS Fn/Globe key — virtual keycode 63 (kVK_Function)
-_FN_KEYCODE = keyboard.KeyCode.from_vk(63)
-
 KEY_MAP = {
     "right_option": keyboard.Key.alt_r,
     "alt_r": keyboard.Key.alt_r,
     "right_alt": keyboard.Key.alt_r,
     "right_command": keyboard.Key.cmd_r,
     "right_shift": keyboard.Key.shift_r,
-    "fn": _FN_KEYCODE,
-    "globe": _FN_KEYCODE,
 }
 
 
