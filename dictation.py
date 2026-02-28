@@ -394,6 +394,14 @@ class DictationApp:
 
         atexit.register(self._atexit_cleanup)
 
+    def _emit_state(self, state: str, detail: str = "") -> None:
+        """Notify UI of state change. Never raises — UI failures must not break dictation."""
+        if self.on_state_change:
+            try:
+                self.on_state_change(state, detail)
+            except Exception as exc:
+                log("ui", f"State callback failed ({state}): {exc}")
+
     @property
     def stopped(self) -> bool:
         return self._stop_event.is_set()
@@ -447,8 +455,7 @@ class DictationApp:
         log("language", f"Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
         self.play_beep(1200.0)
-        if self.on_state_change:
-            self.on_state_change("language_changed", f"{display} ({new_lang})")
+        self._emit_state("language_changed", f"{display} ({new_lang})")
 
     def _actionable_error(self, exc: Exception) -> str:
         """Map an exception to an actionable user-facing message."""
@@ -607,8 +614,7 @@ class DictationApp:
             log("recording", f"Failed to start stream: {exc}")
             self._play_error_beep()
             self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
-            if self.on_state_change:
-                self.on_state_change("idle", "")
+            self._emit_state("idle")
             return
 
         if started:
@@ -616,8 +622,7 @@ class DictationApp:
             # during PortAudio stream creation
             self.audio_controller.mute()
             log("recording", "Started.")
-            if self.on_state_change:
-                self.on_state_change("recording", "")
+            self._emit_state("recording")
 
     def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
         if self.stopped:
@@ -650,15 +655,13 @@ class DictationApp:
                 self._cycle_language()
             else:
                 self._last_tap_time = now
-            if self.on_state_change:
-                self.on_state_change("idle", "")
+            self._emit_state("idle")
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
             log("recording", f"Ignored overlong clip ({result.duration_seconds:.2f}s > {self.config.recording.max_duration:.2f}s).")
             self._notify("Recording too long, ignored")
-            if self.on_state_change:
-                self.on_state_change("idle", "")
+            self._emit_state("idle")
             return
 
         # Config auto-send applies to all dictations (Ctrl modifier is per-press)
@@ -681,8 +684,7 @@ class DictationApp:
             with self._pipeline_lock:
                 size_kb = len(result.audio_bytes) / 1024
                 log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({size_kb:.0f} KB)...")
-                if self.on_state_change:
-                    self.on_state_change("transcribing", "")
+                self._emit_state("transcribing")
                 try:
                     transcript = self._transcribe_with_retry(result.audio_bytes)
                 except Exception:
@@ -708,34 +710,29 @@ class DictationApp:
                 if not cleaned:
                     log("pipeline", f"Empty after cleanup (original: '{transcript}')")
                     self._play_error_beep()
-                    if self.on_state_change:
-                        self.on_state_change("idle", "")
+                    self._emit_state("idle")
                     return
 
                 if command_mode:
                     log("pipeline", f"Command mode — matching: '{cleaned}'")
                     if commands.execute(cleaned):
-                        if self.on_state_change:
-                            self.on_state_change("idle", "")
+                        self._emit_state("idle")
                     else:
                         log("command", f"No match for '{cleaned}', ignoring.")
                         self._play_error_beep()
                         self._notify(f"Unknown command: {cleaned}")
-                        if self.on_state_change:
-                            self.on_state_change("idle", "")
+                        self._emit_state("idle")
                     return
 
                 self.paster.paste(cleaned, auto_send=auto_send)
                 self.history.add(cleaned, self.active_language, result.duration_seconds)
                 log("pipeline", f"Pasted {len(cleaned)} chars (auto_send={auto_send}).")
-                if self.on_state_change:
-                    self.on_state_change("idle", "")
+                self._emit_state("idle")
         except Exception as exc:
             log("pipeline", f"Failed: {exc}")
             self._play_error_beep()
             self._notify(self._actionable_error(exc))
-            if self.on_state_change:
-                self.on_state_change("idle", "")
+            self._emit_state("idle")
         finally:
             current = threading.current_thread()
             with self._threads_lock:

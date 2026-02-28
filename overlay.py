@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from AppKit import (
     NSBezierPath,
     NSColor,
@@ -12,7 +14,7 @@ from AppKit import (
     NSWindow,
     NSWindowStyleMaskBorderless,
 )
-from objc import python_method
+from PyObjCTools.AppHelper import callAfter
 
 
 class _DotView(NSView):
@@ -33,8 +35,10 @@ class RecordingOverlay:
     def __init__(self) -> None:
         self._window: NSWindow | None = None
         self._dot: _DotView | None = None
+        self._lock = threading.Lock()
 
     def _ensure_window(self) -> None:
+        """Create the window. MUST be called on main thread."""
         if self._window is not None:
             return
 
@@ -67,28 +71,28 @@ class RecordingOverlay:
         self._window = window
         self._dot = dot
 
-    @python_method
     def show_recording(self) -> None:
-        """Show a red dot (recording)."""
-        self._ensure_window()
-        if self._dot is None:
-            return
-        self._dot._color = NSColor.redColor()
-        self._dot.setNeedsDisplay_(True)
-        self._window.orderFront_(None)
+        """Show a red dot (recording). Safe to call from any thread."""
+        callAfter(self._show, NSColor.redColor())
 
-    @python_method
     def show_transcribing(self) -> None:
-        """Show an orange dot (transcribing)."""
+        """Show an orange dot (transcribing). Safe to call from any thread."""
+        callAfter(self._show, NSColor.orangeColor())
+
+    def hide(self) -> None:
+        """Hide the dot. Safe to call from any thread."""
+        callAfter(self._hide)
+
+    def _show(self, color) -> None:
+        """Main-thread: create window if needed, set color, show."""
         self._ensure_window()
         if self._dot is None:
             return
-        self._dot._color = NSColor.orangeColor()
+        self._dot._color = color
         self._dot.setNeedsDisplay_(True)
         self._window.orderFront_(None)
 
-    @python_method
-    def hide(self) -> None:
-        """Hide the dot."""
+    def _hide(self) -> None:
+        """Main-thread: hide window."""
         if self._window is not None:
             self._window.orderOut_(None)
