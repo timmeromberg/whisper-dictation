@@ -659,6 +659,75 @@ def command_setup(config_path: Path) -> int:
     return 0
 
 
+_PLIST_LABEL = "com.whisper.dictation"
+_PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
+_LOG_PATH = "/tmp/whisper-dictation.log"
+
+
+def _generate_plist() -> str:
+    script_path = Path(__file__).resolve().parent / "whisper-dic"
+    return f"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{_PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{script_path}</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{script_path.parent}</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardOutPath</key>
+  <string>{_LOG_PATH}</string>
+  <key>StandardErrorPath</key>
+  <string>{_LOG_PATH}</string>
+</dict>
+</plist>
+"""
+
+
+def command_install() -> int:
+    if _PLIST_PATH.exists():
+        print(f"[install] Already installed at {_PLIST_PATH}")
+        print("[install] Run 'whisper-dic uninstall' first to reinstall.")
+        return 1
+
+    _PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _PLIST_PATH.write_text(_generate_plist(), encoding="utf-8")
+    print(f"[install] Created {_PLIST_PATH}")
+
+    result = subprocess.run(["launchctl", "load", str(_PLIST_PATH)], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"[install] launchctl load failed: {result.stderr.strip()}")
+        return 1
+
+    print("[install] Loaded into launchd. whisper-dic will start at login.")
+    print(f"[install] Logs: {_LOG_PATH}")
+    return 0
+
+
+def command_uninstall() -> int:
+    if not _PLIST_PATH.exists():
+        print("[uninstall] Not installed.")
+        return 1
+
+    subprocess.run(["launchctl", "unload", str(_PLIST_PATH)], capture_output=True, text=True)
+    _PLIST_PATH.unlink()
+    print(f"[uninstall] Removed {_PLIST_PATH}")
+    print("[uninstall] whisper-dic will no longer start at login.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     config_parent = argparse.ArgumentParser(add_help=False)
     config_parent.add_argument(
@@ -710,6 +779,15 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("key", help="Dotted key path, for example whisper.language")
     set_parser.add_argument("value", help="Value to set")
 
+    subparsers.add_parser(
+        "install",
+        help="Install as login item (start at login, auto-restart)",
+    )
+    subparsers.add_parser(
+        "uninstall",
+        help="Remove login item",
+    )
+
     return parser
 
 
@@ -730,6 +808,10 @@ def main() -> int:
         return command_provider(config_path, args.provider)
     if command == "set":
         return command_set(config_path, args.key, args.value)
+    if command == "install":
+        return command_install()
+    if command == "uninstall":
+        return command_uninstall()
 
     parser.print_help()
     return 1
