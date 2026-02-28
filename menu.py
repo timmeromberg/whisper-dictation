@@ -208,7 +208,6 @@ def run_setup_menu(config_path: Path) -> str:
             continue
 
         if selection == 3:
-            current_vol = str(config.audio_feedback.volume)
             vol_labels = [f"{int(float(v) * 100)}%" for v in VOLUME_OPTIONS]
             current_label = f"{int(config.audio_feedback.volume * 100)}%"
             idx = _show_choice_menu("SET VOLUME", vol_labels, current_label)

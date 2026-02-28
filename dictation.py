@@ -10,7 +10,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import sounddevice as sd
@@ -23,6 +23,8 @@ from cleaner import TextCleaner
 from hotkey import KEY_MAP, HotkeyListener
 from log import log
 from paster import TextPaster
+from recorder import Recorder, RecordingResult
+from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
 LANG_NAMES = {
     "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
@@ -31,8 +33,6 @@ LANG_NAMES = {
     "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
     "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
 }
-from recorder import Recorder, RecordingResult
-from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
 if hasattr(keyboard.Key, "cmd_r"):
     KEY_MAP.setdefault("right_command", keyboard.Key.cmd_r)
@@ -594,7 +594,7 @@ class DictationApp:
         lang_list = ", ".join(self.languages)
         log("ready", f"Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
         log("ready", f"Hold {key} + Shift for voice commands.")
-        log("ready", f"Quick tap to cycle language.")
+        log("ready", "Quick tap to cycle language.")
         log("ready", f"Languages: {lang_list} (active: {self.active_language})")
 
         while not self.stopped:

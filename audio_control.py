@@ -249,7 +249,6 @@ class UpnpDevice:
     def _set_mute(self, muted: bool) -> None:
         import asyncio
         from async_upnp_client.aiohttp import AiohttpRequester
-        from async_upnp_client.client import UpnpDevice as UpnpClientDevice
         from async_upnp_client.client_factory import UpnpFactory
 
         async def _do_mute():
