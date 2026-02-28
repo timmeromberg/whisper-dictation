@@ -438,6 +438,26 @@ class DictationApp:
                 else:
                     raise
 
+    @staticmethod
+    def check_permissions() -> list[str]:
+        """Check macOS permissions. Returns list of missing permission names."""
+        missing = []
+        try:
+            from ApplicationServices import AXIsProcessTrusted
+            if not AXIsProcessTrusted():
+                missing.append("Accessibility")
+        except ImportError:
+            pass
+        try:
+            import sounddevice as _sd
+            stream = _sd.InputStream(samplerate=16000, channels=1, dtype="int16")
+            stream.start()
+            stream.stop()
+            stream.close()
+        except Exception:
+            missing.append("Microphone")
+        return missing
+
     def startup_health_checks(self) -> bool:
         provider = self.config.whisper.provider
         if provider == "groq" and not self.config.whisper.groq.api_key.strip():
@@ -599,6 +619,10 @@ class DictationApp:
                 self._pipeline_threads.discard(current)
 
     def run(self) -> int:
+        missing = self.check_permissions()
+        for perm in missing:
+            log("startup", f"Warning: {perm} permission not granted. Check System Settings > Privacy & Security.")
+
         if not self.startup_health_checks():
             return 1
 

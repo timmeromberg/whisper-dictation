@@ -502,7 +502,49 @@ class DictationMenuBar(rumps.App):
 
     # --- Startup ---
 
+    def _check_permissions(self) -> None:
+        """Check macOS permissions and show guidance if missing."""
+        # Check Accessibility
+        try:
+            from ApplicationServices import AXIsProcessTrusted
+            if not AXIsProcessTrusted():
+                result = rumps.alert(
+                    title="Accessibility Permission Required",
+                    message="whisper-dic needs Accessibility access for global hotkey listening and text pasting.\n\nOpen System Settings to grant it?",
+                    ok="Open Settings",
+                    cancel="Skip",
+                )
+                if result == 1:
+                    from AppKit import NSWorkspace, NSURL
+                    NSWorkspace.sharedWorkspace().openURL_(
+                        NSURL.URLWithString_("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                    )
+        except ImportError:
+            pass
+
+        # Check Microphone
+        try:
+            import sounddevice as sd
+            stream = sd.InputStream(samplerate=16000, channels=1, dtype="int16")
+            stream.start()
+            stream.stop()
+            stream.close()
+        except Exception:
+            result = rumps.alert(
+                title="Microphone Permission Required",
+                message="whisper-dic needs Microphone access to record audio.\n\nOpen System Settings to grant it?",
+                ok="Open Settings",
+                cancel="Skip",
+            )
+            if result == 1:
+                from AppKit import NSWorkspace, NSURL
+                NSWorkspace.sharedWorkspace().openURL_(
+                    NSURL.URLWithString_("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+                )
+
     def _start_dictation(self) -> None:
+        self._check_permissions()
+
         if not self._app.startup_health_checks():
             provider = self.config.whisper.provider
             if provider == "groq" and not self.config.whisper.groq.api_key.strip():
