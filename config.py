@@ -128,7 +128,7 @@ def load_config(path: Path) -> AppConfig:
     if language not in languages:
         languages.insert(0, language)
 
-    return AppConfig(
+    config = AppConfig(
         hotkey=HotkeyConfig(
             key=str(hotkey_data.get("key", "right_option")),
         ),
@@ -184,6 +184,42 @@ def load_config(path: Path) -> AppConfig:
         ),
         custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
     )
+    return _validate_config(config)
+
+
+def _validate_config(config: AppConfig) -> AppConfig:
+    """Clamp config values to sane ranges. Logs warnings, never crashes."""
+    if config.recording.min_duration <= 0:
+        log("config", f"min_duration={config.recording.min_duration} invalid, clamped to 0.1")
+        config.recording.min_duration = 0.1
+
+    if config.recording.max_duration <= config.recording.min_duration:
+        log("config", f"max_duration={config.recording.max_duration} invalid, clamped to 300.0")
+        config.recording.max_duration = 300.0
+
+    valid_rates = {8000, 16000, 22050, 44100, 48000}
+    if config.recording.sample_rate not in valid_rates:
+        log("config", f"sample_rate={config.recording.sample_rate} invalid, clamped to 16000")
+        config.recording.sample_rate = 16000
+
+    if not 0.0 <= config.audio_feedback.volume <= 1.0:
+        clamped = max(0.0, min(1.0, config.audio_feedback.volume))
+        log("config", f"volume={config.audio_feedback.volume} out of range, clamped to {clamped}")
+        config.audio_feedback.volume = clamped
+
+    if not config.whisper.language:
+        log("config", "language is empty, defaulting to 'en'")
+        config.whisper.language = "en"
+
+    if config.whisper.provider not in {"local", "groq"}:
+        log("config", f"provider='{config.whisper.provider}' invalid, defaulting to 'local'")
+        config.whisper.provider = "local"
+
+    if config.whisper.timeout_seconds <= 0:
+        log("config", f"timeout_seconds={config.whisper.timeout_seconds} invalid, clamped to 120.0")
+        config.whisper.timeout_seconds = 120.0
+
+    return config
 
 
 def _to_toml_literal(raw_value: str) -> str:

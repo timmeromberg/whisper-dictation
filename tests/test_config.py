@@ -109,3 +109,47 @@ class TestToTomlLiteral:
 
     def test_escapes_quotes(self) -> None:
         assert _to_toml_literal('say "hi"') == '"say \\"hi\\""'
+
+
+class TestValidation:
+    def test_negative_min_duration_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "neg.toml"
+        p.write_text("[recording]\nmin_duration = -1.0\n")
+        config = load_config(p)
+        assert config.recording.min_duration == 0.1
+
+    def test_max_less_than_min_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "maxmin.toml"
+        p.write_text("[recording]\nmin_duration = 0.5\nmax_duration = 0.1\n")
+        config = load_config(p)
+        assert config.recording.max_duration == 300.0
+
+    def test_invalid_sample_rate_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "sr.toml"
+        p.write_text("[recording]\nsample_rate = 12345\n")
+        config = load_config(p)
+        assert config.recording.sample_rate == 16000
+
+    def test_volume_over_1_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "vol.toml"
+        p.write_text("[audio_feedback]\nvolume = 5.0\n")
+        config = load_config(p)
+        assert config.audio_feedback.volume == 1.0
+
+    def test_volume_negative_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "volneg.toml"
+        p.write_text("[audio_feedback]\nvolume = -0.5\n")
+        config = load_config(p)
+        assert config.audio_feedback.volume == 0.0
+
+    def test_empty_language_defaults(self, tmp_path: Path) -> None:
+        p = tmp_path / "lang.toml"
+        p.write_text('[whisper]\nlanguage = ""\n')
+        config = load_config(p)
+        assert config.whisper.language == "en"
+
+    def test_negative_timeout_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "timeout.toml"
+        p.write_text("[whisper]\ntimeout_seconds = -10\n")
+        config = load_config(p)
+        assert config.whisper.timeout_seconds == 120.0
