@@ -698,7 +698,7 @@ def _generate_plist() -> str:
   <key>ProgramArguments</key>
   <array>
     <string>{script_path}</string>
-    <string>run</string>
+    <string>menubar</string>
   </array>
   <key>WorkingDirectory</key>
   <string>{script_path.parent}</string>
