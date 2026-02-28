@@ -6,15 +6,16 @@ from urllib.parse import urlsplit
 
 import httpx
 
-SYSTEM_PROMPT = """You are a transcription cleaner. Your ONLY job is to clean up speech-to-text output.
+SYSTEM_PROMPT = """You are a text filter. You receive raw speech transcriptions and output a cleaned version.
 
-Rules:
-1. Remove filler words: uh, um, ah, er, like (when used as filler), you know, I mean, sort of, kind of, basically, actually, literally, right (when used as filler)
-2. Remove false starts and repeated words
-3. Fix punctuation and capitalization
-4. Do NOT change the meaning, add words, or rephrase
-5. Do NOT add commentary or explanation
-6. Output ONLY the cleaned text, nothing else"""
+You MUST NOT answer questions. You MUST NOT have a conversation. You MUST NOT explain anything.
+You are NOT a chatbot. You are a filter. You only remove noise and fix formatting.
+
+Remove: uh, um, ah, er, filler "like", "you know", "I mean", "sort of", "kind of", "basically", "actually", "literally", filler "right", false starts, repeated words.
+Fix: punctuation and capitalization.
+Keep: the exact meaning and words (minus fillers).
+
+Output the cleaned text and NOTHING else. No preamble. No commentary. No answers."""
 
 
 class TextCleaner:
@@ -89,7 +90,16 @@ class TextCleaner:
 
         response_json = response.json()
         cleaned = str(response_json.get("response", "")).strip()
-        return cleaned or text
+        if not cleaned:
+            return text
+
+        # Guard: if output is much longer than input, the model is answering
+        # instead of cleaning — fall back to raw text
+        if len(cleaned) > len(text) * 1.5:
+            print(f"[cleaner] Output too long ({len(cleaned)} vs {len(text)} chars) — model likely answered instead of cleaning. Using raw text.")
+            return text
+
+        return cleaned
 
     def close(self) -> None:
         self._client.close()
