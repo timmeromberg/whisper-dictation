@@ -464,7 +464,11 @@ class DictationApp:
             started = self.recorder.start()
         except Exception as exc:
             log("recording", f"Failed to start stream: {exc}")
+            self._play_error_beep()
+            self._notify("Microphone unavailable")
             self.audio_controller.unmute()
+            if self.on_state_change:
+                self.on_state_change("idle", "")
             return
 
         if started:
@@ -504,10 +508,15 @@ class DictationApp:
             if len(self._languages) > 1 and (now - self._last_cycle_time) > 1.0:
                 self._last_cycle_time = now
                 self._cycle_language()
+            if self.on_state_change:
+                self.on_state_change("idle", "")
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
             log("recording", f"Ignored overlong clip ({result.duration_seconds:.2f}s > {self.config.recording.max_duration:.2f}s).")
+            self._notify("Recording too long, ignored")
+            if self.on_state_change:
+                self.on_state_change("idle", "")
             return
 
         worker = threading.Thread(
@@ -544,6 +553,9 @@ class DictationApp:
                 cleaned = cleaned.strip()
                 if not cleaned:
                     log("pipeline", f"Empty after cleanup (original: '{transcript}')")
+                    self._play_error_beep()
+                    if self.on_state_change:
+                        self.on_state_change("idle", "")
                     return
 
                 if command_mode:
