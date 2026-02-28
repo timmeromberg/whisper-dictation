@@ -223,7 +223,7 @@ unmute_command = "some-command --unmute"
 ./whisper-dic install
 
 # View logs
-tail -f /tmp/whisper-dictation.log
+tail -f ~/Library/Logs/whisper-dictation.log
 
 # Uninstall
 ./whisper-dic uninstall
@@ -249,7 +249,7 @@ Click the icon to switch language, provider, hotkey, beep volume, or quit.
 
 **Transcription failing?**
 - Run `whisper-dic status` to check endpoint health
-- Check logs: `tail -f /tmp/whisper-dictation.log`
+- Check logs: `tail -f ~/Library/Logs/whisper-dictation.log`
 - For Groq: verify API key is set and valid
 
 **Text not appearing?**
