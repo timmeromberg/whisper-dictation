@@ -1,0 +1,6 @@
+pynput>=1.8.0
+sounddevice>=0.5.0
+soundfile>=0.12.0
+numpy>=1.26.0
+httpx>=0.27.0
+pyperclip>=1.9.0
