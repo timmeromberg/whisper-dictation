@@ -1,13 +1,19 @@
 [hotkey]
+# Which modifier key triggers dictation
+# Options: left_option, right_option, left_command, right_command, left_shift, right_shift
 key = "left_option"
 
 [recording]
+# Taps shorter than min_duration trigger language cycling instead of recording
 min_duration = 0.3
+# Recordings longer than max_duration are discarded (safety limit)
 max_duration = 300.0
 sample_rate = 16000
 
 [whisper]
-# Which provider to use: "local" or "groq"
+# Provider: "groq" (cloud, fast, free tier) or "local" (offline, needs whisper.cpp server)
+# Groq: get a free API key at https://console.groq.com — no GPU required
+# Local: run a whisper.cpp server first (see https://github.com/ggerganov/whisper.cpp)
 provider = "local"
 language = "en"
 # Quick-tap the hotkey to cycle between these languages
@@ -19,6 +25,7 @@ url = "http://localhost:2022/v1/audio/transcriptions"
 model = "large-v3"
 
 [whisper.groq]
+# Get your key from https://console.groq.com (free tier: 20 req/min)
 api_key = ""
 model = "whisper-large-v3"
 url = "https://api.groq.com/openai/v1/audio/transcriptions"
@@ -58,7 +65,7 @@ mute_local = true
 
 [audio_feedback]
 enabled = true
-start_frequency = 880
-stop_frequency = 660
-duration_seconds = 0.08
-volume = 0.2
+start_frequency = 880    # Hz — beep when recording starts
+stop_frequency = 660     # Hz — beep when recording stops
+duration_seconds = 0.08  # beep length in seconds
+volume = 0.2             # 0.0 (silent) to 1.0 (full) — change via menu bar or: whisper-dic set audio_feedback.volume 0.5

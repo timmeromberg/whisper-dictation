@@ -81,6 +81,19 @@ class DictationMenuBar(rumps.App):
             callback=self._toggle_text_commands,
         )
 
+        # --- How to Use ---
+        key_display = self.config.hotkey.key.replace("_", " ")
+        self._help_menu = rumps.MenuItem("How to Use")
+        for label in [
+            f"Hold {key_display} — dictate",
+            f"Hold {key_display} + Ctrl — dictate + send",
+            f"Hold {key_display} + Shift — voice command",
+            f"Quick-tap {key_display} — cycle language",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            self._help_menu.add(item)
+
         # --- Build menu ---
         self.menu = [
             self._status_item,
@@ -90,6 +103,8 @@ class DictationMenuBar(rumps.App):
             self._hotkey_menu,
             self._volume_menu,
             self._textcmds_item,
+            None,
+            self._help_menu,
             None,
             rumps.MenuItem("Quit", callback=self._quit),
         ]
@@ -192,6 +207,8 @@ class DictationMenuBar(rumps.App):
         self._volume_menu.title = f"Volume: {label}"
         for item in self._volume_menu.values():
             item.state = 1 if getattr(item, '_vol_value', None) == vol else 0
+        # Preview the new volume with a test beep
+        self._app.play_beep(self._app.config.audio_feedback.start_frequency)
         print(f"[menubar] Volume: {label}")
 
     def _toggle_text_commands(self, _sender) -> None:
@@ -211,12 +228,22 @@ class DictationMenuBar(rumps.App):
 
     def _start_dictation(self) -> None:
         if not self._app.startup_health_checks():
-            rumps.notification("whisper-dic", "Startup Failed",
-                               "Whisper provider is unreachable.")
+            provider = self.config.whisper.provider
+            if provider == "groq" and not self.config.whisper.groq.api_key.strip():
+                rumps.notification("whisper-dic", "Groq API Key Missing",
+                                   "Run: whisper-dic set whisper.groq.api_key YOUR_KEY")
+            elif provider == "local":
+                rumps.notification("whisper-dic", "Local Whisper Unreachable",
+                                   "Start your whisper.cpp server, then restart whisper-dic.")
+            else:
+                rumps.notification("whisper-dic", "Startup Failed",
+                                   "Whisper provider is unreachable. Run: whisper-dic status")
             return
 
         self._app.start_listener()
         key = self.config.hotkey.key.replace("_", " ")
+        rumps.notification("whisper-dic", "Ready",
+                           f"Hold {key} to dictate. Tap to cycle language.")
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
 
 

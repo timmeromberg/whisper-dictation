@@ -57,10 +57,12 @@ Or use the interactive setup:
 
 Before first use, grant these in **System Settings > Privacy & Security**:
 
-- **Microphone** — for audio recording
-- **Accessibility** — for global hotkey listening and keystroke simulation
+| Permission | Why | What to add |
+|---|---|---|
+| **Microphone** | Audio recording | Your Terminal app (e.g. iTerm, Terminal) |
+| **Accessibility** | Global hotkey + paste simulation | Your Terminal app **and** `.venv/bin/python` |
 
-Add your Terminal app (or `.venv/bin/python`) to both lists.
+If permissions are missing, whisper-dic will show a notification telling you which one to fix.
 
 ### 5. Run
 
@@ -138,7 +140,8 @@ whisper-dic menubar          # Start with menu bar icon
 whisper-dic setup            # Interactive setup wizard
 whisper-dic status           # Show config and endpoint health
 whisper-dic provider [groq|local]  # Show or switch provider
-whisper-dic set KEY VALUE    # Update a config value
+whisper-dic set KEY VALUE    # Update a config value (run 'whisper-dic set -h' for examples)
+whisper-dic logs             # Show recent log entries (use -n f to follow)
 whisper-dic discover         # Find audio devices on your network
 whisper-dic install          # Install as login item (auto-start)
 whisper-dic uninstall        # Remove login item

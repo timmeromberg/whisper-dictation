@@ -380,7 +380,7 @@ class DictationApp:
         display = LANG_NAMES.get(new_lang, new_lang)
         log("language", f"Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
-        self._play_beep(1200.0)
+        self.play_beep(1200.0)
         if self.on_state_change:
             self.on_state_change("language_changed", f"{display} ({new_lang})")
 
@@ -407,7 +407,7 @@ class DictationApp:
         except Exception as exc:
             log("audio", f"Error beep failed: {exc}")
 
-    def _play_beep(self, frequency: float) -> None:
+    def play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
         if not feedback.enabled:
             return
@@ -455,7 +455,7 @@ class DictationApp:
             return
 
         # Play start beep before muting so it's audible
-        self._play_beep(self.config.audio_feedback.start_frequency)
+        self.play_beep(self.config.audio_feedback.start_frequency)
         time.sleep(self.config.audio_feedback.duration_seconds + 0.02)
 
         # Mute audio devices before recording starts
@@ -466,7 +466,7 @@ class DictationApp:
         except Exception as exc:
             log("recording", f"Failed to start stream: {exc}")
             self._play_error_beep()
-            self._notify("Microphone unavailable")
+            self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
             self.audio_controller.unmute()
             if self.on_state_change:
                 self.on_state_change("idle", "")
@@ -491,18 +491,18 @@ class DictationApp:
 
         if command_mode:
             # Triple short beep for command mode
-            self._play_beep(1320.0)
+            self.play_beep(1320.0)
             time.sleep(0.08)
-            self._play_beep(1320.0)
+            self.play_beep(1320.0)
             time.sleep(0.08)
-            self._play_beep(1320.0)
+            self.play_beep(1320.0)
         elif auto_send:
             # Double beep for auto-send
-            self._play_beep(1100.0)
+            self.play_beep(1100.0)
             time.sleep(0.1)
-            self._play_beep(1100.0)
+            self.play_beep(1100.0)
         else:
-            self._play_beep(self.config.audio_feedback.stop_frequency)
+            self.play_beep(self.config.audio_feedback.stop_frequency)
 
         if result.duration_seconds < self.config.recording.min_duration:
             now = time.monotonic()
@@ -861,6 +861,28 @@ def _generate_plist() -> str:
 """
 
 
+def command_logs(lines_arg: str) -> int:
+    log_path = Path(_LOG_PATH)
+    if not log_path.exists():
+        print(f"[logs] No log file yet at {log_path}")
+        print("[logs] Start whisper-dic to create it.")
+        return 1
+
+    if lines_arg.lower() == "f":
+        import os
+        os.execlp("tail", "tail", "-f", str(log_path))
+    else:
+        try:
+            n = int(lines_arg)
+        except ValueError:
+            print(f"[logs] Invalid line count: {lines_arg}")
+            return 1
+        import os
+        os.execlp("tail", "tail", f"-n{n}", str(log_path))
+
+    return 0
+
+
 def command_install() -> int:
     if _PLIST_PATH.exists():
         print(f"[install] Already installed at {_PLIST_PATH}")
@@ -902,7 +924,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        description="System-wide hold-to-dictate tool",
+        description="System-wide hold-to-dictate for macOS. Hold a key, speak, release — your words appear wherever the cursor is.",
         parents=[config_parent],
     )
     subparsers = parser.add_subparsers(dest="command")
@@ -939,9 +961,19 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser = subparsers.add_parser(
         "set",
         parents=[config_parent],
-        help="Set a config key (for example whisper.groq.api_key sk-xxx)",
+        help="Set a config value",
+        epilog=(
+            "examples:\n"
+            "  whisper-dic set whisper.language nl\n"
+            "  whisper-dic set whisper.provider groq\n"
+            "  whisper-dic set whisper.groq.api_key gsk_...\n"
+            "  whisper-dic set hotkey.key right_option\n"
+            "  whisper-dic set audio_feedback.volume 0.5\n"
+            "  whisper-dic set text_commands.enabled false"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    set_parser.add_argument("key", help="Dotted key path, for example whisper.language")
+    set_parser.add_argument("key", help="Dotted key path (e.g. whisper.language)")
     set_parser.add_argument("value", help="Value to set")
 
     subparsers.add_parser(
@@ -953,6 +985,14 @@ def build_parser() -> argparse.ArgumentParser:
         "discover",
         parents=[config_parent],
         help="Discover audio devices on the local network",
+    )
+    logs_parser = subparsers.add_parser(
+        "logs",
+        help="Tail the log file",
+    )
+    logs_parser.add_argument(
+        "-n", "--lines", default="50",
+        help="Number of lines to show (default: 50, use 'f' to follow)",
     )
     subparsers.add_parser(
         "install",
@@ -990,6 +1030,8 @@ def main() -> int:
         from audio_control import discover
         discover(config_path)
         return 0
+    if command == "logs":
+        return command_logs(args.lines)
     if command == "install":
         return command_install()
     if command == "uninstall":

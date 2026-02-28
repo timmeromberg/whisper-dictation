@@ -15,6 +15,22 @@ DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_GROQ_MODEL = "whisper-large-v3"
 
 
+def _describe_http_error(response: httpx.Response) -> str:
+    """Turn HTTP errors into actionable messages."""
+    code = response.status_code
+    if code == 401:
+        return "API key is invalid or expired. Update with: whisper-dic set whisper.groq.api_key YOUR_KEY"
+    if code == 403:
+        return "API key does not have permission for this model. Check your Groq dashboard."
+    if code == 413:
+        return "Recording too large. Try a shorter recording."
+    if code == 429:
+        return "Rate limit exceeded. Wait a moment and try again."
+    if code >= 500:
+        return f"Server error ({code}). The provider may be temporarily down."
+    return f"HTTP {code}: {response.text[:200]}"
+
+
 class WhisperTranscriber(ABC):
     """Base interface for OpenAI-compatible Whisper transcription clients."""
 
@@ -75,8 +91,7 @@ class _HTTPWhisperTranscriber(WhisperTranscriber):
 
         response = self._client.post(self.url, data=data, files=files)
         if response.status_code != 200:
-            body = response.text[:300]
-            raise RuntimeError(f"HTTP {response.status_code}: {body}")
+            raise RuntimeError(_describe_http_error(response))
 
         payload = response.json()
         return str(payload.get("text", "")).strip()
