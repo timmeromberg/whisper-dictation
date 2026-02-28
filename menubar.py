@@ -9,8 +9,15 @@ from pathlib import Path
 import rumps
 
 from dictation import (
-    DictationApp, ConfigWatcher, LANG_NAMES, load_config, set_config_value,
-    create_transcriber, command_install, command_uninstall, _PLIST_PATH,
+    _PLIST_PATH,
+    LANG_NAMES,
+    ConfigWatcher,
+    DictationApp,
+    command_install,
+    command_uninstall,
+    create_transcriber,
+    load_config,
+    set_config_value,
 )
 from overlay import RecordingOverlay
 
@@ -483,7 +490,8 @@ class DictationMenuBar(rumps.App):
             return None
 
     def _edit_min_duration(self, _sender) -> None:
-        val = self._prompt_float("Min Duration", "Minimum recording duration in seconds:", self.config.recording.min_duration)
+        cur = self.config.recording.min_duration
+        val = self._prompt_float("Min Duration", "Minimum recording duration in seconds:", cur)
         if val is not None:
             self._set_config("recording.min_duration", str(val))
             self.config.recording.min_duration = val
@@ -491,7 +499,8 @@ class DictationMenuBar(rumps.App):
             self._min_dur_item.title = f"Min Duration: {val}s"
 
     def _edit_max_duration(self, _sender) -> None:
-        val = self._prompt_float("Max Duration", "Maximum recording duration in seconds:", self.config.recording.max_duration)
+        cur = self.config.recording.max_duration
+        val = self._prompt_float("Max Duration", "Maximum recording duration in seconds:", cur)
         if val is not None:
             self._set_config("recording.max_duration", str(val))
             self.config.recording.max_duration = val

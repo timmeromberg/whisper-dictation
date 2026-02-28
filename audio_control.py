@@ -248,6 +248,7 @@ class UpnpDevice:
 
     def _set_mute(self, muted: bool) -> None:
         import asyncio
+
         from async_upnp_client.aiohttp import AiohttpRequester
         from async_upnp_client.client_factory import UpnpFactory
 
@@ -394,6 +395,7 @@ def _discover_all() -> list[dict]:
     # UPnP/DLNA
     try:
         import asyncio
+
         from async_upnp_client.search import async_search
 
         async def _scan():

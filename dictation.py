@@ -551,7 +551,7 @@ class DictationApp:
                 is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
                 if is_transient and attempt < max_attempts:
                     wait = min(0.5 * (2 ** (attempt - 1)), 8.0)
-                    log("pipeline", f"Transient error (attempt {attempt}/{max_attempts}): {exc}, retrying in {wait}s...")
+                    log("pipeline", f"Transient error ({attempt}/{max_attempts}): {exc}, retry in {wait}s...")
                     time.sleep(wait)
                 else:
                     raise
@@ -659,7 +659,8 @@ class DictationApp:
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
-            log("recording", f"Ignored overlong clip ({result.duration_seconds:.2f}s > {self.config.recording.max_duration:.2f}s).")
+            dur, mx = result.duration_seconds, self.config.recording.max_duration
+            log("recording", f"Ignored overlong clip ({dur:.1f}s > {mx:.0f}s).")
             self._notify("Recording too long, ignored")
             self._emit_state("idle")
             return
@@ -1092,7 +1093,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        description="System-wide hold-to-dictate for macOS. Hold a key, speak, release — your words appear wherever the cursor is.",
+        description="System-wide hold-to-dictate for macOS.",
         parents=[config_parent],
     )
     subparsers = parser.add_subparsers(dest="command")

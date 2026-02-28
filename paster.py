@@ -49,7 +49,8 @@ def _frontmost_bundle_id() -> str:
     """Get frontmost app bundle ID via osascript (always fresh)."""
     try:
         result = subprocess.run(
-            ["osascript", "-e", 'tell application "System Events" to get bundle identifier of first process whose frontmost is true'],
+            ["osascript", "-e",
+             'tell application "System Events" to get bundle identifier of first process whose frontmost is true'],
             capture_output=True, text=True, timeout=2,
         )
         return result.stdout.strip()

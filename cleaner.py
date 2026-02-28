@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-
 # Filler patterns, ordered from multi-word to single-word
 _FILLER_PATTERNS = [
     # Multi-word fillers (must come first)

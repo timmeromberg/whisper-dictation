@@ -158,7 +158,8 @@ class HotkeyListener:
                     self._shift_held, self._shift_last_seen,
                     Quartz.kCGEventFlagMaskShift, now,
                 )
-                log("hotkey", f"Release: auto_send={auto_send} (ctrl_delta={ctrl_delta:.3f}s), command_mode={command_mode} (shift_delta={shift_delta:.3f}s)")
+                cd, sd = ctrl_delta, shift_delta
+                log("hotkey", f"Release: send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s")
                 should_fire = True
 
         if should_fire:

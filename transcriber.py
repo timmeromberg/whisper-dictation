@@ -8,7 +8,6 @@ from urllib.parse import urlsplit
 
 import httpx
 
-
 DEFAULT_LOCAL_URL = "http://localhost:2022/v1/audio/transcriptions"
 DEFAULT_LOCAL_MODEL = "large-v3"
 DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
