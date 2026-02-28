@@ -321,66 +321,54 @@ class AudioController:
             log("audio_ctrl", f"Configured {len(self._devices)} device(s): {names}")
 
     def mute(self) -> None:
-        """Mute all configured devices. Non-blocking for network devices."""
+        """Mute all configured devices in a background thread.
+
+        All muting runs off the recording thread to avoid CoreAudio
+        interference with PortAudio's input stream.
+        """
         if not self._enabled or not self._devices:
             return
 
-        local = [d for d in self._devices if isinstance(d, LocalMacDevice)]
-        network = [d for d in self._devices if not isinstance(d, LocalMacDevice)]
-
-        # Mute local Mac inline (fast, <50ms)
-        for dev in local:
-            try:
-                dev.mute()
-            except Exception as exc:
-                log("audio_ctrl", f"Mute error: {exc}")
-
-        # Mute network devices in background thread
-        if network:
-            threading.Thread(
-                target=self._mute_network,
-                args=(network,),
-                daemon=True,
-                name="audio-mute",
-            ).start()
+        devices = list(self._devices)
+        threading.Thread(
+            target=self._mute_all,
+            args=(devices,),
+            daemon=True,
+            name="audio-mute",
+        ).start()
 
     def unmute(self) -> None:
-        """Unmute all configured devices. Non-blocking for network devices."""
+        """Unmute all configured devices in a background thread."""
         if not self._enabled or not self._devices:
             return
 
-        local = [d for d in self._devices if isinstance(d, LocalMacDevice)]
-        network = [d for d in self._devices if not isinstance(d, LocalMacDevice)]
-
-        for dev in local:
-            try:
-                dev.unmute()
-            except Exception as exc:
-                log("audio_ctrl", f"Unmute error: {exc}")
-
-        if network:
-            threading.Thread(
-                target=self._unmute_network,
-                args=(network,),
-                daemon=True,
-                name="audio-unmute",
-            ).start()
+        devices = list(self._devices)
+        threading.Thread(
+            target=self._unmute_all,
+            args=(devices,),
+            daemon=True,
+            name="audio-unmute",
+        ).start()
 
     @staticmethod
-    def _mute_network(devices: list[AudioDevice]) -> None:
+    def _mute_all(devices: list[AudioDevice]) -> None:
+        import time as _time
+        # Brief delay to let PortAudio input stream fully stabilize
+        # before we touch CoreAudio (osascript mute) or spawn subprocesses
+        _time.sleep(0.1)
         for dev in devices:
             try:
                 dev.mute()
             except Exception as exc:
-                log("audio_ctrl", f"Network mute error ({dev.name}): {exc}")
+                log("audio_ctrl", f"Mute error ({dev.name}): {exc}")
 
     @staticmethod
-    def _unmute_network(devices: list[AudioDevice]) -> None:
+    def _unmute_all(devices: list[AudioDevice]) -> None:
         for dev in devices:
             try:
                 dev.unmute()
             except Exception as exc:
-                log("audio_ctrl", f"Network unmute error ({dev.name}): {exc}")
+                log("audio_ctrl", f"Unmute error ({dev.name}): {exc}")
 
 
 def _discover_all() -> list[dict]:
