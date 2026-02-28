@@ -23,6 +23,9 @@ api_key = ""
 model = "whisper-large-v3"
 url = "https://api.groq.com/openai/v1/audio/transcriptions"
 
+[paste]
+auto_send = false
+
 [audio_feedback]
 enabled = true
 start_frequency = 880

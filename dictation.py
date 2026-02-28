@@ -65,6 +65,11 @@ class WhisperConfig:
 
 
 @dataclass
+class PasteConfig:
+    auto_send: bool = False
+
+
+@dataclass
 class AudioFeedbackConfig:
     enabled: bool = True
     start_frequency: float = 880.0
@@ -77,6 +82,7 @@ class AudioFeedbackConfig:
 class AppConfig:
     hotkey: HotkeyConfig
     recording: RecordingConfig
+    paste: PasteConfig
     whisper: WhisperConfig
     audio_feedback: AudioFeedbackConfig
 
@@ -96,6 +102,7 @@ def load_config(path: Path) -> AppConfig:
 
     hotkey_data = _section(data, "hotkey")
     recording_data = _section(data, "recording")
+    paste_data = _section(data, "paste")
     whisper_data = _section(data, "whisper")
     whisper_local_data = _section(data, "whisper.local")
     whisper_groq_data = _section(data, "whisper.groq")
@@ -122,6 +129,9 @@ def load_config(path: Path) -> AppConfig:
             min_duration=float(recording_data.get("min_duration", 0.3)),
             max_duration=float(recording_data.get("max_duration", 300.0)),
             sample_rate=int(recording_data.get("sample_rate", 16000)),
+        ),
+        paste=PasteConfig(
+            auto_send=bool(paste_data.get("auto_send", False)),
         ),
         whisper=WhisperConfig(
             provider=provider,
@@ -264,7 +274,7 @@ class DictationApp:
         )
         self.transcriber = create_transcriber(config.whisper)
         self.cleaner = TextCleaner()
-        self.paster = TextPaster()
+        self.paster = TextPaster(auto_send=config.paste.auto_send)
 
         self._listener = RightOptionHotkeyListener(
             on_hold_start=self._on_hold_start,
