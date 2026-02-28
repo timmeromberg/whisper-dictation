@@ -565,6 +565,8 @@ class DictationApp:
                             self.on_state_change("idle", "")
                     else:
                         log("command", f"No match for '{cleaned}', ignoring.")
+                        self._play_error_beep()
+                        self._notify(f"Unknown command: {cleaned}")
                         if self.on_state_change:
                             self.on_state_change("idle", "")
                     return
@@ -1002,6 +1004,10 @@ def build_parser() -> argparse.ArgumentParser:
         "uninstall",
         help="Remove login item",
     )
+    subparsers.add_parser(
+        "version",
+        help="Show version",
+    )
 
     return parser
 
@@ -1036,6 +1042,10 @@ def main() -> int:
         return command_install()
     if command == "uninstall":
         return command_uninstall()
+    if command == "version":
+        version_file = Path(__file__).with_name("VERSION")
+        print(version_file.read_text().strip() if version_file.exists() else "unknown")
+        return 0
 
     parser.print_help()
     return 1

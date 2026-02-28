@@ -145,6 +145,7 @@ whisper-dic logs             # Show recent log entries (use -n f to follow)
 whisper-dic discover         # Find audio devices on your network
 whisper-dic install          # Install as login item (auto-start)
 whisper-dic uninstall        # Remove login item
+whisper-dic version          # Show version
 ```
 
 ## Configuration

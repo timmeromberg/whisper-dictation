@@ -94,6 +94,32 @@ class DictationMenuBar(rumps.App):
             item.set_callback(None)
             self._help_menu.add(item)
 
+        # Voice commands submenu inside Help
+        voice_cmds = rumps.MenuItem("Voice Commands")
+        for label in [
+            "copy / cut / paste / select all",
+            "undo / redo / save / find",
+            "delete / enter / tab / escape",
+            "screenshot / bold / new tab",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            voice_cmds.add(item)
+        self._help_menu.add(voice_cmds)
+
+        # Text commands submenu inside Help
+        text_cmds = rumps.MenuItem("Text Commands (say these)")
+        for label in [
+            "period / comma / question mark",
+            "new line / new paragraph",
+            "open quote / close quote",
+            "colon / semicolon / dash",
+        ]:
+            item = rumps.MenuItem(label)
+            item.set_callback(None)
+            text_cmds.add(item)
+        self._help_menu.add(text_cmds)
+
         # --- Build menu ---
         self.menu = [
             self._status_item,
