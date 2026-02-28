@@ -48,13 +48,38 @@ _LEADING_COMMA_RE = re.compile(r"^\s*,\s*", re.MULTILINE)
 _TRAILING_COMMA_RE = re.compile(r",\s*$", re.MULTILINE)
 _COMMA_COMMA_RE = re.compile(r",\s*,")
 
+# Text commands: spoken words → punctuation/formatting
+# Order matters: multi-word commands must come before single-word
+_TEXT_COMMANDS = [
+    (r"\bnew paragraph\b", "\n\n"),
+    (r"\bnew line\b", "\n"),
+    (r"\bnewline\b", "\n"),
+    (r"\bfull stop\b", "."),
+    (r"\bperiod\b", "."),
+    (r"\bcomma\b", ","),
+    (r"\bquestion mark\b", "?"),
+    (r"\bexclamation mark\b", "!"),
+    (r"\bexclamation point\b", "!"),
+    (r"\bsemicolon\b", ";"),
+    (r"\bcolon\b", ":"),
+    (r"\bopen quote\b", "\u201c"),
+    (r"\bclose quote\b", "\u201d"),
+    (r"\bopen paren\b", "("),
+    (r"\bclose paren\b", ")"),
+    (r"\bem dash\b", "\u2014"),
+    (r"\bdash\b", "\u2014"),
+    (r"\bhyphen\b", "-"),
+    (r"\btab\b", "\t"),
+]
+
+_TEXT_COMMAND_RES = [(re.compile(p, re.IGNORECASE), r) for p, r in _TEXT_COMMANDS]
+
 
 class TextCleaner:
     """Remove filler words and clean up transcription artifacts using regex."""
 
-    def __init__(self, **_kwargs) -> None:
-        # Accept and ignore kwargs for backward compat with config loading
-        pass
+    def __init__(self, text_commands: bool = True, **_kwargs) -> None:
+        self.text_commands = text_commands
 
     def health_check(self) -> bool:
         return True
@@ -81,6 +106,13 @@ class TextCleaner:
 
         # Remove repeated words ("I I think" -> "I think")
         result = _REPEATED_WORD_RE.sub(r"\1", result)
+
+        # Text commands: "new line" → \n, "period" → .
+        if self.text_commands:
+            for pattern, replacement in _TEXT_COMMAND_RES:
+                result = pattern.sub(replacement, result)
+            # Clean spaces around newlines
+            result = re.sub(r" *\n *", "\n", result)
 
         # Clean up punctuation artifacts
         result = _COMMA_COMMA_RE.sub(",", result)

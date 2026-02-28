@@ -26,6 +26,9 @@ url = "https://api.groq.com/openai/v1/audio/transcriptions"
 [paste]
 auto_send = false
 
+[text_commands]
+enabled = true
+
 [audio_feedback]
 enabled = true
 start_frequency = 880

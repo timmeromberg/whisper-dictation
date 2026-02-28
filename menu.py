@@ -158,6 +158,7 @@ def run_setup_menu(config_path: Path) -> str:
         vol_pct = f"{int(config.audio_feedback.volume * 100)}%"
 
         auto_send_display = "on" if config.paste.auto_send else "off"
+        text_cmds_display = "on" if config.text_commands.enabled else "off"
 
         title = _boxed_title("WHISPER-DIC SETTINGS") + "\n"
         entries = [
@@ -166,6 +167,7 @@ def run_setup_menu(config_path: Path) -> str:
             _setting_line("Hotkey", config.hotkey.key),
             _setting_line("Volume", vol_pct),
             _setting_line("Auto Send", auto_send_display),
+            _setting_line("Text Cmds", text_cmds_display),
             _setting_line("Groq Key", groq_status),
             _SEPARATOR,
             "  ▶ Start Dictating",
@@ -173,7 +175,7 @@ def run_setup_menu(config_path: Path) -> str:
         ]
 
         selection = _show_menu(entries, title)
-        if selection is None or selection == 8:
+        if selection is None or selection == 9:
             _clear_screen()
             return "quit"
 
@@ -221,12 +223,17 @@ def run_setup_menu(config_path: Path) -> str:
             continue
 
         if selection == 5:
+            new_val = "false" if config.text_commands.enabled else "true"
+            set_config_value(config_path, "text_commands.enabled", new_val)
+            continue
+
+        if selection == 6:
             api_key = _prompt_for_groq_key()
             if api_key is not None:
                 set_config_value(config_path, "whisper.groq.api_key", api_key)
             continue
 
-        if selection == 7:
+        if selection == 8:
             _clear_screen()
             return "start"
 
