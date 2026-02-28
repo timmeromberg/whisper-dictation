@@ -13,7 +13,6 @@ from dictation import DictationApp, LANG_NAMES, load_config, set_config_value, c
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
 HOTKEY_OPTIONS = ["left_option", "right_option", "left_command", "right_command", "left_shift", "right_shift"]
-VOLUME_OPTIONS = ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1.0"]
 
 
 class DictationMenuBar(rumps.App):
@@ -63,16 +62,17 @@ class DictationMenuBar(rumps.App):
                 item.state = 1
             self._hotkey_menu.add(item)
 
-        # --- Volume submenu ---
-        current_vol = f"{int(self.config.audio_feedback.volume * 100)}%"
-        self._volume_menu = rumps.MenuItem(f"Volume: {current_vol}")
-        for v in VOLUME_OPTIONS:
-            label = f"{int(float(v) * 100)}%"
-            item = rumps.MenuItem(label, callback=self._switch_volume)
-            item._vol_value = v
-            if label == current_vol:
-                item.state = 1
-            self._volume_menu.add(item)
+        # --- Volume slider ---
+        vol_pct = int(self.config.audio_feedback.volume * 100)
+        self._volume_menu = rumps.MenuItem(f"Volume: {vol_pct}%")
+        self._volume_slider = rumps.SliderMenuItem(
+            value=vol_pct,
+            min_value=0,
+            max_value=100,
+            callback=self._on_volume_slide,
+        )
+        self._volume_menu.add(self._volume_slider)
+        self._volume_last_change = 0.0
 
         # --- Text Commands toggle ---
         tc_on = self.config.text_commands.enabled
@@ -284,18 +284,25 @@ class DictationMenuBar(rumps.App):
             item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
         print(f"[menubar] Hotkey: {hk}")
 
-    def _switch_volume(self, sender) -> None:
-        vol = sender._vol_value
-        set_config_value(self.config_path, "audio_feedback.volume", vol)
-        self.config = load_config(self.config_path)
-        self._app.config.audio_feedback.volume = float(vol)
-        label = f"{int(float(vol) * 100)}%"
-        self._volume_menu.title = f"Volume: {label}"
-        for item in self._volume_menu.values():
-            item.state = 1 if getattr(item, '_vol_value', None) == vol else 0
-        # Preview the new volume with a test beep
-        self._app.play_beep(self._app.config.audio_feedback.start_frequency)
-        print(f"[menubar] Volume: {label}")
+    def _on_volume_slide(self, sender) -> None:
+        import time as _time
+        pct = int(sender.value)
+        vol = pct / 100.0
+        self._app.config.audio_feedback.volume = vol
+        self.config.audio_feedback.volume = vol
+        self._volume_menu.title = f"Volume: {pct}%"
+        now = _time.monotonic()
+        # Debounce: only persist and preview after slider settles (0.3s)
+        self._volume_last_change = now
+
+        def _persist():
+            _time.sleep(0.3)
+            if self._volume_last_change == now:
+                set_config_value(self.config_path, "audio_feedback.volume", str(vol))
+                self._app.play_beep(self._app.config.audio_feedback.start_frequency)
+                print(f"[menubar] Volume: {pct}%")
+
+        threading.Thread(target=_persist, daemon=True).start()
 
     def _toggle_text_commands(self, _sender) -> None:
         current = self.config.text_commands.enabled
