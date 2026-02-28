@@ -469,10 +469,10 @@ class DictationApp:
 
         # Play start beep before muting so it's audible
         self.play_beep(self.config.audio_feedback.start_frequency)
-        time.sleep(self.config.audio_feedback.duration_seconds + 0.02)
-        # Ensure the beep's output stream is fully released before opening
-        # the recording input stream — avoids PortAudio double-free crash
-        sd.stop()
+        # Wait for the beep's output stream to fully finish and release
+        # PortAudio resources — avoids double-free crash when opening
+        # the recording input stream immediately after
+        sd.wait()
 
         # Mute audio devices before recording starts
         self.audio_controller.mute()

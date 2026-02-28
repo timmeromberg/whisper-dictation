@@ -112,6 +112,9 @@ config.audio_feedback.volume = 0.0
 
 app = DictationApp(config)
 
+# Mock paster to prevent actual Cmd+V into the terminal
+app.paster.paste = lambda text, auto_send=False: None
+
 # Track state changes
 states = []
 app.on_state_change = lambda state, text: states.append((state, text))
@@ -125,7 +128,6 @@ time.sleep(0.5)
 
 # Simulate hold end (stops recording, triggers pipeline)
 # Patch transcriber to avoid real API call — return canned text
-original_transcribe = app.transcriber.transcribe
 app.transcriber.transcribe = lambda audio_bytes, **kw: 'smoke test hello world'
 app._on_hold_end()
 
@@ -142,7 +144,6 @@ print(f'  Hold end: states = {state_names}')
 final_texts = [s[1] for s in states if s[1]]
 print(f'  Pipeline output: {final_texts}')
 
-app.transcriber.transcribe = original_transcribe
 app.stop()
 print('[smoke] Dictation flow: passed')
 " 2>&1
