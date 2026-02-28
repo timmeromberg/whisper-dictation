@@ -12,6 +12,7 @@ _VK = {
     "s": 1, "v": 9, "x": 7, "z": 6,
     "return": 36, "tab": 48, "escape": 53, "delete": 51,
     "space": 49, "up": 126, "down": 125, "left": 123, "right": 124,
+    "3": 20, "4": 21,
 }
 
 _FLAG_CMD = Quartz.kCGEventFlagMaskCommand
@@ -61,6 +62,18 @@ _COMMANDS["close window"] = (_VK["w"], _FLAG_CMD)
 _COMMANDS["new window"] = (_VK["n"], _FLAG_CMD)
 _COMMANDS["print"] = (_VK["p"], _FLAG_CMD)
 _COMMANDS["bold"] = (_VK["b"], _FLAG_CMD)
+
+# Screenshot to clipboard: Cmd+Ctrl+Shift+4 (area select)
+_FLAG_SCREENSHOT = _FLAG_CMD | _FLAG_SHIFT | Quartz.kCGEventFlagMaskControl
+_COMMANDS["screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
+_COMMANDS["take screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
+_COMMANDS["take a screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
+_COMMANDS["screen capture"] = (_VK["4"], _FLAG_SCREENSHOT)
+_COMMANDS["capture screen"] = (_VK["4"], _FLAG_SCREENSHOT)
+# Full screen to clipboard: Cmd+Ctrl+Shift+3
+_COMMANDS["full screenshot"] = (_VK["3"], _FLAG_SCREENSHOT)
+_COMMANDS["screenshot full"] = (_VK["3"], _FLAG_SCREENSHOT)
+_COMMANDS["screenshot full screen"] = (_VK["3"], _FLAG_SCREENSHOT)
 
 # Aliases for common Whisper mishearings
 _ALIASES: dict[str, str] = {
