@@ -119,7 +119,11 @@ class HotkeyListener:
                 should_fire = True
 
         if should_fire:
-            self._on_hold_start()
+            # Run off pynput thread so key release events aren't blocked
+            threading.Thread(
+                target=self._on_hold_start, daemon=True,
+                name="hotkey-start",
+            ).start()
 
     def _handle_release(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
         if key in _CTRL_KEYS:
@@ -158,7 +162,10 @@ class HotkeyListener:
                 should_fire = True
 
         if should_fire:
-            self._on_hold_end(auto_send, command_mode)
+            threading.Thread(
+                target=self._on_hold_end, args=(auto_send, command_mode),
+                daemon=True, name="hotkey-end",
+            ).start()
 
     def start(self) -> None:
         with self._lock:
