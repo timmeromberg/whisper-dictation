@@ -98,6 +98,7 @@ class RightOptionHotkeyListener:
         if key in _CTRL_KEYS:
             with self._lock:
                 self._ctrl_held = False
+                self._ctrl_last_seen = time.monotonic()
             return
 
         if not self._matches(key):
@@ -109,7 +110,7 @@ class RightOptionHotkeyListener:
             if self._pressed:
                 self._pressed = False
                 now = time.monotonic()
-                # Control counts if: currently held, OR was held within the last 500ms
+                # Control counts if: currently held, OR was active within the last 500ms
                 ctrl_recent = (
                     self._ctrl_held
                     or _ctrl_is_pressed()
