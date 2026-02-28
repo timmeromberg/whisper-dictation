@@ -134,12 +134,7 @@ class DictationApp:
             model=config.whisper.model,
             timeout_seconds=config.whisper.timeout_seconds,
         )
-        self.cleaner = TextCleaner(
-            enabled=config.ollama.enabled,
-            url=config.ollama.url,
-            model=config.ollama.model,
-            timeout_seconds=config.ollama.timeout_seconds,
-        )
+        self.cleaner = TextCleaner()
         self.paster = TextPaster()
 
         self._listener = RightOptionHotkeyListener(
@@ -180,23 +175,7 @@ class DictationApp:
             return False
         print("[startup] Whisper is reachable.")
 
-        if not self.cleaner.enabled:
-            print("[startup] Ollama cleanup disabled by config.")
-            return True
-
-        print("[startup] Checking Ollama server...")
-        if not self.cleaner.health_check():
-            print("[startup] Warning: Ollama unreachable. Continuing without cleanup.")
-            self.cleaner.enabled = False
-            return True
-
-        print("[startup] Ollama is reachable. Pre-warming model...")
-        if not self.cleaner.prewarm(prompt=self.config.ollama.prewarm_prompt):
-            print("[startup] Warning: Ollama pre-warm failed. Continuing without cleanup.")
-            self.cleaner.enabled = False
-            return True
-
-        print("[startup] Ollama model pre-warmed.")
+        print("[startup] Regex-based filler removal enabled.")
         return True
 
     def _on_hold_start(self) -> None:

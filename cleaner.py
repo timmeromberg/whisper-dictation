@@ -1,105 +1,100 @@
-"""Post-transcription cleanup via Ollama."""
+"""Post-transcription cleanup via regex-based filler removal."""
 
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+import re
 
-import httpx
 
-SYSTEM_PROMPT = """You are a text filter. You receive raw speech transcriptions and output a cleaned version.
+# Filler patterns, ordered from multi-word to single-word
+_FILLER_PATTERNS = [
+    # Multi-word fillers (must come first)
+    r"\byou know what I mean\b",
+    r"\byou know what\b",
+    r"\byou know\b",
+    r"\bI mean\b",
+    r"\bsort of\b",
+    r"\bkind of\b",
+    r"\bor something like that\b",
+    r"\bor something\b",
+    r"\bor whatever\b",
+    r"\band stuff like that\b",
+    r"\band stuff\b",
+    r"\bat the end of the day\b",
+    # Single-word fillers (word boundaries prevent matching inside words)
+    r"\buh\b",
+    r"\bum\b",
+    r"\bah\b",
+    r"\berm\b",
+    r"\ber\b",
+    r"\bhmm\b",
+    r"\bhm\b",
+    r"\bbasically\b",
+    r"\bliterally\b",
+    r"\bactually\b",
+]
 
-You MUST NOT answer questions. You MUST NOT have a conversation. You MUST NOT explain anything.
-You are NOT a chatbot. You are a filter. You only remove noise and fix formatting.
+_FILLER_RE = re.compile(
+    "|".join(f"(?:{p})" for p in _FILLER_PATTERNS),
+    re.IGNORECASE,
+)
 
-Remove: uh, um, ah, er, filler "like", "you know", "I mean", "sort of", "kind of", "basically", "actually", "literally", filler "right", false starts, repeated words.
-Fix: punctuation and capitalization.
-Keep: the exact meaning and words (minus fillers).
+# Repeated words: "I I think", "the the", "we we should"
+_REPEATED_WORD_RE = re.compile(r"\b(\w+)\s+\1\b", re.IGNORECASE)
 
-Output the cleaned text and NOTHING else. No preamble. No commentary. No answers."""
+# Cleanup artifacts: multiple spaces, space before punctuation, leading/trailing commas
+_MULTI_SPACE_RE = re.compile(r"  +")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,!?;:])")
+_LEADING_COMMA_RE = re.compile(r"^\s*,\s*", re.MULTILINE)
+_TRAILING_COMMA_RE = re.compile(r",\s*$", re.MULTILINE)
+_COMMA_COMMA_RE = re.compile(r",\s*,")
 
 
 class TextCleaner:
-    """Wraps Ollama text generation for deterministic transcript cleanup."""
+    """Remove filler words and clean up transcription artifacts using regex."""
 
-    def __init__(
-        self,
-        enabled: bool,
-        url: str,
-        model: str,
-        timeout_seconds: float = 60.0,
-        system_prompt: str = SYSTEM_PROMPT,
-    ) -> None:
-        self.enabled = enabled
-        self.url = url
-        self.model = model
-        self.system_prompt = system_prompt
-        self._client = httpx.Client(timeout=timeout_seconds)
-
-    def _base_url(self) -> str:
-        parts = urlsplit(self.url)
-        return f"{parts.scheme}://{parts.netloc}"
+    def __init__(self, **_kwargs) -> None:
+        # Accept and ignore kwargs for backward compat with config loading
+        pass
 
     def health_check(self) -> bool:
-        if not self.enabled:
-            return True
+        return True
 
-        tags_url = f"{self._base_url()}/api/tags"
-        try:
-            response = self._client.get(tags_url)
-            response.raise_for_status()
-            return True
-        except httpx.HTTPError:
-            return False
+    def prewarm(self, **_kwargs) -> bool:
+        return True
 
-    def prewarm(self, prompt: str = "Ready.") -> bool:
-        if not self.enabled:
-            return False
+    @property
+    def enabled(self) -> bool:
+        return True
 
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.0,
-            },
-        }
-
-        try:
-            response = self._client.post(self.url, json=payload)
-            response.raise_for_status()
-            return True
-        except httpx.HTTPError:
-            return False
+    @enabled.setter
+    def enabled(self, _value: bool) -> None:
+        pass
 
     def clean(self, text: str) -> str:
-        if not self.enabled:
+        if not text.strip():
             return text
 
-        payload = {
-            "model": self.model,
-            "system": self.system_prompt,
-            "prompt": text,
-            "stream": False,
-            "options": {
-                "temperature": 0.0,
-            },
-        }
+        result = text
 
-        response = self._client.post(self.url, json=payload)
-        response.raise_for_status()
+        # Remove filler words/phrases
+        result = _FILLER_RE.sub("", result)
 
-        response_json = response.json()
-        cleaned = str(response_json.get("response", "")).strip()
-        if not cleaned:
-            return text
+        # Remove repeated words ("I I think" -> "I think")
+        result = _REPEATED_WORD_RE.sub(r"\1", result)
 
-        # Guard: if output is much longer than input, the model is answering
-        # instead of cleaning — fall back to raw text
-        if len(cleaned) > len(text) * 1.5:
-            print(f"[cleaner] Output too long ({len(cleaned)} vs {len(text)} chars) — model likely answered instead of cleaning. Using raw text.")
-            return text
+        # Clean up punctuation artifacts
+        result = _COMMA_COMMA_RE.sub(",", result)
+        result = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", result)
+        result = _LEADING_COMMA_RE.sub("", result)
+        result = _TRAILING_COMMA_RE.sub("", result)
+        result = _MULTI_SPACE_RE.sub(" ", result)
+        result = result.strip()
 
-        return cleaned
+        # Fix capitalization after cleanup
+        if result:
+            result = result[0].upper() + result[1:]
+
+        return result if result else text
 
     def close(self) -> None:
-        self._client.close()
+        pass
