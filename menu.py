@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -35,19 +33,8 @@ def _setting_line(label: str, value: str) -> str:
 
 
 def _resolve_dictation_functions() -> tuple[Callable[[Path], Any], Callable[[Path, str, str], None]]:
-    # When dictation.py is started as a script, it is loaded as __main__.
-    main_module = sys.modules.get("__main__")
-    if (
-        main_module is not None
-        and hasattr(main_module, "load_config")
-        and hasattr(main_module, "set_config_value")
-    ):
-        load_config = getattr(main_module, "load_config")
-        set_config_value = getattr(main_module, "set_config_value")
-        return load_config, set_config_value
-
-    dictation_module = importlib.import_module("dictation")
-    return dictation_module.load_config, dictation_module.set_config_value
+    from config import load_config, set_config_value
+    return load_config, set_config_value
 
 
 def _show_menu(entries: list[str], title: str, cursor_index: int = 0) -> int | None:

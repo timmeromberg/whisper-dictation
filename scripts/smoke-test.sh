@@ -73,7 +73,7 @@ print(f'  Recorder: {result.duration_seconds:.2f}s, {len(result.audio_bytes)} by
 
 # Test transcriber creation (don't actually call API — just verify wiring)
 from pathlib import Path
-from dictation import load_config
+from config import load_config
 from transcriber import create_transcriber
 config = load_config(Path('$SMOKE_CONFIG'))
 t = create_transcriber(config.whisper)
@@ -104,7 +104,8 @@ FLOW_OUT=$("$PYTHON" -c "
 import sys, os, time, threading
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
-from dictation import DictationApp, load_config
+from config import load_config
+from dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -214,7 +215,7 @@ echo "[smoke] Config test..."
 import os, tempfile, tomllib
 from pathlib import Path
 os.chdir('$SCRIPT_DIR')
-from dictation import load_config
+from config import load_config
 
 # Default config loads without error
 config = load_config(Path('$SMOKE_CONFIG'))
@@ -250,7 +251,8 @@ ERROR_OUT=$("$PYTHON" -c "
 import sys, os, time
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
-from dictation import DictationApp, load_config
+from config import load_config
+from dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -300,7 +302,8 @@ SEND_OUT=$("$PYTHON" -c "
 import sys, os, time
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
-from dictation import DictationApp, load_config
+from config import load_config
+from dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -341,7 +344,8 @@ echo "[smoke] Provider switch test..."
 import sys, os, shutil, tempfile
 os.chdir('$SCRIPT_DIR')
 from pathlib import Path
-from dictation import DictationApp, load_config, set_config_value
+from config import load_config, set_config_value
+from dictation import DictationApp
 from transcriber import create_transcriber, LocalWhisperTranscriber, GroqWhisperTranscriber
 
 tmp = tempfile.NamedTemporaryFile(suffix='.toml', delete=False)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dictation import AppConfig, _section, _to_toml_literal, load_config
+from config import AppConfig, _section, _to_toml_literal, load_config
 
 
 class TestLoadConfig:

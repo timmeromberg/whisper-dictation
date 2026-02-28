@@ -8,18 +8,10 @@ from pathlib import Path
 
 import rumps
 
-from dictation import (
-    _PLIST_PATH,
-    LANG_NAMES,
-    ConfigWatcher,
-    DictationApp,
-    command_install,
-    command_uninstall,
-    create_transcriber,
-    load_config,
-    set_config_value,
-)
+from config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
+from dictation import _PLIST_PATH, DictationApp, command_install, command_uninstall
 from overlay import RecordingOverlay
+from transcriber import create_transcriber
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
