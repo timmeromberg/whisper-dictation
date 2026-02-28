@@ -1,10 +1,17 @@
-"""Transcription history — keeps the last N transcriptions in memory."""
+"""Transcription history — keeps the last N transcriptions in memory and optionally persists to disk."""
 
 from __future__ import annotations
 
+import json
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+from log import log
+
+_DEFAULT_PERSIST_PATH = Path.home() / ".config" / "whisper-dic" / "history.json"
+_SAVE_DEBOUNCE_SECONDS = 5.0
 
 
 @dataclass
@@ -16,8 +23,53 @@ class HistoryEntry:
 
 
 class TranscriptionHistory:
-    def __init__(self, max_items: int = 50) -> None:
+    def __init__(self, max_items: int = 50, persist_path: Path | None = _DEFAULT_PERSIST_PATH) -> None:
         self._entries: deque[HistoryEntry] = deque(maxlen=max_items)
+        self._persist_path = persist_path
+        self._last_save_time: float = 0.0
+        self._dirty = False
+
+        if persist_path is not None:
+            self._load()
+
+    def _load(self) -> None:
+        """Load history from disk. Graceful on missing or corrupt files."""
+        if self._persist_path is None or not self._persist_path.exists():
+            return
+        try:
+            raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, list):
+                log("history", "Corrupt history file (not a list), starting fresh")
+                return
+            for item in raw:
+                if isinstance(item, dict) and "text" in item:
+                    self._entries.append(HistoryEntry(
+                        text=str(item["text"]),
+                        timestamp=float(item.get("timestamp", 0.0)),
+                        language=str(item.get("language", "en")),
+                        duration_seconds=float(item.get("duration_seconds", 0.0)),
+                    ))
+            log("history", f"Loaded {len(self._entries)} entries from disk")
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            log("history", f"Failed to load history: {exc}")
+
+    def _save(self, force: bool = False) -> None:
+        """Save history to disk, debounced unless force=True."""
+        if self._persist_path is None:
+            return
+        if not force and not self._dirty:
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_save_time) < _SAVE_DEBOUNCE_SECONDS:
+            return
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            data = [asdict(e) for e in self._entries]
+            self._persist_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self._last_save_time = now
+            self._dirty = False
+        except OSError as exc:
+            log("history", f"Failed to save history: {exc}")
 
     def add(self, text: str, language: str, duration_seconds: float) -> None:
         self._entries.append(HistoryEntry(
@@ -26,6 +78,8 @@ class TranscriptionHistory:
             language=language,
             duration_seconds=duration_seconds,
         ))
+        self._dirty = True
+        self._save()
 
     def entries(self) -> list[HistoryEntry]:
         """Return entries newest-first."""
@@ -36,6 +90,13 @@ class TranscriptionHistory:
 
     def clear(self) -> None:
         self._entries.clear()
+        self._dirty = True
+        self._save(force=True)
+
+    def flush(self) -> None:
+        """Force-save pending changes. Call on shutdown."""
+        if self._dirty:
+            self._save(force=True)
 
     def __len__(self) -> int:
         return len(self._entries)

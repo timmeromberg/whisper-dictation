@@ -464,6 +464,7 @@ class DictationApp:
 
     def _atexit_cleanup(self) -> None:
         """Belt-and-suspenders cleanup for abnormal exits."""
+        self.history.flush()
         if self.recorder.is_recording:
             log("atexit", "Cleaning up active recording...")
             self.recorder.stop()
