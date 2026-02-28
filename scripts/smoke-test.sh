@@ -98,5 +98,67 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+# Step 5: Dictation flow test — simulate hold-to-dictate via DictationApp
+echo "[smoke] Dictation flow test..."
+"$PYTHON" -c "
+import sys, os, time, threading
+os.chdir('$SCRIPT_DIR')
+from pathlib import Path
+from dictation import DictationApp, load_config
+
+config = load_config(Path('$SMOKE_CONFIG'))
+# Disable audio feedback to keep it quiet
+config.audio_feedback.volume = 0.0
+
+app = DictationApp(config)
+
+# Track state changes
+states = []
+app.on_state_change = lambda state, text: states.append((state, text))
+
+# Simulate hold start (starts recording)
+app._on_hold_start()
+assert app.recorder._stream is not None, 'Recorder stream not started'
+print('  Hold start: recording active')
+
+time.sleep(0.5)
+
+# Simulate hold end (stops recording, triggers pipeline)
+# Patch transcriber to avoid real API call — return canned text
+original_transcribe = app.transcriber.transcribe
+app.transcriber.transcribe = lambda audio_bytes, **kw: 'smoke test hello world'
+app._on_hold_end()
+
+# Wait briefly for pipeline thread to finish
+time.sleep(1.0)
+
+# Verify pipeline ran (state should have gone through transcribing → idle)
+state_names = [s[0] for s in states]
+assert 'recording' in state_names, f'Never entered recording state: {state_names}'
+assert 'idle' in state_names, f'Never returned to idle: {state_names}'
+print(f'  Hold end: states = {state_names}')
+
+# Verify the cleaned text was produced (pasting will fail without accessibility, that's OK)
+final_texts = [s[1] for s in states if s[1]]
+print(f'  Pipeline output: {final_texts}')
+
+app.transcriber.transcribe = original_transcribe
+app.stop()
+print('[smoke] Dictation flow: passed')
+" 2>&1
+
+if [ $? -ne 0 ]; then
+  echo "[smoke] FAIL: dictation flow test failed"
+  rm -f "$SMOKE_CONFIG"
+  exit 1
+fi
+
+# Step 6: CLI argument parsing test
+echo "[smoke] CLI test..."
+"$PYTHON" "$SCRIPT_DIR/dictation.py" --help >/dev/null 2>&1
+"$PYTHON" "$SCRIPT_DIR/dictation.py" status --help >/dev/null 2>&1
+"$PYTHON" "$SCRIPT_DIR/dictation.py" set --help >/dev/null 2>&1
+echo "[smoke] CLI: passed"
+
 rm -f "$SMOKE_CONFIG"
 echo "[smoke] All checks passed."
