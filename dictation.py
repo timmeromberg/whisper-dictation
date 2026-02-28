@@ -579,7 +579,15 @@ class DictationApp:
             log("pipeline", f"Failed: {exc}")
             # Audio + visual feedback so the user knows something went wrong
             self._play_error_beep()
-            self._notify(f"Transcription failed: {exc}")
+            err_str = str(exc).lower()
+            if any(s in err_str for s in ["connect", "refused", "unreachable", "resolve"]):
+                provider = self.config.whisper.provider
+                if provider == "local":
+                    self._notify("Whisper server unreachable. Is your whisper.cpp server running?")
+                else:
+                    self._notify(f"Cannot reach {provider}. Check your internet connection.")
+            else:
+                self._notify(f"Transcription failed: {exc}")
             if self.on_state_change:
                 self.on_state_change("idle", "")
         finally:
@@ -651,6 +659,9 @@ def _load_config_from_path(config_path: Path) -> AppConfig:
 
 
 def _print_status(config_path: Path, config: AppConfig) -> None:
+    version_file = Path(__file__).with_name("VERSION")
+    version = version_file.read_text().strip() if version_file.exists() else "unknown"
+    print(f"[status] whisper-dic v{version}")
     print(f"[status] Config: {config_path}")
     print(f"[status] hotkey.key = {config.hotkey.key}")
     print(
