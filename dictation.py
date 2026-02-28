@@ -299,11 +299,14 @@ class DictationApp:
             self._lang_index = self._languages.index(config.whisper.language)
 
         self._last_cycle_time = 0.0
-
         self._stop_event = threading.Event()
         self._pipeline_lock = threading.Lock()
         self._threads_lock = threading.Lock()
         self._pipeline_threads: set[threading.Thread] = set()
+
+        # Optional callback for UI updates: fn(state: str, detail: str)
+        # States: "idle", "recording", "transcribing", "language_changed"
+        self.on_state_change: Callable[[str, str], None] | None = None
 
     @property
     def stopped(self) -> bool:
@@ -337,6 +340,8 @@ class DictationApp:
         print(f"[language] Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
         self._play_beep(1200.0)
+        if self.on_state_change:
+            self.on_state_change("language_changed", f"{display} ({new_lang})")
 
     def _play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
@@ -378,6 +383,8 @@ class DictationApp:
         if started:
             self._play_beep(self.config.audio_feedback.start_frequency)
             print("[recording] Started.")
+            if self.on_state_change:
+                self.on_state_change("recording", "")
 
     def _on_hold_end(self, auto_send: bool = False) -> None:
         if self.stopped:
@@ -425,6 +432,8 @@ class DictationApp:
         try:
             with self._pipeline_lock:
                 print("[pipeline] Transcribing...")
+                if self.on_state_change:
+                    self.on_state_change("transcribing", "")
                 transcript = self.transcriber.transcribe(result.wav_bytes)
 
                 cleaned = transcript
@@ -443,6 +452,8 @@ class DictationApp:
 
                 self.paster.paste(cleaned, auto_send=auto_send)
                 print(f"[pipeline] Pasted {len(cleaned)} chars.")
+                if self.on_state_change:
+                    self.on_state_change("idle", "")
         except Exception as exc:
             print(f"[pipeline] Failed: {exc}")
         finally:
@@ -790,6 +801,11 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("value", help="Value to set")
 
     subparsers.add_parser(
+        "menubar",
+        parents=[config_parent],
+        help="Run with menu bar icon",
+    )
+    subparsers.add_parser(
         "install",
         help="Install as login item (start at login, auto-restart)",
     )
@@ -810,6 +826,9 @@ def main() -> int:
 
     if command == "run":
         return command_run(config_path)
+    if command == "menubar":
+        from menubar import run_menubar
+        return run_menubar(config_path)
     if command == "setup":
         return command_setup(config_path)
     if command == "status":
