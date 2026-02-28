@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import signal
 import subprocess
+import tempfile
 import threading
 import time
+import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
-import sounddevice as sd
 import tomllib
 from pynput import keyboard
 
@@ -402,10 +404,7 @@ class DictationApp:
         gap = np.zeros(int(sample_rate * 0.08), dtype=np.float32)
         signal = np.concatenate([tone, gap, tone])
 
-        try:
-            sd.play(signal, samplerate=sample_rate, blocking=False)
-        except Exception as exc:
-            log("audio", f"Error beep failed: {exc}")
+        self._play_wav(signal, sample_rate)
 
     def play_beep(self, frequency: float) -> None:
         feedback = self.config.audio_feedback
@@ -418,10 +417,28 @@ class DictationApp:
         tone = np.sin(2.0 * np.pi * frequency * timeline).astype(np.float32)
         tone *= feedback.volume
 
+        self._play_wav(tone, sample_rate)
+
+    @staticmethod
+    def _play_wav(samples: np.ndarray, sample_rate: int) -> None:
+        """Play audio samples via macOS afplay, avoiding PortAudio entirely."""
+        int_samples = (samples * 32767).astype(np.int16)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sample_rate)
+            w.writeframes(int_samples.tobytes())
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp.write(buf.getvalue())
+        tmp.close()
         try:
-            sd.play(tone, samplerate=sample_rate, blocking=True)
+            subprocess.run(["afplay", tmp.name], timeout=5)
         except Exception as exc:
             log("audio", f"Beep failed: {exc}")
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
 
     def _transcribe_with_retry(self, audio_bytes: bytes, max_attempts: int = 4) -> str:
         """Transcribe with retry on transient network errors (SSL, connection reset)."""
