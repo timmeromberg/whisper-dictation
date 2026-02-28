@@ -10,6 +10,8 @@ from typing import Optional
 import Quartz
 from pynput import keyboard
 
+from log import log
+
 KEY_MAP = {
     "left_option": keyboard.Key.alt_l,
     "alt_l": keyboard.Key.alt_l,
@@ -134,6 +136,8 @@ class RightOptionHotkeyListener:
             if self._pressed:
                 self._pressed = False
                 now = time.monotonic()
+                ctrl_delta = now - self._ctrl_last_seen
+                shift_delta = now - self._shift_last_seen
                 auto_send = self._modifier_recent(
                     self._ctrl_held, self._ctrl_last_seen,
                     Quartz.kCGEventFlagMaskControl, now,
@@ -142,6 +146,7 @@ class RightOptionHotkeyListener:
                     self._shift_held, self._shift_last_seen,
                     Quartz.kCGEventFlagMaskShift, now,
                 )
+                log("hotkey", f"Release: auto_send={auto_send} (ctrl_delta={ctrl_delta:.3f}s), command_mode={command_mode} (shift_delta={shift_delta:.3f}s)")
                 should_fire = True
 
         if should_fire:

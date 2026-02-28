@@ -10,6 +10,8 @@ import pyperclip
 import Quartz
 from pynput.keyboard import Controller, Key
 
+from log import log
+
 # macOS virtual key code for Return
 _VK_RETURN = 36
 
@@ -71,12 +73,19 @@ class TextPaster:
             return
 
         with self._lock:
+            log("paste", f"Copying {len(text)} chars to clipboard")
             pyperclip.copy(text)
             time.sleep(self.paste_delay_seconds)
+            log("paste", "Sending Cmd+V")
             with self._keyboard.pressed(Key.cmd):
                 self._keyboard.press("v")
                 self._keyboard.release("v")
 
-            if auto_send and _frontmost_bundle_id() in _TERMINAL_BUNDLES:
-                time.sleep(0.3)
-                _post_key(_VK_RETURN)
+            if auto_send:
+                bundle = _frontmost_bundle_id()
+                is_terminal = bundle in _TERMINAL_BUNDLES
+                log("paste", f"Auto-send check: bundle={bundle}, terminal={is_terminal}")
+                if is_terminal:
+                    time.sleep(0.3)
+                    log("paste", "Sending Return")
+                    _post_key(_VK_RETURN)

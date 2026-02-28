@@ -20,6 +20,7 @@ from pynput import keyboard
 import commands
 from cleaner import TextCleaner
 from hotkey import KEY_MAP, RightOptionHotkeyListener
+from log import log
 from paster import TextPaster
 from recorder import Recorder, RecordingResult
 from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
@@ -338,7 +339,7 @@ class DictationApp:
             "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
         }
         display = LANG_NAMES.get(new_lang, new_lang)
-        print(f"[language] Switched to {display} ({new_lang})")
+        log("language", f"Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
         self._play_beep(1200.0)
         if self.on_state_change:
@@ -358,17 +359,16 @@ class DictationApp:
         try:
             sd.play(tone, samplerate=sample_rate, blocking=False)
         except Exception as exc:
-            print(f"[audio] beep failed: {exc}")
+            log("audio", f"Beep failed: {exc}")
 
     def startup_health_checks(self) -> bool:
         provider = self.config.whisper.provider
-        print(f"[startup] Checking Whisper provider ({provider})...")
+        log("startup", f"Checking Whisper provider ({provider})...")
         if not self.transcriber.health_check():
-            print("[startup] Whisper provider is unreachable. Exiting.")
+            log("startup", "Whisper provider is unreachable. Exiting.")
             return False
-        print("[startup] Whisper provider is reachable.")
-
-        print("[startup] Regex-based filler removal enabled.")
+        log("startup", "Whisper provider is reachable.")
+        log("startup", "Regex-based filler removal enabled.")
         return True
 
     def _on_hold_start(self) -> None:
@@ -378,12 +378,12 @@ class DictationApp:
         try:
             started = self.recorder.start()
         except Exception as exc:
-            print(f"[recording] Failed to start stream: {exc}")
+            log("recording", f"Failed to start stream: {exc}")
             return
 
         if started:
             self._play_beep(self.config.audio_feedback.start_frequency)
-            print("[recording] Started.")
+            log("recording", "Started.")
             if self.on_state_change:
                 self.on_state_change("recording", "")
 
@@ -418,10 +418,7 @@ class DictationApp:
             return
 
         if result.duration_seconds > self.config.recording.max_duration:
-            print(
-                f"[recording] Ignored overlong clip ({result.duration_seconds:.2f}s > "
-                f"{self.config.recording.max_duration:.2f}s)."
-            )
+            log("recording", f"Ignored overlong clip ({result.duration_seconds:.2f}s > {self.config.recording.max_duration:.2f}s).")
             return
 
         worker = threading.Thread(
@@ -439,41 +436,43 @@ class DictationApp:
     def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
         try:
             with self._pipeline_lock:
-                print("[pipeline] Transcribing...")
+                log("pipeline", "Transcribing...")
                 if self.on_state_change:
                     self.on_state_change("transcribing", "")
                 transcript = self.transcriber.transcribe(result.wav_bytes)
+                log("pipeline", f"Transcript: '{transcript}'")
 
                 cleaned = transcript
                 if self.cleaner.enabled:
                     try:
-                        print("[pipeline] Cleaning transcript...")
+                        log("pipeline", "Cleaning transcript...")
                         cleaned = self.cleaner.clean(transcript)
                     except Exception as exc:
-                        print(f"[pipeline] Cleanup failed, using raw transcript: {exc}")
+                        log("pipeline", f"Cleanup failed, using raw transcript: {exc}")
                         cleaned = transcript
 
                 cleaned = cleaned.strip()
                 if not cleaned:
-                    print("[pipeline] Nothing to paste after cleanup.")
+                    log("pipeline", "Nothing to paste after cleanup.")
                     return
 
                 if command_mode:
+                    log("pipeline", f"Command mode — matching: '{cleaned}'")
                     if commands.execute(cleaned):
                         if self.on_state_change:
                             self.on_state_change("idle", "")
                     else:
-                        print(f"[command] No match for '{cleaned}', ignoring.")
+                        log("command", f"No match for '{cleaned}', ignoring.")
                         if self.on_state_change:
                             self.on_state_change("idle", "")
                     return
 
                 self.paster.paste(cleaned, auto_send=auto_send)
-                print(f"[pipeline] Pasted {len(cleaned)} chars.")
+                log("pipeline", f"Pasted {len(cleaned)} chars (auto_send={auto_send}).")
                 if self.on_state_change:
                     self.on_state_change("idle", "")
         except Exception as exc:
-            print(f"[pipeline] Failed: {exc}")
+            log("pipeline", f"Failed: {exc}")
         finally:
             current = threading.current_thread()
             with self._threads_lock:
@@ -486,10 +485,10 @@ class DictationApp:
         self._listener.start()
         key = self.config.hotkey.key.replace("_", " ")
         lang_list = ", ".join(self._languages)
-        print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
-        print(f"[ready] Hold {key} + Shift for voice commands.")
-        print(f"[ready] Quick tap to cycle language.")
-        print(f"[ready] Languages: {lang_list} (active: {self._languages[self._lang_index]})")
+        log("ready", f"Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
+        log("ready", f"Hold {key} + Shift for voice commands.")
+        log("ready", f"Quick tap to cycle language.")
+        log("ready", f"Languages: {lang_list} (active: {self._languages[self._lang_index]})")
 
         while not self.stopped:
             time.sleep(0.1)
@@ -501,7 +500,7 @@ class DictationApp:
             return
 
         self._stop_event.set()
-        print("[shutdown] Stopping listener and recorder...")
+        log("shutdown", "Stopping listener and recorder...")
 
         self._listener.stop()
         self.recorder.stop()
@@ -514,7 +513,7 @@ class DictationApp:
 
         self.transcriber.close()
         self.cleaner.close()
-        print("[shutdown] Complete.")
+        log("shutdown", "Complete.")
 
 
 def _load_config_from_path(config_path: Path) -> AppConfig:

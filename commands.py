@@ -6,6 +6,8 @@ import time
 
 import Quartz
 
+from log import log
+
 # macOS virtual key codes
 _VK = {
     "a": 0, "b": 11, "c": 8, "d": 2, "f": 3, "n": 45, "p": 35,
@@ -125,15 +127,21 @@ def execute(text: str) -> bool:
     normalized = normalized.rstrip(".!?,;:")
 
     # Check aliases first, then direct match
+    original = normalized
     normalized = _ALIASES.get(normalized, normalized)
+    if original != normalized:
+        log("command", f"Alias: '{original}' -> '{normalized}'")
+
     entry = _COMMANDS.get(normalized)
     if entry is None:
+        log("command", f"No match for '{normalized}'")
         return False
 
     vk, flags = entry
+    log("command", f"Executing: '{normalized}' (vk={vk}, flags=0x{flags:x})")
     time.sleep(0.05)
     _post_key(vk, flags)
-    print(f"[command] Executed: '{normalized}'")
+    log("command", f"Done: '{normalized}'")
     return True
 
 
