@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -22,8 +23,26 @@ class LocalMacDevice:
 
     def __init__(self) -> None:
         self.name = "Local Mac"
+        self._was_muted = False
+        self._saved_volume: int | None = None
 
     def mute(self) -> None:
+        # Save current state before muting
+        try:
+            r = subprocess.run(
+                ["osascript", "-e", "get volume settings"],
+                capture_output=True, text=True, timeout=5,
+            )
+            # Output: "output volume:69, input volume:50, alert volume:100, output muted:false"
+            parts = dict(p.strip().split(":") for p in r.stdout.strip().split(","))
+            self._was_muted = parts.get("output muted", "").strip() == "true"
+            self._saved_volume = int(parts.get("output volume", "50").strip())
+            log("audio_ctrl", f"Saved Mac volume: {self._saved_volume}, was_muted: {self._was_muted}")
+        except Exception as exc:
+            log("audio_ctrl", f"Failed to save Mac volume: {exc}")
+            self._was_muted = False
+            self._saved_volume = None
+
         subprocess.run(
             ["osascript", "-e", "set volume output muted true"],
             capture_output=True, timeout=5,
@@ -31,11 +50,23 @@ class LocalMacDevice:
         log("audio_ctrl", "Muted: Local Mac")
 
     def unmute(self) -> None:
+        if self._was_muted:
+            log("audio_ctrl", "Mac was already muted, not restoring")
+            return
+
         subprocess.run(
             ["osascript", "-e", "set volume output muted false"],
             capture_output=True, timeout=5,
         )
-        log("audio_ctrl", "Unmuted: Local Mac")
+        if self._saved_volume is not None:
+            # Restore exact volume level
+            subprocess.run(
+                ["osascript", "-e", f"set volume output volume {self._saved_volume}"],
+                capture_output=True, timeout=5,
+            )
+            log("audio_ctrl", f"Unmuted: Local Mac (restored volume {self._saved_volume})")
+        else:
+            log("audio_ctrl", "Unmuted: Local Mac")
 
 
 class CustomDevice:
@@ -96,7 +127,8 @@ class AdbDevice:
     def __init__(self, name: str = "", serial: str = "", unmute_volume: int = 10) -> None:
         self.name = name or "Android Device"
         self._serial = serial  # empty = auto-detect first device
-        self._unmute_volume = unmute_volume
+        self._unmute_volume = unmute_volume  # fallback if query fails
+        self._saved_volume: int | None = None
 
     def _get_serial(self) -> str | None:
         if self._serial:
@@ -108,26 +140,44 @@ class AdbDevice:
             return serial
         return None
 
-    def _run_adb(self, *args: str) -> bool:
+    def _run_adb(self, *args: str) -> subprocess.CompletedProcess | None:
         serial = self._get_serial()
         if not serial:
             log("audio_ctrl", f"No ADB device found for {self.name}")
-            return False
+            return None
         cmd = ["adb", "-s", serial] + list(args)
         try:
-            subprocess.run(cmd, capture_output=True, timeout=10)
-            return True
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         except Exception as exc:
             log("audio_ctrl", f"ADB command failed for {self.name}: {exc}")
-            return False
+            return None
+
+    def _query_volume(self) -> int | None:
+        """Query current media stream volume. Returns int or None on failure."""
+        result = self._run_adb("shell", "cmd", "media_session", "volume", "--get", "--stream", "3")
+        if result is None:
+            return None
+        # Output contains a line like: "volume is 6 in range [0..15]"
+        m = re.search(r"volume is (\d+)", result.stdout)
+        if m:
+            return int(m.group(1))
+        log("audio_ctrl", f"Could not parse ADB volume output: {result.stdout.strip()}")
+        return None
 
     def mute(self) -> None:
-        if self._run_adb("shell", "cmd", "media_session", "volume", "--set", "0", "--stream", "3"):
+        # Save current volume before muting
+        self._saved_volume = self._query_volume()
+        if self._saved_volume is not None:
+            log("audio_ctrl", f"Saved ADB volume: {self._saved_volume}")
+
+        result = self._run_adb("shell", "cmd", "media_session", "volume", "--set", "0", "--stream", "3")
+        if result is not None:
             log("audio_ctrl", f"Muted: {self.name} (ADB)")
 
     def unmute(self) -> None:
-        vol = str(self._unmute_volume)
-        if self._run_adb("shell", "cmd", "media_session", "volume", "--set", vol, "--stream", "3"):
+        vol = self._saved_volume if self._saved_volume is not None else self._unmute_volume
+        result = self._run_adb("shell", "cmd", "media_session", "volume", "--set", str(vol), "--stream", "3")
+        if result is not None:
             log("audio_ctrl", f"Unmuted: {self.name} (ADB, volume={vol})")
 
 
