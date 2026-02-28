@@ -8,7 +8,10 @@ from pathlib import Path
 
 import rumps
 
-from dictation import DictationApp, LANG_NAMES, load_config, set_config_value, create_transcriber
+from dictation import (
+    DictationApp, LANG_NAMES, load_config, set_config_value, create_transcriber,
+    command_install, command_uninstall, _PLIST_PATH,
+)
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
@@ -151,6 +154,7 @@ class DictationMenuBar(rumps.App):
             None,
             rumps.MenuItem("Check Status", callback=self._check_status),
             rumps.MenuItem("View Logs", callback=self._view_logs),
+            self._build_service_menu(),
             None,
             self._help_menu,
             self._version_item(),
@@ -394,6 +398,49 @@ class DictationMenuBar(rumps.App):
             self.config.whisper.timeout_seconds = val
             self._app.config.whisper.timeout_seconds = val
             self._timeout_item.title = f"Timeout: {val}s"
+
+    def _build_service_menu(self) -> rumps.MenuItem:
+        menu = rumps.MenuItem("Service")
+        menu.add(rumps.MenuItem("Install (Start at Login)", callback=self._install_service))
+        menu.add(rumps.MenuItem("Uninstall", callback=self._uninstall_service))
+        installed = "Yes" if _PLIST_PATH.exists() else "No"
+        self._installed_item = rumps.MenuItem(f"Installed: {installed}")
+        self._installed_item.set_callback(None)
+        menu.add(self._installed_item)
+        return menu
+
+    def _install_service(self, _sender) -> None:
+        def _run():
+            rc = command_install()
+            if rc == 0:
+                rumps.notification("whisper-dic", "Installed",
+                                   "whisper-dic will start at login and auto-restart on crash.")
+            else:
+                rumps.notification("whisper-dic", "Install Failed",
+                                   "Check the terminal for details.")
+            self._installed_item.title = f"Installed: {'Yes' if _PLIST_PATH.exists() else 'No'}"
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _uninstall_service(self, _sender) -> None:
+        result = rumps.alert(
+            title="Uninstall whisper-dic?",
+            message="This will remove whisper-dic from login items. It won't auto-start anymore.",
+            ok="Uninstall",
+            cancel="Cancel",
+        )
+        if result != 1:
+            return
+
+        def _run():
+            rc = command_uninstall()
+            if rc == 0:
+                rumps.notification("whisper-dic", "Uninstalled",
+                                   "whisper-dic removed from login items.")
+            else:
+                rumps.notification("whisper-dic", "Uninstall Failed",
+                                   "Not currently installed.")
+            self._installed_item.title = f"Installed: {'Yes' if _PLIST_PATH.exists() else 'No'}"
+        threading.Thread(target=_run, daemon=True).start()
 
     def _version_item(self) -> rumps.MenuItem:
         version_file = Path(__file__).with_name("VERSION")
