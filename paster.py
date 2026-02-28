@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
 import threading
 import time
 
 import pyperclip
 import Quartz
-from AppKit import NSWorkspace
 from pynput.keyboard import Controller, Key
 
 # macOS virtual key code for Return
@@ -45,13 +45,16 @@ def _post_key(vk: int) -> None:
     Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
 
 
-def _frontmost_is_terminal() -> bool:
-    """Check if the frontmost app is a terminal/IDE."""
-    app = NSWorkspace.sharedWorkspace().frontmostApplication()
-    if app is None:
-        return False
-    bundle_id = app.bundleIdentifier() or ""
-    return bundle_id in _TERMINAL_BUNDLES
+def _frontmost_bundle_id() -> str:
+    """Get frontmost app bundle ID via osascript (always fresh)."""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", 'tell application "System Events" to get bundle identifier of first process whose frontmost is true'],
+            capture_output=True, text=True, timeout=2,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
 
 
 class TextPaster:
@@ -75,6 +78,6 @@ class TextPaster:
                 self._keyboard.press("v")
                 self._keyboard.release("v")
 
-            if self.auto_send and _frontmost_is_terminal():
-                time.sleep(0.3)
-                _post_key(_VK_RETURN)
+            if self.auto_send and _frontmost_bundle_id() in _TERMINAL_BUNDLES:
+                    time.sleep(0.3)
+                    _post_key(_VK_RETURN)
