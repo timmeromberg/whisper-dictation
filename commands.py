@@ -4,57 +4,39 @@ from __future__ import annotations
 
 import time
 
-import Quartz
-
+from compat import FLAG_ALT, FLAG_CMD, FLAG_CTRL, FLAG_SHIFT, VK_RETURN
+from compat import VK_MAP as _VK
+from compat import post_key as _post_key
 from log import log
 
-# macOS virtual key codes
-VK_RETURN = 36
-
-_VK = {
-    "a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3, "g": 5,
-    "h": 4, "i": 34, "j": 38, "k": 40, "l": 37, "m": 46, "n": 45,
-    "o": 31, "p": 35, "q": 12, "r": 15, "s": 1, "t": 17, "u": 32,
-    "v": 9, "w": 13, "x": 7, "y": 16, "z": 6,
-    "0": 29, "1": 18, "2": 19, "3": 20, "4": 21, "5": 23,
-    "6": 22, "7": 26, "8": 28, "9": 25,
-    "return": 36, "tab": 48, "escape": 53, "delete": 51,
-    "space": 49, "up": 126, "down": 125, "left": 123, "right": 124,
-    "-": 27, "=": 24, "[": 33, "]": 30, "\\": 42, ";": 41,
-    "'": 39, ",": 43, ".": 47, "/": 44, "`": 50,
-}
-_FLAG_CTRL = Quartz.kCGEventFlagMaskControl
-
-_FLAG_CMD = Quartz.kCGEventFlagMaskCommand
-_FLAG_SHIFT = Quartz.kCGEventFlagMaskShift
-_FLAG_ALT = Quartz.kCGEventFlagMaskAlternate
+__all__ = ["VK_RETURN", "execute", "list_commands", "register_custom"]
 
 # Command table: normalized spoken phrase -> (virtual_key, modifier_flags)
 _COMMANDS: dict[str, tuple[int, int]] = {
-    "select all": (_VK["a"], _FLAG_CMD),
-    "undo": (_VK["z"], _FLAG_CMD),
-    "undo that": (_VK["z"], _FLAG_CMD),
-    "redo": (_VK["z"], _FLAG_CMD | _FLAG_SHIFT),
-    "copy": (_VK["c"], _FLAG_CMD),
-    "copy text": (_VK["c"], _FLAG_CMD),
-    "copy that": (_VK["c"], _FLAG_CMD),
-    "copy it": (_VK["c"], _FLAG_CMD),
-    "copy this": (_VK["c"], _FLAG_CMD),
-    "cut": (_VK["x"], _FLAG_CMD),
-    "cut text": (_VK["x"], _FLAG_CMD),
-    "cut that": (_VK["x"], _FLAG_CMD),
-    "cut it": (_VK["x"], _FLAG_CMD),
-    "paste": (_VK["v"], _FLAG_CMD),
-    "paste text": (_VK["v"], _FLAG_CMD),
-    "paste that": (_VK["v"], _FLAG_CMD),
-    "paste it": (_VK["v"], _FLAG_CMD),
-    "paste this": (_VK["v"], _FLAG_CMD),
-    "save": (_VK["s"], _FLAG_CMD),
-    "save file": (_VK["s"], _FLAG_CMD),
-    "save it": (_VK["s"], _FLAG_CMD),
-    "find": (_VK["f"], _FLAG_CMD),
-    "new tab": (_VK["tab"], _FLAG_CMD),
-    "close tab": (_VK["x"], _FLAG_CMD),  # Cmd+W would be better but no 'w' in _VK
+    "select all": (_VK["a"], FLAG_CMD),
+    "undo": (_VK["z"], FLAG_CMD),
+    "undo that": (_VK["z"], FLAG_CMD),
+    "redo": (_VK["z"], FLAG_CMD | FLAG_SHIFT),
+    "copy": (_VK["c"], FLAG_CMD),
+    "copy text": (_VK["c"], FLAG_CMD),
+    "copy that": (_VK["c"], FLAG_CMD),
+    "copy it": (_VK["c"], FLAG_CMD),
+    "copy this": (_VK["c"], FLAG_CMD),
+    "cut": (_VK["x"], FLAG_CMD),
+    "cut text": (_VK["x"], FLAG_CMD),
+    "cut that": (_VK["x"], FLAG_CMD),
+    "cut it": (_VK["x"], FLAG_CMD),
+    "paste": (_VK["v"], FLAG_CMD),
+    "paste text": (_VK["v"], FLAG_CMD),
+    "paste that": (_VK["v"], FLAG_CMD),
+    "paste it": (_VK["v"], FLAG_CMD),
+    "paste this": (_VK["v"], FLAG_CMD),
+    "save": (_VK["s"], FLAG_CMD),
+    "save file": (_VK["s"], FLAG_CMD),
+    "save it": (_VK["s"], FLAG_CMD),
+    "find": (_VK["f"], FLAG_CMD),
+    "new tab": (_VK["tab"], FLAG_CMD),
+    "close tab": (_VK["x"], FLAG_CMD),  # Cmd+W would be better but no 'w' in _VK
     "delete": (_VK["delete"], 0),
     "delete that": (_VK["delete"], 0),
     "delete it": (_VK["delete"], 0),
@@ -65,14 +47,14 @@ _COMMANDS: dict[str, tuple[int, int]] = {
     "escape": (_VK["escape"], 0),
 }
 
-_COMMANDS["close tab"] = (_VK["w"], _FLAG_CMD)
-_COMMANDS["close window"] = (_VK["w"], _FLAG_CMD)
-_COMMANDS["new window"] = (_VK["n"], _FLAG_CMD)
-_COMMANDS["print"] = (_VK["p"], _FLAG_CMD)
-_COMMANDS["bold"] = (_VK["b"], _FLAG_CMD)
+_COMMANDS["close tab"] = (_VK["w"], FLAG_CMD)
+_COMMANDS["close window"] = (_VK["w"], FLAG_CMD)
+_COMMANDS["new window"] = (_VK["n"], FLAG_CMD)
+_COMMANDS["print"] = (_VK["p"], FLAG_CMD)
+_COMMANDS["bold"] = (_VK["b"], FLAG_CMD)
 
 # Screenshot to clipboard: Cmd+Ctrl+Shift+4 (area select)
-_FLAG_SCREENSHOT = _FLAG_CMD | _FLAG_SHIFT | Quartz.kCGEventFlagMaskControl
+_FLAG_SCREENSHOT = FLAG_CMD | FLAG_SHIFT | FLAG_CTRL
 _COMMANDS["screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
 _COMMANDS["take screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
 _COMMANDS["take a screenshot"] = (_VK["4"], _FLAG_SCREENSHOT)
@@ -110,19 +92,6 @@ _ALIASES: dict[str, str] = {
 }
 
 
-def _post_key(vk: int, flags: int = 0) -> None:
-    """Post a key event with optional modifier flags via CGEvent."""
-    down = Quartz.CGEventCreateKeyboardEvent(None, vk, True)
-    if flags:
-        Quartz.CGEventSetFlags(down, flags)
-    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
-
-    up = Quartz.CGEventCreateKeyboardEvent(None, vk, False)
-    if flags:
-        Quartz.CGEventSetFlags(up, flags)
-    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
-
-
 def execute(text: str) -> bool:
     """Try to match text to a voice command and execute it.
 
@@ -157,10 +126,10 @@ def list_commands() -> list[str]:
 
 
 _MODIFIER_MAP = {
-    "cmd": _FLAG_CMD, "command": _FLAG_CMD,
-    "ctrl": _FLAG_CTRL, "control": _FLAG_CTRL,
-    "shift": _FLAG_SHIFT,
-    "alt": _FLAG_ALT, "option": _FLAG_ALT,
+    "cmd": FLAG_CMD, "command": FLAG_CMD,
+    "ctrl": FLAG_CTRL, "control": FLAG_CTRL,
+    "shift": FLAG_SHIFT,
+    "alt": FLAG_ALT, "option": FLAG_ALT,
 }
 
 
