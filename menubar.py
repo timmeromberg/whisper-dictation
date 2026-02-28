@@ -8,15 +8,7 @@ from pathlib import Path
 
 import rumps
 
-from dictation import DictationApp, load_config, set_config_value, create_transcriber
-
-LANG_NAMES = {
-    "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
-    "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
-    "ja": "Japanese", "zh": "Chinese", "ko": "Korean", "auto": "Auto-detect",
-    "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
-    "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
-}
+from dictation import DictationApp, LANG_NAMES, load_config, set_config_value, create_transcriber
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]

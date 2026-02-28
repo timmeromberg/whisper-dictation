@@ -9,6 +9,8 @@ import Quartz
 from log import log
 
 # macOS virtual key codes
+VK_RETURN = 36
+
 _VK = {
     "a": 0, "b": 11, "c": 8, "d": 2, "f": 3, "n": 45, "p": 35,
     "s": 1, "v": 9, "x": 7, "z": 6,

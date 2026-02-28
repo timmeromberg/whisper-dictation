@@ -10,10 +10,8 @@ import pyperclip
 import Quartz
 from pynput.keyboard import Controller, Key
 
+from commands import VK_RETURN
 from log import log
-
-# macOS virtual key code for Return
-_VK_RETURN = 36
 
 # Bundle IDs of apps where auto_send should fire
 _TERMINAL_BUNDLES = {
@@ -88,4 +86,4 @@ class TextPaster:
                 if is_terminal:
                     time.sleep(0.3)
                     log("paste", "Sending Return")
-                    _post_key(_VK_RETURN)
+                    _post_key(VK_RETURN)

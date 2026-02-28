@@ -23,6 +23,14 @@ from cleaner import TextCleaner
 from hotkey import KEY_MAP, RightOptionHotkeyListener
 from log import log
 from paster import TextPaster
+
+LANG_NAMES = {
+    "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
+    "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
+    "ja": "Japanese", "zh": "Chinese", "ko": "Korean", "auto": "Auto-detect",
+    "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
+    "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
+}
 from recorder import Recorder, RecordingResult
 from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
@@ -369,13 +377,6 @@ class DictationApp:
             new_lang = self._languages[self._lang_index]
         self.transcriber.language = new_lang
 
-        LANG_NAMES = {
-            "en": "English", "nl": "Dutch", "de": "German", "fr": "French",
-            "es": "Spanish", "it": "Italian", "pt": "Portuguese", "ru": "Russian",
-            "ja": "Japanese", "zh": "Chinese", "ko": "Korean", "auto": "Auto-detect",
-            "ar": "Arabic", "hi": "Hindi", "pl": "Polish", "sv": "Swedish",
-            "tr": "Turkish", "uk": "Ukrainian", "da": "Danish", "no": "Norwegian",
-        }
         display = LANG_NAMES.get(new_lang, new_lang)
         log("language", f"Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
@@ -818,7 +819,7 @@ def command_setup(config_path: Path) -> int:
 
 _PLIST_LABEL = "com.whisper.dictation"
 _PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
-_LOG_PATH = "/tmp/whisper-dictation.log"
+_LOG_PATH = str(Path.home() / "Library" / "Logs" / "whisper-dictation.log")
 
 
 def _generate_plist() -> str:
