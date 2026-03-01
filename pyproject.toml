@@ -6,7 +6,21 @@ build-backend = "setuptools.build_meta"
 name = "whisper-dic"
 dynamic = ["version"]
 requires-python = ">=3.12"
-description = "Voice-to-text dictation tool with hotkey activation"
+description = "System-wide hold-to-dictate for macOS and Windows using Whisper"
+license = {text = "MIT"}
+authors = [{name = "Tim Romberg"}]
+readme = "README.md"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Intended Audience :: End Users/Desktop",
+    "Development Status :: 4 - Beta",
+]
 dependencies = [
     "pynput>=1.8.0",
     "sounddevice>=0.5.0",
@@ -25,6 +39,12 @@ macos = [
 
 [project.scripts]
 whisper-dic = "whisper_dic.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/timmeromberg/whisper-dic"
+Repository = "https://github.com/timmeromberg/whisper-dic"
+Issues = "https://github.com/timmeromberg/whisper-dic/issues"
+Changelog = "https://github.com/timmeromberg/whisper-dic/blob/main/CHANGELOG.md"
 
 [tool.setuptools.dynamic]
 version = {file = "src/whisper_dic/VERSION"}
