@@ -306,6 +306,15 @@ class DictationMenuBar(rumps.App):
 
     _LEVEL_BARS = ["\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"]
 
+    def _update_preview_badges(self) -> None:
+        """Sync preview overlay badges with current config state."""
+        badges: list[str] = []
+        if self.config.rewrite.enabled:
+            badges.append("AI Rewrite")
+        if self.config.paste.auto_send:
+            badges.append("Auto-Send")
+        self._preview_overlay.set_badges(badges)
+
     def _on_state_change(self, state: str, detail: str) -> None:
         if state == "recording":
             self._is_recording = True
@@ -313,6 +322,7 @@ class DictationMenuBar(rumps.App):
             self._status_item.title = "Status: Recording..."
             self._level_timer.start()
             self._overlay.show_recording()
+            self._update_preview_badges()
         elif state == "transcribing":
             self._is_recording = False
             self._level_timer.stop()

@@ -6,12 +6,16 @@ import threading
 from typing import Any
 
 from AppKit import (
+    NSAttributedString,
     NSBezierPath,
     NSColor,
     NSEvent,
     NSFloatingWindowLevel,
     NSFont,
+    NSFontAttributeName,
+    NSForegroundColorAttributeName,
     NSMakeRect,
+    NSMakeSize,
     NSScreen,
     NSTextField,
     NSView,
@@ -106,19 +110,29 @@ class RecordingOverlay:
 class PreviewOverlay:
     """Floating translucent panel showing live transcription preview near the cursor."""
 
-    WIDTH = 400
-    HEIGHT = 60
-    PADDING = 8
+    MIN_WIDTH = 200
+    MAX_WIDTH = 500
+    MAX_HEIGHT = 300
+    PADDING = 10
+    STATUS_HEIGHT = 18  # height reserved for status badges
+    STATUS_GAP = 4  # gap between status line and text
     CURSOR_OFFSET_Y = 20  # pixels above the cursor
-    MAX_DISPLAY_CHARS = 120
+    FONT_SIZE = 13.0
+    STATUS_FONT_SIZE = 10.0
     _TRACK_INTERVAL = 0.08  # seconds between cursor position updates
 
     def __init__(self) -> None:
         self._window: NSWindow | None = None
         self._label: NSTextField | None = None
+        self._status_label: NSTextField | None = None
         self._tracking_stop = threading.Event()
         self._tracking_thread: threading.Thread | None = None
         self._visible = False
+        self._badges: list[str] = []
+
+    def set_badges(self, badges: list[str]) -> None:
+        """Set status badges (e.g. ["AI Rewrite", "Auto-Send"]). Thread-safe."""
+        self._badges = badges
 
     def show(self, text: str) -> None:
         """Show or update preview text near cursor. Safe to call from any thread."""
@@ -133,8 +147,7 @@ class PreviewOverlay:
         if self._window is not None:
             return
 
-        # Initial rect — will be repositioned in _show
-        rect = NSMakeRect(0, 0, self.WIDTH, self.HEIGHT)
+        rect = NSMakeRect(0, 0, self.MAX_WIDTH, 40)
 
         window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             rect,
@@ -146,7 +159,7 @@ class PreviewOverlay:
         window.setIgnoresMouseEvents_(True)
         window.setOpaque_(False)
         window.setBackgroundColor_(
-            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.1, 0.1, 0.1, 0.8)
+            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.08, 0.08, 0.10, 0.85)
         )
         window.setAlphaValue_(0.95)
         window.setHasShadow_(True)
@@ -156,24 +169,75 @@ class PreviewOverlay:
         content.layer().setCornerRadius_(10.0)
         content.layer().setMasksToBounds_(True)
 
-        label_rect = NSMakeRect(
-            self.PADDING, self.PADDING,
-            self.WIDTH - 2 * self.PADDING,
-            self.HEIGHT - 2 * self.PADDING,
+        # Status badges line (bottom)
+        status_label = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(self.PADDING, self.PADDING, self.MAX_WIDTH - 2 * self.PADDING, self.STATUS_HEIGHT)
         )
-        label = NSTextField.alloc().initWithFrame_(label_rect)
+        status_label.setEditable_(False)
+        status_label.setSelectable_(False)
+        status_label.setBezeled_(False)
+        status_label.setDrawsBackground_(False)
+        status_label.setFont_(NSFont.systemFontOfSize_(self.STATUS_FONT_SIZE))
+        status_label.setStringValue_("")
+        status_label.setMaximumNumberOfLines_(1)
+        content.addSubview_(status_label)
+
+        # Main text label (above status)
+        label_y = self.PADDING + self.STATUS_HEIGHT + self.STATUS_GAP
+        label = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(self.PADDING, label_y, self.MAX_WIDTH - 2 * self.PADDING, 24)
+        )
         label.setEditable_(False)
         label.setSelectable_(False)
         label.setBezeled_(False)
         label.setDrawsBackground_(False)
         label.setTextColor_(NSColor.whiteColor())
-        label.setFont_(NSFont.systemFontOfSize_(13.0))
+        label.setFont_(NSFont.systemFontOfSize_(self.FONT_SIZE))
         label.setStringValue_("")
-        label.setMaximumNumberOfLines_(2)
+        label.setMaximumNumberOfLines_(0)  # unlimited lines
+        label.setPreferredMaxLayoutWidth_(self.MAX_WIDTH - 2 * self.PADDING)
         content.addSubview_(label)
 
         self._window = window
         self._label = label
+        self._status_label = status_label
+
+    def _resize_to_fit(self) -> None:
+        """Resize window to fit label content. MUST be called on main thread."""
+        if self._label is None or self._window is None:
+            return
+
+        max_label_w = self.MAX_WIDTH - 2 * self.PADDING
+        has_status = self._badges and self._status_label is not None
+        status_total = (self.STATUS_HEIGHT + self.STATUS_GAP) if has_status else 0
+        max_text_h = self.MAX_HEIGHT - 2 * self.PADDING - status_total
+
+        # Calculate text size
+        ideal = self._label.cell().cellSizeForBounds_(
+            NSMakeRect(0, 0, max_label_w, max_text_h)
+        )
+        label_w = max(self.MIN_WIDTH - 2 * self.PADDING, min(ideal.width, max_label_w))
+        label_h = min(ideal.height, max_text_h)
+
+        win_w = label_w + 2 * self.PADDING
+        win_h = label_h + 2 * self.PADDING + status_total
+
+        # Position status at bottom, text above it
+        if has_status and self._status_label is not None:
+            self._status_label.setFrame_(
+                NSMakeRect(self.PADDING, self.PADDING, label_w, self.STATUS_HEIGHT)
+            )
+            self._status_label.setHidden_(False)
+            label_y = self.PADDING + self.STATUS_HEIGHT + self.STATUS_GAP
+        else:
+            if self._status_label is not None:
+                self._status_label.setHidden_(True)
+            label_y = self.PADDING
+
+        self._label.setFrame_(NSMakeRect(self.PADDING, label_y, label_w, label_h))
+        frame = self._window.frame()
+        frame.size = NSMakeSize(win_w, win_h)
+        self._window.setFrame_display_(frame, True)
 
     def _position_near_cursor(self) -> None:
         """Reposition window near the mouse cursor, clamped to screen."""
@@ -189,19 +253,53 @@ class PreviewOverlay:
         vx, vy = visible.origin.x, visible.origin.y
         vw, vh = visible.size.width, visible.size.height
 
+        win_frame = self._window.frame()
+        w = win_frame.size.width
+        h = win_frame.size.height
+
         # Center horizontally on cursor, place above cursor
-        x = mouse.x - self.WIDTH / 2
+        x = mouse.x - w / 2
         y = mouse.y + self.CURSOR_OFFSET_Y
 
         # If window would go above visible area, place below cursor instead
-        if y + self.HEIGHT > vy + vh:
-            y = mouse.y - self.HEIGHT - self.CURSOR_OFFSET_Y
+        if y + h > vy + vh:
+            y = mouse.y - h - self.CURSOR_OFFSET_Y
 
         # Clamp to visible screen bounds
-        x = max(vx, min(x, vx + vw - self.WIDTH))
-        y = max(vy, min(y, vy + vh - self.HEIGHT))
+        x = max(vx, min(x, vx + vw - w))
+        y = max(vy, min(y, vy + vh - h))
 
         self._window.setFrameOrigin_((x, y))
+
+    _BADGE_COLORS: dict[str, tuple[float, float, float]] = {
+        "AI Rewrite": (0.55, 0.36, 0.95),  # purple
+        "Auto-Send": (0.20, 0.70, 0.45),   # green
+    }
+    _BADGE_DEFAULT_COLOR = (0.45, 0.55, 0.65)  # grey-blue
+
+    def _render_badges(self) -> None:
+        """Update the status label with colored badge text."""
+        if self._status_label is None or not self._badges:
+            return
+
+        font = NSFont.boldSystemFontOfSize_(self.STATUS_FONT_SIZE)
+        parts: list[Any] = []
+        for i, badge in enumerate(self._badges):
+            r, g, b = self._BADGE_COLORS.get(badge, self._BADGE_DEFAULT_COLOR)
+            color = NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, 1.0)
+            attrs = {NSFontAttributeName: font, NSForegroundColorAttributeName: color}
+            part = NSAttributedString.alloc().initWithString_attributes_(badge, attrs)
+            parts.append(part)
+            if i < len(self._badges) - 1:
+                sep_color = NSColor.colorWithCalibratedWhite_alpha_(0.4, 1.0)
+                sep_attrs = {NSFontAttributeName: font, NSForegroundColorAttributeName: sep_color}
+                sep = NSAttributedString.alloc().initWithString_attributes_("  \u00b7  ", sep_attrs)
+                parts.append(sep)
+
+        combined = parts[0].mutableCopy()
+        for part in parts[1:]:
+            combined.appendAttributedString_(part)
+        self._status_label.setAttributedStringValue_(combined)
 
     def _show(self, text: str) -> None:
         """Main-thread: create window if needed, update text, show near cursor."""
@@ -209,10 +307,9 @@ class PreviewOverlay:
         if self._label is None:
             return
 
-        display = text
-        if len(display) > self.MAX_DISPLAY_CHARS:
-            display = "..." + display[-(self.MAX_DISPLAY_CHARS - 3):]
-        self._label.setStringValue_(display)
+        self._label.setStringValue_(text)
+        self._render_badges()
+        self._resize_to_fit()
 
         self._position_near_cursor()
         if self._window is not None:
