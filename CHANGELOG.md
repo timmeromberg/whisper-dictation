@@ -5,6 +5,21 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-01
+
+### Added
+- Microphone selection: choose which input device to use for recording
+- Menu bar submenu lists all available microphones with live switching
+- `whisper-dic devices` CLI command to list available microphones
+- Smoke test gracefully skips menubar startup when another instance is running
+
+### Fixed
+- Clipboard restored after paste to prevent accidental double-paste
+
+### Changed
+- Audio feedback (beeps) now non-blocking for lower dictation latency
+- Recording starts immediately on keypress instead of waiting for beep
+
 ## [0.5.0] - 2026-03-01
 
 ### Added
