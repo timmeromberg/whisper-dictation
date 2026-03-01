@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from log import log
+from .log import log
 
 
 class AudioDevice(Protocol):

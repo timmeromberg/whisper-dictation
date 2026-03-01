@@ -10,11 +10,11 @@ from typing import Any
 import rumps
 import sounddevice as sd
 
-from cli import _PLIST_PATH, command_install, command_uninstall
-from config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
-from dictation import DictationApp
-from overlay import RecordingOverlay
-from transcriber import create_transcriber
+from .cli import _PLIST_PATH, command_install, command_uninstall
+from .config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
+from .dictation import DictationApp
+from .overlay import RecordingOverlay
+from .transcriber import create_transcriber
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
@@ -590,8 +590,8 @@ class DictationMenuBar(rumps.App):
         threading.Thread(target=_run, daemon=True).start()
 
     def _version_item(self) -> rumps.MenuItem:
-        version_file = Path(__file__).with_name("VERSION")
-        version = version_file.read_text().strip() if version_file.exists() else "?"
+        from . import __version__
+        version = __version__
         item = rumps.MenuItem(f"Version: {version}")
         item.set_callback(None)
         return item
@@ -618,7 +618,7 @@ class DictationMenuBar(rumps.App):
 
     def _on_config_changed(self, new_config: Any) -> None:
         """Called from watcher thread when config.toml changes externally."""
-        from log import log
+        from .log import log
         log("config-watch", "Config changed externally, reloading...")
         old = self.config
         self.config = new_config
@@ -807,7 +807,7 @@ class DictationMenuBar(rumps.App):
 
 
 def run_menubar(config_path: Path) -> int:
-    from cli import _check_single_instance, _rotate_log_if_needed
+    from .cli import _check_single_instance, _rotate_log_if_needed
     if not _check_single_instance():
         return 1
     _rotate_log_if_needed()

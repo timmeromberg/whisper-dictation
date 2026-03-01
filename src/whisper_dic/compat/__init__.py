@@ -7,7 +7,7 @@ import sys
 _PLATFORM = sys.platform
 
 if _PLATFORM == "darwin":
-    from compat._macos import (  # noqa: F401
+    from ._macos import (  # noqa: F401
         FLAG_ALT,
         FLAG_CMD,
         FLAG_CTRL,
@@ -27,7 +27,7 @@ if _PLATFORM == "darwin":
         post_keycode,
     )
 elif _PLATFORM == "win32":
-    from compat._windows import (  # noqa: F401
+    from ._windows import (  # noqa: F401
         FLAG_ALT,
         FLAG_CMD,
         FLAG_CTRL,

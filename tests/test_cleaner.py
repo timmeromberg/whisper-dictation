@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cleaner import TextCleaner
+from whisper_dic.cleaner import TextCleaner
 
 
 @pytest.fixture()

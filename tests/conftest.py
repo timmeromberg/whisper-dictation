@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -18,4 +19,4 @@ def tmp_config(tmp_path: Path) -> Path:
 @pytest.fixture()
 def example_config() -> Path:
     """Path to the real config.example.toml shipped with the project."""
-    return Path(__file__).resolve().parent.parent / "config.example.toml"
+    return files("whisper_dic").joinpath("config.example.toml")

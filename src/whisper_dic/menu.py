@@ -33,7 +33,7 @@ def _setting_line(label: str, value: str) -> str:
 
 
 def _resolve_dictation_functions() -> tuple[Callable[[Path], Any], Callable[[Path, str, str], None]]:
-    from config import load_config, set_config_value
+    from .config import load_config, set_config_value
     return load_config, set_config_value
 
 

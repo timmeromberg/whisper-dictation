@@ -9,7 +9,7 @@ import winsound
 
 from pynput.keyboard import Key
 
-from log import log
+from ..log import log
 
 user32 = ctypes.windll.user32  # type: ignore[attr-defined]
 kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]

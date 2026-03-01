@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="$SCRIPT_DIR/.venv/bin/python"
+export PYTHONPATH="$SCRIPT_DIR/src"
 
 if [ ! -x "$PYTHON" ]; then
   echo "[smoke] SKIP: no .venv found (smoke test requires venv)"
@@ -15,7 +16,7 @@ fi
 
 # Step 1: Compile check
 echo "[smoke] Compile check..."
-if ! "$PYTHON" -m compileall -q "$SCRIPT_DIR"/*.py; then
+if ! "$PYTHON" -m compileall -q "$SCRIPT_DIR/src/whisper_dic/"; then
   echo "[smoke] FAIL: compile error"
   exit 1
 fi
@@ -29,15 +30,15 @@ else
 fi
 
 # Step 3: Startup test — app must start and stay alive for 3 seconds
-pkill -f "cli.py menubar.*--config.*/tmp/smoke" 2>/dev/null || true
+pkill -f "whisper_dic.cli menubar.*--config.*/tmp/smoke" 2>/dev/null || true
 sleep 0.5
 
 SMOKE_CONFIG="/tmp/smoke-test-whisper-dic.toml"
-cp "$SCRIPT_DIR/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null || true
+cp "$SCRIPT_DIR/src/whisper_dic/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null || true
 
 SMOKE_LOG="/tmp/smoke-menubar-$$.log"
 echo "[smoke] Starting menubar app..."
-"$PYTHON" "$SCRIPT_DIR/cli.py" menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
+"$PYTHON" -m whisper_dic.cli menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
 PID=$!
 
 sleep 3
@@ -62,11 +63,10 @@ rm -f "$SMOKE_LOG"
 # Step 4: Dictation pipeline test — record, transcribe, clean
 echo "[smoke] Pipeline test..."
 "$PYTHON" -c "
-import sys, os
-os.chdir('$SCRIPT_DIR')
+import sys
 
 # Test recorder: start/stop a brief recording
-from recorder import Recorder
+from whisper_dic.recorder import Recorder
 rec = Recorder(sample_rate=16000)
 rec.start()
 import time; time.sleep(0.5)
@@ -78,8 +78,8 @@ print(f'  Recorder: {result.duration_seconds:.2f}s, {len(result.audio_bytes)} by
 
 # Test transcriber creation (don't actually call API — just verify wiring)
 from pathlib import Path
-from config import load_config
-from transcriber import create_transcriber
+from whisper_dic.config import load_config
+from whisper_dic.transcriber import create_transcriber
 config = load_config(Path('$SMOKE_CONFIG'))
 t = create_transcriber(config.whisper)
 assert t is not None, 'Transcriber is None'
@@ -87,7 +87,7 @@ t.close()
 print(f'  Transcriber: {config.whisper.provider} created OK')
 
 # Test cleaner
-from cleaner import TextCleaner
+from whisper_dic.cleaner import TextCleaner
 c = TextCleaner(text_commands=True)
 cleaned = c.clean('Hello um period new line world')
 assert 'um' not in cleaned.lower(), 'Filler not removed'
@@ -106,11 +106,10 @@ fi
 # Step 5: Dictation flow test — simulate hold-to-dictate via DictationApp
 echo "[smoke] Dictation flow test..."
 FLOW_OUT=$("$PYTHON" -c "
-import sys, os, time, threading
-os.chdir('$SCRIPT_DIR')
+import sys, time, threading
 from pathlib import Path
-from config import load_config
-from dictation import DictationApp
+from whisper_dic.config import load_config
+from whisper_dic.dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -147,15 +146,15 @@ fi
 
 # Step 6: CLI argument parsing test
 echo "[smoke] CLI test..."
-"$PYTHON" "$SCRIPT_DIR/cli.py" --help >/dev/null 2>&1
-"$PYTHON" "$SCRIPT_DIR/cli.py" status --help >/dev/null 2>&1
-"$PYTHON" "$SCRIPT_DIR/cli.py" set --help >/dev/null 2>&1
+"$PYTHON" -m whisper_dic.cli --help >/dev/null 2>&1
+"$PYTHON" -m whisper_dic.cli status --help >/dev/null 2>&1
+"$PYTHON" -m whisper_dic.cli set --help >/dev/null 2>&1
 echo "[smoke] CLI: passed"
 
 # Step 7: Text commands and cleaner coverage
 echo "[smoke] Text commands test..."
 "$PYTHON" -c "
-from cleaner import TextCleaner
+from whisper_dic.cleaner import TextCleaner
 
 c = TextCleaner(text_commands=True)
 
@@ -219,8 +218,7 @@ echo "[smoke] Config test..."
 "$PYTHON" -c "
 import os, tempfile, tomllib
 from pathlib import Path
-os.chdir('$SCRIPT_DIR')
-from config import load_config
+from whisper_dic.config import load_config
 
 # Default config loads without error
 config = load_config(Path('$SMOKE_CONFIG'))
@@ -253,11 +251,10 @@ fi
 # Step 9: Error path test — transcriber failure doesn't crash the app
 echo "[smoke] Error path test..."
 ERROR_OUT=$("$PYTHON" -c "
-import sys, os, time
-os.chdir('$SCRIPT_DIR')
+import sys, time
 from pathlib import Path
-from config import load_config
-from dictation import DictationApp
+from whisper_dic.config import load_config
+from whisper_dic.dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -304,11 +301,10 @@ fi
 # Step 10: Auto-send flow test
 echo "[smoke] Auto-send test..."
 SEND_OUT=$("$PYTHON" -c "
-import sys, os, time
-os.chdir('$SCRIPT_DIR')
+import sys, time
 from pathlib import Path
-from config import load_config
-from dictation import DictationApp
+from whisper_dic.config import load_config
+from whisper_dic.dictation import DictationApp
 
 config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
@@ -346,12 +342,11 @@ fi
 # Step 11: Provider switch test
 echo "[smoke] Provider switch test..."
 "$PYTHON" -c "
-import sys, os, shutil, tempfile
-os.chdir('$SCRIPT_DIR')
+import sys, shutil, tempfile
 from pathlib import Path
-from config import load_config, set_config_value
-from dictation import DictationApp
-from transcriber import create_transcriber, LocalWhisperTranscriber, GroqWhisperTranscriber
+from whisper_dic.config import load_config, set_config_value
+from whisper_dic.dictation import DictationApp
+from whisper_dic.transcriber import create_transcriber, LocalWhisperTranscriber, GroqWhisperTranscriber
 
 tmp = tempfile.NamedTemporaryFile(suffix='.toml', delete=False)
 tmp.close()
@@ -377,6 +372,7 @@ t3 = create_transcriber(config3.whisper)
 assert isinstance(t3, LocalWhisperTranscriber), f'Expected Local after switch back, got {type(t3)}'
 t3.close()
 
+import os
 os.unlink(tmp.name)
 print('[smoke] Provider switch: passed')
 " 2>&1

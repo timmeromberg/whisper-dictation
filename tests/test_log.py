@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from log import log
+from whisper_dic.log import log
 
 
 class TestLog:

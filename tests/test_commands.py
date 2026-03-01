@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from commands import _COMMANDS, _parse_shortcut, execute, list_commands, register_custom
-from compat import VK_MAP
+from whisper_dic.commands import _COMMANDS, _parse_shortcut, execute, list_commands, register_custom
+from whisper_dic.compat import VK_MAP
 
 
 @pytest.fixture(autouse=True)
@@ -48,29 +48,29 @@ class TestParseShortcut:
 
 class TestExecute:
     def test_known_command_returns_true(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         assert execute("undo") is True
 
     def test_unknown_returns_false(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         assert execute("fly to the moon") is False
 
     def test_alias_resolves(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         assert execute("peace") is True  # alias for "paste"
 
     def test_strips_punctuation(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         assert execute("Undo.") is True
 
     def test_case_insensitive(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         assert execute("COPY") is True
 
 
 class TestRegisterCustom:
     def test_registers_valid_command(self, monkeypatch) -> None:
-        monkeypatch.setattr("commands._post_key", lambda vk, flags=0: None)
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         register_custom({"zoom in": "cmd+="})
         assert execute("zoom in") is True
 

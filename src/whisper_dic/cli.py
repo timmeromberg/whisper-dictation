@@ -11,11 +11,20 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from config import AppConfig, _to_toml_literal, load_config, set_config_value
-from dictation import DictationApp
-from transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
+from .config import AppConfig, _to_toml_literal, load_config, set_config_value
+from .dictation import DictationApp
+from .transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
 _PID_FILE = Path("/tmp/whisper-dic.pid")
+
+
+def _default_config_path() -> Path:
+    """Return the default config path (~/.config/whisper-dic/config.toml)."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path.home() / ".config"
+    return base / "whisper-dic" / "config.toml"
 
 
 def _check_single_instance() -> bool:
@@ -45,17 +54,13 @@ def _cleanup_pid() -> None:
 
 def _load_config_from_path(config_path: Path) -> AppConfig:
     if not config_path.exists():
-        example = config_path.parent / "config.example.toml"
-        if example.exists():
-            import shutil
-            shutil.copy2(example, config_path)
-            config_path.chmod(0o600)
-            print(f"[setup] Created {config_path.name} from template. Edit it to set your preferences.")
-        else:
-            raise FileNotFoundError(
-                f"Config file not found: {config_path}\n"
-                f"Run: cp config.example.toml config.toml"
-            )
+        import shutil
+        from importlib.resources import files
+        example = files("whisper_dic").joinpath("config.example.toml")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(example), config_path)
+        config_path.chmod(0o600)
+        print(f"[setup] Created {config_path} from template. Edit it to set your preferences.")
 
     # Fix permissions if config is world-readable (it may contain API keys)
     mode = config_path.stat().st_mode & 0o777
@@ -67,8 +72,8 @@ def _load_config_from_path(config_path: Path) -> AppConfig:
 
 
 def _print_status(config_path: Path, config: AppConfig) -> None:
-    version_file = Path(__file__).with_name("VERSION")
-    version = version_file.read_text().strip() if version_file.exists() else "unknown"
+    from . import __version__
+    version = __version__
     print(f"[status] whisper-dic v{version}")
     print(f"[status] Config: {config_path}")
     print(f"[status] hotkey.key = {config.hotkey.key}")
@@ -259,7 +264,7 @@ def command_setup(config_path: Path) -> int:
         return 1
 
     try:
-        from menu import run_setup_menu
+        from .menu import run_setup_menu
     except Exception as exc:
         print(f"Failed to load setup menu: {exc}")
         return 1
@@ -306,7 +311,9 @@ def _rotate_log_if_needed() -> None:
 
 
 def _generate_plist() -> str:
-    script_path = Path(__file__).resolve().parent / "whisper-dic"
+    import shutil
+    script_path = shutil.which("whisper-dic") or "whisper-dic"
+    script_path = Path(script_path).resolve()
     return f"""\
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -416,7 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
     config_parent = argparse.ArgumentParser(add_help=False)
     config_parent.add_argument(
         "--config",
-        default=str(Path(__file__).with_name("config.toml")),
+        default=str(_default_config_path()),
         help="Path to config.toml",
     )
 
@@ -526,7 +533,7 @@ def main() -> int:
             print("[menubar] Menu bar UI is only available on macOS.")
             print("[menubar] Use 'whisper-dic run' for CLI mode.")
             return 1
-        from menubar import run_menubar
+        from .menubar import run_menubar
         return run_menubar(config_path)
     if command == "setup":
         return command_setup(config_path)
@@ -539,7 +546,7 @@ def main() -> int:
     if command == "devices":
         return command_devices(config_path)
     if command == "discover":
-        from audio_control import discover
+        from .audio_control import discover
         discover(config_path)
         return 0
     if command == "logs":
@@ -549,8 +556,8 @@ def main() -> int:
     if command == "uninstall":
         return command_uninstall()
     if command == "version":
-        version_file = Path(__file__).with_name("VERSION")
-        print(version_file.read_text().strip() if version_file.exists() else "unknown")
+        from . import __version__
+        print(__version__)
         return 0
 
     parser.print_help()

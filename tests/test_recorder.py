@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from recorder import Recorder, RecordingResult
+from whisper_dic.recorder import Recorder, RecordingResult
 
 
 class TestInitialState:

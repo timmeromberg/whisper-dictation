@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import compat
+import whisper_dic.compat as compat
 
 
 class TestExportsExist:

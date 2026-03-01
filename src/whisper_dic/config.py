@@ -5,14 +5,13 @@ from __future__ import annotations
 import re
 import threading
 import time
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-import tomllib
-
-from audio_control import AudioControlConfig
-from log import log
+from .audio_control import AudioControlConfig
+from .log import log
 
 LANG_NAMES = {
     "en": "English", "nl": "Dutch", "de": "German", "fr": "French",

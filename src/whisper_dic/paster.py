@@ -8,8 +8,8 @@ import time
 import pyperclip
 from pynput.keyboard import Controller
 
-from compat import PASTE_MODIFIER_KEY, TERMINAL_APP_IDS, VK_RETURN, frontmost_app_id, post_keycode
-from log import log
+from .compat import PASTE_MODIFIER_KEY, TERMINAL_APP_IDS, VK_RETURN, frontmost_app_id, post_keycode
+from .log import log
 
 
 class TextPaster:

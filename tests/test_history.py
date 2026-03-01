@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from history import TranscriptionHistory
+from whisper_dic.history import TranscriptionHistory
 
 
 class TestHistory:

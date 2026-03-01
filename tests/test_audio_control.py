@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from audio_control import (
+from whisper_dic.audio_control import (
     AdbDevice,
     AudioControlConfig,
     AudioController,
@@ -77,7 +77,7 @@ class TestControllerEnabled:
 class TestLocalMacDevice:
     def test_mute_calls_osascript(self) -> None:
         dev = LocalMacDevice()
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 stdout="output volume:50, input volume:50, alert volume:100, output muted:false\n"
             )
@@ -87,7 +87,7 @@ class TestLocalMacDevice:
     def test_unmute_skips_when_was_muted(self) -> None:
         dev = LocalMacDevice()
         dev._was_muted = True
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             dev.unmute()
             mock_run.assert_not_called()
 
@@ -95,7 +95,7 @@ class TestLocalMacDevice:
         dev = LocalMacDevice()
         dev._was_muted = False
         dev._saved_volume = 42
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             dev.unmute()
             assert mock_run.call_count == 2  # unmute + restore volume
 
@@ -103,37 +103,37 @@ class TestLocalMacDevice:
 class TestCustomDevice:
     def test_mute_runs_command(self) -> None:
         dev = CustomDevice(name="Test", mute_command="echo mute", unmute_command="echo unmute")
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             dev.mute()
             mock_run.assert_called_once()
 
     def test_unmute_runs_command(self) -> None:
         dev = CustomDevice(name="Test", mute_command="echo mute", unmute_command="echo unmute")
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             dev.unmute()
             mock_run.assert_called_once()
 
     def test_mute_failure_does_not_raise(self) -> None:
         dev = CustomDevice(name="Test", mute_command="nonexistent", unmute_command="echo ok")
-        with patch("audio_control.subprocess.run", side_effect=Exception("fail")):
+        with patch("whisper_dic.audio_control.subprocess.run", side_effect=Exception("fail")):
             dev.mute()  # should not raise
 
 
 class TestAdbDevices:
     def test_parses_device_list(self) -> None:
         fake_output = "List of devices attached\nabc123  device model:Pixel_7\n"
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(stdout=fake_output)
             devices = _adb_devices()
             assert len(devices) == 1
             assert devices[0] == ("abc123", "Pixel_7")
 
     def test_no_adb_returns_empty(self) -> None:
-        with patch("audio_control.subprocess.run", side_effect=Exception("no adb")):
+        with patch("whisper_dic.audio_control.subprocess.run", side_effect=Exception("no adb")):
             assert _adb_devices() == []
 
     def test_no_devices_returns_empty(self) -> None:
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(stdout="List of devices attached\n\n")
             assert _adb_devices() == []
 
@@ -143,7 +143,7 @@ class TestAdbDevices:
             "abc123  device model:Pixel_7\n"
             "def456  device model:Galaxy_S23\n"
         )
-        with patch("audio_control.subprocess.run") as mock_run:
+        with patch("whisper_dic.audio_control.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(stdout=fake_output)
             devices = _adb_devices()
             assert len(devices) == 2

@@ -9,8 +9,8 @@ from typing import Optional
 
 from pynput import keyboard
 
-from compat import MASK_CONTROL, MASK_SHIFT, modifier_is_pressed
-from log import log
+from .compat import MASK_CONTROL, MASK_SHIFT, modifier_is_pressed
+from .log import log
 
 KEY_MAP = {
     "left_option": keyboard.Key.alt_l,

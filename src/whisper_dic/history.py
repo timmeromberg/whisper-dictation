@@ -8,7 +8,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from log import log
+from .log import log
 
 _DEFAULT_PERSIST_PATH = Path.home() / ".config" / "whisper-dic" / "history.json"
 _SAVE_DEBOUNCE_SECONDS = 5.0

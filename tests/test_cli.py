@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cli import build_parser
+from whisper_dic.cli import build_parser
 
 
 class TestBuildParser:

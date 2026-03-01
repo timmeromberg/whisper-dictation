@@ -7,7 +7,7 @@ import subprocess
 import Quartz
 from pynput.keyboard import Key
 
-from log import log
+from ..log import log
 
 # ---------------------------------------------------------------------------
 # Modifier checking (from hotkey.py)

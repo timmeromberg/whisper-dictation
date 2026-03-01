@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from transcriber import (
+from whisper_dic.transcriber import (
     GroqWhisperTranscriber,
     LocalWhisperTranscriber,
     _describe_http_error,

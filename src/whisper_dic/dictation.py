@@ -14,19 +14,19 @@ from typing import Callable
 import numpy as np
 from pynput import keyboard
 
-import commands
-from audio_control import AudioController
-from cleaner import TextCleaner
-from compat import check_accessibility
-from compat import notify as _platform_notify
-from compat import play_wav_file as _platform_play
-from config import LANG_NAMES, AppConfig
-from history import TranscriptionHistory
-from hotkey import KEY_MAP, HotkeyListener
-from log import log
-from paster import TextPaster
-from recorder import Recorder, RecordingResult
-from transcriber import create_transcriber, create_transcriber_for
+from . import commands
+from .audio_control import AudioController
+from .cleaner import TextCleaner
+from .compat import check_accessibility
+from .compat import notify as _platform_notify
+from .compat import play_wav_file as _platform_play
+from .config import LANG_NAMES, AppConfig
+from .history import TranscriptionHistory
+from .hotkey import KEY_MAP, HotkeyListener
+from .log import log
+from .paster import TextPaster
+from .recorder import Recorder, RecordingResult
+from .transcriber import create_transcriber, create_transcriber_for
 
 if hasattr(keyboard.Key, "cmd_r"):
     KEY_MAP.setdefault("right_command", keyboard.Key.cmd_r)

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import time
 
-from compat import FLAG_ALT, FLAG_CMD, FLAG_CTRL, FLAG_SHIFT, VK_RETURN
-from compat import VK_MAP as _VK
-from compat import post_key as _post_key
-from log import log
+from .compat import FLAG_ALT, FLAG_CMD, FLAG_CTRL, FLAG_SHIFT, VK_RETURN
+from .compat import VK_MAP as _VK
+from .compat import post_key as _post_key
+from .log import log
 
 __all__ = ["VK_RETURN", "execute", "list_commands", "register_custom"]
 

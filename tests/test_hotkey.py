@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pynput import keyboard
 
-from hotkey import KEY_MAP, HotkeyListener
+from whisper_dic.hotkey import KEY_MAP, HotkeyListener
 
 
 class TestKeyMap:
