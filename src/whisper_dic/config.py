@@ -223,8 +223,8 @@ def _validate_config(config: AppConfig) -> AppConfig:
         log("config", f"sample_rate={config.recording.sample_rate} invalid, clamped to 16000")
         config.recording.sample_rate = 16000
 
-    if not 0.5 <= config.recording.preview_interval <= 30.0:
-        clamped = max(0.5, min(30.0, config.recording.preview_interval))
+    if not 0.1 <= config.recording.preview_interval <= 30.0:
+        clamped = max(0.1, min(30.0, config.recording.preview_interval))
         log("config", f"preview_interval={config.recording.preview_interval} out of range, clamped to {clamped}")
         config.recording.preview_interval = clamped
 
