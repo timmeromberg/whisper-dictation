@@ -88,7 +88,17 @@ whisper-dic setup
 | Permission | Why | What to add |
 |---|---|---|
 | **Microphone** | Audio recording | Your Terminal app (e.g. iTerm, Terminal) |
-| **Accessibility** | Global hotkey + paste simulation | Your Terminal app **and** `.venv/bin/python` |
+| **Accessibility** | Global hotkey + paste simulation | Your Terminal app **and** the Python binary whisper-dic runs with |
+
+To find which Python binary to add, run:
+
+```bash
+python3 -c "import sys; print(sys.executable)"
+```
+
+Add the printed path to Accessibility. If you installed via pipx, the binary is inside `~/.local/pipx/venvs/whisper-dic/bin/python`. If you installed from source, it's `.venv/bin/python` in the repo.
+
+**Important:** macOS will kill whisper-dic with a trace trap (SIGTRAP) if the Python binary doesn't have Accessibility permission. Make sure you're running whisper-dic with the same Python you granted permission to.
 
 If permissions are missing, whisper-dic will show a notification telling you which one to fix.
 
