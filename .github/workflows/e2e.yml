@@ -44,7 +44,7 @@ jobs:
       - name: Install
         run: pip install -e .
       - name: Install build tools
-        run: choco install cmake git -y
+        run: choco install cmake git ffmpeg -y
       - name: Run E2E
         shell: bash
         run: bash scripts/e2e-test.sh
