@@ -82,6 +82,9 @@ class DictationApp:
         self._threads_lock = threading.Lock()
         self._pipeline_threads: set[threading.Thread] = set()
 
+        self._start_done = threading.Event()
+        self._start_done.set()  # no pending start
+
         self._preview_stop = threading.Event()
         self._preview_thread: threading.Thread | None = None
         self._preview_transcriber: WhisperTranscriber | None = None
@@ -291,27 +294,32 @@ class DictationApp:
         return True
 
     def _on_hold_start(self) -> None:
-        if self.stopped:
-            return
-
+        self._start_done.clear()
         try:
-            started = self.recorder.start()
-        except Exception as exc:
-            log("recording", f"Failed to start stream: {exc}")
-            self._play_error_beep()
-            self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
-            self._emit_state("idle")
-            return
+            if self.stopped:
+                return
 
-        if started:
-            self.audio_controller.mute()
-            log("recording", "Started.")
-            self._emit_state("recording")
-            self.play_beep(self.config.audio_feedback.start_frequency)
-            self._start_preview()
+            try:
+                started = self.recorder.start()
+            except Exception as exc:
+                log("recording", f"Failed to start stream: {exc}")
+                self._play_error_beep()
+                self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
+                self._emit_state("idle")
+                return
+
+            if started:
+                self.audio_controller.mute()
+                log("recording", "Started.")
+                self._emit_state("recording")
+                self.play_beep(self.config.audio_feedback.start_frequency)
+                self._start_preview()
+        finally:
+            self._start_done.set()
 
     def _on_cancel(self) -> None:
         """Cancel active recording — stop, discard audio, return to idle."""
+        self._start_done.wait(timeout=2.0)
         if self.stopped:
             return
         log("recording", "Cancelled by Escape.")
@@ -322,6 +330,9 @@ class DictationApp:
         self._emit_state("idle")
 
     def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
+        # Wait for _on_hold_start to finish — prevents race on quick press/release
+        self._start_done.wait(timeout=2.0)
+
         if self.stopped:
             return
 
