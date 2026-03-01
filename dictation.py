@@ -159,36 +159,47 @@ class DictationApp:
         return f"Transcription failed: {str(exc)[:100]}"
 
     def _play_error_beep(self) -> None:
-        """Low descending double-buzz to signal an error."""
+        """Low descending double-buzz to signal an error (non-blocking)."""
         feedback = self.config.audio_feedback
         if not feedback.enabled:
             return
+        threading.Thread(
+            target=self._generate_error_beep,
+            args=(feedback.volume,),
+            daemon=True,
+            name="error-beep",
+        ).start()
 
+    def _generate_error_beep(self, volume: float) -> None:
         sample_rate = 44100
         duration = 0.15
         sample_count = int(sample_rate * duration)
         timeline = np.linspace(0, duration, sample_count, endpoint=False)
-        # Descending buzz: 400Hz -> 200Hz
         freqs = np.linspace(400, 200, sample_count)
         tone = np.sin(2.0 * np.pi * freqs * timeline).astype(np.float32)
-        tone *= feedback.volume
-        # Two buzzes with a gap
+        tone *= volume
         gap = np.zeros(int(sample_rate * 0.08), dtype=np.float32)
         signal = np.concatenate([tone, gap, tone])
-
         self._play_wav(signal, sample_rate)
 
     def play_beep(self, frequency: float) -> None:
+        """Play a short tone. Non-blocking — fires in a background thread."""
         feedback = self.config.audio_feedback
         if not feedback.enabled:
             return
+        threading.Thread(
+            target=self._generate_and_play_beep,
+            args=(frequency, feedback.volume, feedback.duration_seconds),
+            daemon=True,
+            name="beep",
+        ).start()
 
+    def _generate_and_play_beep(self, frequency: float, volume: float, duration: float) -> None:
         sample_rate = 44100
-        sample_count = max(1, int(sample_rate * feedback.duration_seconds))
-        timeline = np.linspace(0, feedback.duration_seconds, sample_count, endpoint=False)
+        sample_count = max(1, int(sample_rate * duration))
+        timeline = np.linspace(0, duration, sample_count, endpoint=False)
         tone = np.sin(2.0 * np.pi * frequency * timeline).astype(np.float32)
-        tone *= feedback.volume
-
+        tone *= volume
         self._play_wav(tone, sample_rate)
 
     @staticmethod
@@ -267,11 +278,6 @@ class DictationApp:
         if self.stopped:
             return
 
-        # Play start beep before recording
-        self.play_beep(self.config.audio_feedback.start_frequency)
-        # Brief delay for CoreAudio to fully release after afplay
-        time.sleep(0.05)
-
         try:
             started = self.recorder.start()
         except Exception as exc:
@@ -282,11 +288,10 @@ class DictationApp:
             return
 
         if started:
-            # Mute after recording starts — avoids CoreAudio interference
-            # during PortAudio stream creation
             self.audio_controller.mute()
             log("recording", "Started.")
             self._emit_state("recording")
+            self.play_beep(self.config.audio_feedback.start_frequency)
 
     def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
         if self.stopped:
