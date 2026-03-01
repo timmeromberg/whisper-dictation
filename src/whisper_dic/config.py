@@ -80,6 +80,17 @@ class AudioFeedbackConfig:
 
 
 @dataclass
+class RewriteConfig:
+    enabled: bool = False
+    model: str = "llama-3.3-70b-versatile"
+    prompt: str = (
+        "You are a dictation assistant. Clean up the following transcription: "
+        "fix grammar, punctuation, and capitalization. Keep the original meaning "
+        "and words as much as possible. Return only the corrected text, nothing else."
+    )
+
+
+@dataclass
 class AppConfig:
     hotkey: HotkeyConfig
     recording: RecordingConfig
@@ -88,6 +99,7 @@ class AppConfig:
     whisper: WhisperConfig
     audio_feedback: AudioFeedbackConfig
     audio_control: AudioControlConfig = field(default_factory=AudioControlConfig)
+    rewrite: RewriteConfig = field(default_factory=RewriteConfig)
     custom_commands: dict[str, str] = field(default_factory=dict)
 
 
@@ -113,6 +125,7 @@ def load_config(path: Path) -> AppConfig:
     whisper_groq_data = _section(data, "whisper.groq")
     feedback_data = _section(data, "audio_feedback")
     audio_control_data = _section(data, "audio_control")
+    rewrite_data = _section(data, "rewrite")
     custom_commands_data = _section(data, "custom_commands")
 
     provider = str(whisper_data.get("provider", "local")).strip().lower()
@@ -182,6 +195,11 @@ def load_config(path: Path) -> AppConfig:
             enabled=bool(audio_control_data.get("enabled", False)),
             mute_local=bool(audio_control_data.get("mute_local", True)),
             devices=list(audio_control_data.get("devices", [])),
+        ),
+        rewrite=RewriteConfig(
+            enabled=bool(rewrite_data.get("enabled", False)),
+            model=str(rewrite_data.get("model", "llama-3.3-70b-versatile")),
+            prompt=str(rewrite_data.get("prompt", RewriteConfig.prompt)),
         ),
         custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
     )

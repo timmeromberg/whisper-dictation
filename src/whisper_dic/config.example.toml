@@ -77,6 +77,14 @@ mute_local = true
 # "zoom out" = "cmd+-"
 # "refresh" = "cmd+r"
 
+[rewrite]
+# AI-powered rewriting of transcriptions using Groq LLM
+# Requires a Groq API key (reuses whisper.groq.api_key)
+enabled = false
+model = "llama-3.3-70b-versatile"
+# Customize the rewriting behavior by changing this prompt
+prompt = "You are a dictation assistant. Clean up the following transcription: fix grammar, punctuation, and capitalization. Keep the original meaning and words as much as possible. Return only the corrected text, nothing else."
+
 [audio_feedback]
 enabled = true
 start_frequency = 880    # Hz — beep when recording starts

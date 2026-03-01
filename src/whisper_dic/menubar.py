@@ -49,7 +49,7 @@ class DictationMenuBar(rumps.App):
         self._hotkey_menu = self._build_hotkey_menu()
         self._volume_menu, self._volume_slider = self._build_volume_menu()
         self._mic_menu = self._build_microphone_menu()
-        self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item = (
+        self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item, self._rewrite_item = (
             self._build_toggle_items()
         )
         self._help_menu = self._build_help_menu()
@@ -68,6 +68,7 @@ class DictationMenuBar(rumps.App):
             self._autosend_item,
             self._audioctrl_item,
             self._failover_item,
+            self._rewrite_item,
             None,
             self._history_menu,
             self._build_recording_menu(),
@@ -148,7 +149,9 @@ class DictationMenuBar(rumps.App):
             pass
         return menu
 
-    def _build_toggle_items(self) -> tuple[rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem]:
+    def _build_toggle_items(
+        self,
+    ) -> tuple[rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem]:
         tc_on = self.config.text_commands.enabled
         textcmds = rumps.MenuItem(f"Text Commands: {'on' if tc_on else 'off'}", callback=self._toggle_text_commands)
 
@@ -161,7 +164,10 @@ class DictationMenuBar(rumps.App):
         fo_on = self.config.whisper.failover
         failover = rumps.MenuItem(f"Failover: {'on' if fo_on else 'off'}", callback=self._toggle_failover)
 
-        return textcmds, autosend, audioctrl, failover
+        rw_on = self.config.rewrite.enabled
+        rewrite = rumps.MenuItem(f"AI Rewrite: {'on' if rw_on else 'off'}", callback=self._toggle_rewrite)
+
+        return textcmds, autosend, audioctrl, failover, rewrite
 
     def _build_help_menu(self) -> rumps.MenuItem:
         key_display = self.config.hotkey.key.replace("_", " ")
@@ -480,6 +486,37 @@ class DictationMenuBar(rumps.App):
         self._failover_item.title = f"Failover: {'on' if new_val else 'off'}"
         print(f"[menubar] Failover: {'on' if new_val else 'off'}")
 
+    def _toggle_rewrite(self, _sender: Any) -> None:
+        from .rewriter import Rewriter
+
+        current = self.config.rewrite.enabled
+        new_val = not current
+        self._set_config("rewrite.enabled", "true" if new_val else "false")
+        self.config.rewrite.enabled = new_val
+        self._app.config.rewrite.enabled = new_val
+
+        if new_val:
+            api_key = self.config.whisper.groq.api_key.strip()
+            if not api_key:
+                rumps.notification("whisper-dic", "AI Rewrite",
+                                   "Groq API key required. Set it first.")
+                self.config.rewrite.enabled = False
+                self._app.config.rewrite.enabled = False
+                self._set_config("rewrite.enabled", "false")
+                return
+            self._app._rewriter = Rewriter(
+                api_key=api_key,
+                model=self.config.rewrite.model,
+                prompt=self.config.rewrite.prompt,
+            )
+        else:
+            if self._app._rewriter is not None:
+                self._app._rewriter.close()
+                self._app._rewriter = None
+
+        self._rewrite_item.title = f"AI Rewrite: {'on' if new_val else 'off'}"
+        print(f"[menubar] AI Rewrite: {'on' if new_val else 'off'}")
+
     def _build_recording_menu(self) -> rumps.MenuItem:
         menu = rumps.MenuItem("Recording")
         self._min_dur_item = rumps.MenuItem(
@@ -665,6 +702,25 @@ class DictationMenuBar(rumps.App):
         if new_config.whisper.failover != old.whisper.failover:
             self._app.config.whisper.failover = new_config.whisper.failover
             self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
+
+        if new_config.rewrite.enabled != old.rewrite.enabled:
+            self._app.config.rewrite = new_config.rewrite
+            if new_config.rewrite.enabled:
+                from .rewriter import Rewriter
+                api_key = new_config.whisper.groq.api_key.strip()
+                if api_key:
+                    if self._app._rewriter is not None:
+                        self._app._rewriter.close()
+                    self._app._rewriter = Rewriter(
+                        api_key=api_key,
+                        model=new_config.rewrite.model,
+                        prompt=new_config.rewrite.prompt,
+                    )
+            else:
+                if self._app._rewriter is not None:
+                    self._app._rewriter.close()
+                    self._app._rewriter = None
+            self._rewrite_item.title = f"AI Rewrite: {'on' if new_config.rewrite.enabled else 'off'}"
 
         if new_config.recording.device != old.recording.device:
             self._app.recorder.device = new_config.recording.device

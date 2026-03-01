@@ -98,6 +98,10 @@ def _print_status(config_path: Path, config: AppConfig) -> None:
         f"url={config.whisper.groq.url}, model={config.whisper.groq.model}, "
         f"api_key={'set' if config.whisper.groq.api_key.strip() else 'missing'}"
     )
+    print(
+        "[status] rewrite = "
+        f"enabled={config.rewrite.enabled}, model={config.rewrite.model}"
+    )
 
 
 def _check_endpoint_reachability(config: AppConfig) -> tuple[bool, bool, bool]:

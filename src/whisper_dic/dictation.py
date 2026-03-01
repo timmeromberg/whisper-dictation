@@ -26,6 +26,7 @@ from .hotkey import KEY_MAP, HotkeyListener
 from .log import log
 from .paster import TextPaster
 from .recorder import Recorder, RecordingResult
+from .rewriter import Rewriter
 from .transcriber import create_transcriber, create_transcriber_for
 
 if hasattr(keyboard.Key, "cmd_r"):
@@ -46,6 +47,14 @@ class DictationApp:
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
         self.paster = TextPaster()
         self.audio_controller = AudioController(config.audio_control)
+
+        self._rewriter: Rewriter | None = None
+        if config.rewrite.enabled and config.whisper.groq.api_key.strip():
+            self._rewriter = Rewriter(
+                api_key=config.whisper.groq.api_key,
+                model=config.rewrite.model,
+                prompt=config.rewrite.prompt,
+            )
 
         self.history = TranscriptionHistory()
 
@@ -377,6 +386,13 @@ class DictationApp:
                     log("pipeline", f"Cleanup failed, using raw transcript: {exc}")
                     cleaned = transcript
 
+                if self._rewriter is not None and not command_mode:
+                    try:
+                        log("pipeline", "Rewriting with AI...")
+                        cleaned = self._rewriter.rewrite(cleaned)
+                    except Exception as exc:
+                        log("pipeline", f"Rewrite failed, using cleaned text: {exc}")
+
                 cleaned = cleaned.strip()
                 if not cleaned:
                     log("pipeline", f"Empty after cleanup (original: '{transcript}')")
@@ -450,6 +466,8 @@ class DictationApp:
 
         self.transcriber.close()
         self.cleaner.close()
+        if self._rewriter is not None:
+            self._rewriter.close()
         log("shutdown", "Complete.")
 
     def _atexit_cleanup(self) -> None:
