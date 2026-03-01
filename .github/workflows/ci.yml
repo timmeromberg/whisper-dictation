@@ -8,9 +8,10 @@ on:
 
 jobs:
   lint-and-test:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [macos-latest, windows-latest]
         python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +30,7 @@ jobs:
         run: ruff check .
 
       - name: Type check
+        if: runner.os == 'macOS'
         run: mypy *.py
 
       - name: Test

@@ -5,6 +5,21 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-01
+
+### Added
+- Windows support (MVP): hold-to-dictate, voice commands, clipboard paste all work on Windows
+- `compat/` platform abstraction package with macOS and Windows backends
+- `whisper-dic.bat` entry point for Windows
+- Windows CI via GitHub Actions (macos-latest + windows-latest matrix)
+
+### Changed
+- All platform-specific code (Quartz, osascript, afplay, launchctl) moved to `compat/_macos.py`
+- Key simulation uses Win32 `SendInput` on Windows, CGEvent on macOS
+- Modifier detection uses `GetAsyncKeyState` on Windows, Quartz on macOS
+- Paste shortcut: Ctrl+V on Windows, Cmd+V on macOS
+- `requirements.txt` uses platform markers for macOS-only dependencies
+
 ## [0.4.0] - 2026-03-01
 
 ### Added

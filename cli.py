@@ -251,11 +251,11 @@ def command_setup(config_path: Path) -> int:
 
 if sys.platform == "darwin":
     _PLIST_LABEL = "com.whisper.dictation"
-    _PLIST_PATH: Path | None = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
+    _PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "com.whisper.dictation.plist"
     _LOG_PATH = str(Path.home() / "Library" / "Logs" / "whisper-dictation.log")
 else:
-    _PLIST_LABEL = None
-    _PLIST_PATH = None
+    _PLIST_LABEL = None  # type: ignore[assignment]
+    _PLIST_PATH = None  # type: ignore[assignment]
     _log_dir = Path.home() / "AppData" / "Local" / "whisper-dictation"
     _log_dir.mkdir(parents=True, exist_ok=True)
     _LOG_PATH = str(_log_dir / "whisper-dictation.log")
