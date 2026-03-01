@@ -1,5 +1,10 @@
 # whisper-dic
 
+[![CI](https://github.com/timmeromberg/whisper-dic/actions/workflows/ci.yml/badge.svg)](https://github.com/timmeromberg/whisper-dic/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/whisper-dic)](https://pypi.org/project/whisper-dic/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/timmeromberg/whisper-dic/blob/main/LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+
 System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release — your words appear wherever the cursor is. Uses Whisper for transcription via local server or Groq cloud API.
 
 ## Features
