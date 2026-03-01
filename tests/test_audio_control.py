@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from audio_control import (
     AdbDevice,
@@ -31,6 +34,7 @@ class TestControllerDisabled:
 
 
 class TestControllerEnabled:
+    @pytest.mark.skipif(sys.platform != "darwin", reason="LocalMacDevice only on macOS")
     def test_creates_local_device(self) -> None:
         config = AudioControlConfig(enabled=True, mute_local=True)
         ctrl = AudioController(config)
@@ -69,6 +73,7 @@ class TestControllerEnabled:
         assert len(ctrl._devices) == 0
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="LocalMacDevice uses osascript")
 class TestLocalMacDevice:
     def test_mute_calls_osascript(self) -> None:
         dev = LocalMacDevice()

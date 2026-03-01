@@ -29,7 +29,7 @@ class TestLoadConfig:
         p.write_text("")
         config = load_config(p)
         # All defaults
-        assert config.hotkey.key == "right_option"
+        assert config.hotkey.key == "left_option"
         assert config.whisper.provider == "local"
 
     def test_custom_values(self, tmp_path: Path) -> None:
