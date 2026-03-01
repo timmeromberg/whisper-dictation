@@ -39,6 +39,7 @@ class HotkeyListener:
         on_hold_start: Callable[[], None],
         on_hold_end: Callable[[bool, bool], None],
         key_name: str = "right_option",
+        on_cancel: Callable[[], None] | None = None,
     ) -> None:
         if key_name not in KEY_MAP:
             raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(KEY_MAP)}")
@@ -47,6 +48,7 @@ class HotkeyListener:
         self._key_name = key_name
         self._on_hold_start = on_hold_start
         self._on_hold_end = on_hold_end
+        self._on_cancel = on_cancel
 
         self._lock = threading.Lock()
         self._pressed = False
@@ -85,6 +87,18 @@ class HotkeyListener:
         )
 
     def _handle_press(self, key: keyboard.KeyCode | keyboard.Key | None) -> None:
+        if key == keyboard.Key.esc:
+            should_cancel = False
+            with self._lock:
+                if self._pressed:
+                    self._pressed = False
+                    should_cancel = True
+            if should_cancel and self._on_cancel is not None:
+                threading.Thread(
+                    target=self._on_cancel, daemon=True, name="hotkey-cancel",
+                ).start()
+            return
+
         if key in _CTRL_KEYS:
             with self._lock:
                 self._ctrl_held = True
@@ -217,6 +231,7 @@ class NSEventHotkeyListener:
         on_hold_start: Callable[[], None],
         on_hold_end: Callable[[bool, bool], None],
         key_name: str = "right_option",
+        on_cancel: Callable[[], None] | None = None,
     ) -> None:
         if key_name not in _NS_KEYCODE_MAP:
             raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(_NS_KEYCODE_MAP)}")
@@ -226,6 +241,7 @@ class NSEventHotkeyListener:
         self._key_name = key_name
         self._on_hold_start = on_hold_start
         self._on_hold_end = on_hold_end
+        self._on_cancel = on_cancel
 
         self._lock = threading.Lock()
         self._pressed = False
@@ -252,6 +268,28 @@ class NSEventHotkeyListener:
             or modifier_is_pressed(mask)
             or (now - last_seen) < _MODIFIER_WINDOW_SECONDS
         )
+
+    def _handle_event(self, event: object) -> None:
+        """Dispatch NSEvent by type."""
+        event_type: int = event.type()  # type: ignore[attr-defined]
+        if event_type == 12:  # NSEventTypeFlagsChanged
+            self._handle_flags_changed(event)
+        elif event_type == 10:  # NSEventTypeKeyDown
+            self._handle_key_down(event)
+
+    def _handle_key_down(self, event: object) -> None:
+        """Cancel recording if Escape is pressed while hotkey is held."""
+        if event.keyCode() != 53:  # type: ignore[attr-defined]
+            return
+        should_cancel = False
+        with self._lock:
+            if self._pressed:
+                self._pressed = False
+                should_cancel = True
+        if should_cancel and self._on_cancel is not None:
+            threading.Thread(
+                target=self._on_cancel, daemon=True, name="hotkey-cancel",
+            ).start()
 
     def _handle_flags_changed(self, event: object) -> None:
         """Process a modifier key state change."""
@@ -314,23 +352,24 @@ class NSEventHotkeyListener:
 
     def _handle_local_event(self, event: object) -> object:
         """Local monitor wrapper — must return event to pass it along."""
-        self._handle_flags_changed(event)
+        self._handle_event(event)
         return event
 
     def start(self) -> None:
         from AppKit import NSEvent  # type: ignore[import-untyped]
 
-        ns_flags_changed_mask = 1 << 12  # NSEventMaskFlagsChanged
+        # NSEventMaskFlagsChanged | NSEventMaskKeyDown
+        event_mask = (1 << 12) | (1 << 0)
 
         with self._lock:
             if self._global_monitor is not None:
                 return
 
             self._global_monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-                ns_flags_changed_mask, self._handle_flags_changed,
+                event_mask, self._handle_event,
             )
             self._local_monitor = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
-                ns_flags_changed_mask, self._handle_local_event,
+                event_mask, self._handle_local_event,
             )
 
     def stop(self) -> None:

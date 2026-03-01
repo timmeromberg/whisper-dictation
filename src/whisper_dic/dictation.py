@@ -66,6 +66,7 @@ class DictationApp:
             on_hold_start=self._on_hold_start,
             on_hold_end=self._on_hold_end,
             key_name=config.hotkey.key,
+            on_cancel=self._on_cancel,
         )
 
         self._languages = list(config.whisper.languages)
@@ -308,6 +309,17 @@ class DictationApp:
             self._emit_state("recording")
             self.play_beep(self.config.audio_feedback.start_frequency)
             self._start_preview()
+
+    def _on_cancel(self) -> None:
+        """Cancel active recording — stop, discard audio, return to idle."""
+        if self.stopped:
+            return
+        log("recording", "Cancelled by Escape.")
+        self._stop_preview()
+        self.recorder.stop()  # discard the result
+        self.audio_controller.unmute()
+        self.play_beep(440.0)  # low tone = cancelled
+        self._emit_state("idle")
 
     def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
         if self.stopped:
