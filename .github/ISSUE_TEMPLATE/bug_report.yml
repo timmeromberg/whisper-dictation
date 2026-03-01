@@ -1,0 +1,84 @@
+name: Bug Report
+description: Report something that isn't working correctly
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      placeholder: e.g., macOS 14.5, Windows 11 23H2
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      placeholder: e.g., 3.12.4
+    validations:
+      required: true
+
+  - type: input
+    id: whisper-dic-version
+    attributes:
+      label: whisper-dic Version
+      description: Run `whisper-dic version` to find this.
+      placeholder: e.g., 0.9.7
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Whisper Provider
+      options:
+        - groq (cloud)
+        - local (whisper.cpp)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Running Mode
+      options:
+        - Menu bar (whisper-dic menubar)
+        - CLI (whisper-dic run)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly. What did you expect vs what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Start whisper-dic in menubar mode
+        2. Hold left option for 0.5 seconds
+        3. Release
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: "Run `whisper-dic logs -n 50` and paste the output. Redact any API keys."
+      render: shell
