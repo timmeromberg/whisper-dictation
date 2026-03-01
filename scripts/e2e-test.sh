@@ -611,11 +611,11 @@ echo "--- Step 13: Transcription ---"
 sleep 2
 
 if [ -f "$TEST_AUDIO" ]; then
+    CURL_EXIT=0
     RESPONSE=$(curl -s --max-time 30 -X POST http://localhost:2022/v1/audio/transcriptions \
         -F "file=@$TEST_AUDIO;type=audio/flac" \
         -F "model=tiny" \
-        -F "language=en" 2>&1)
-    CURL_EXIT=$?
+        -F "language=en" 2>&1) || CURL_EXIT=$?
 
     if [ "$CURL_EXIT" -ne 0 ] || [ -z "$RESPONSE" ]; then
         fail "Transcription: curl failed (exit=$CURL_EXIT)"
