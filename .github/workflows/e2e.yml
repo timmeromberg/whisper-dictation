@@ -64,8 +64,8 @@ jobs:
           key: e2e-windows-whisper-data-v1
       - name: Install
         run: pip install -e .
-      - name: Install build tools
-        run: choco install cmake git ffmpeg -y
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y
       - name: Run E2E
         shell: bash
         env:
