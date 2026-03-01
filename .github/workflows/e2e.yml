@@ -49,4 +49,6 @@ jobs:
         run: choco install cmake git ffmpeg -y
       - name: Run E2E
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/e2e-test.sh

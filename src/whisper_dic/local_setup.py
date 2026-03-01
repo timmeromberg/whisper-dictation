@@ -161,9 +161,13 @@ def _acquire_server_build(data_dir: Path) -> Path:
 
 def _resolve_latest_release_asset(asset_name: str) -> str:
     """Find download URL for a GitHub release asset."""
+    headers: dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     response = httpx.get(
         "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest",
-        headers={"Accept": "application/vnd.github.v3+json"},
+        headers=headers,
         follow_redirects=True,
         timeout=30.0,
     )
