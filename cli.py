@@ -185,6 +185,35 @@ def command_set(config_path: Path, key: str, value: str) -> int:
     return 0
 
 
+def command_devices(config_path: Path) -> int:
+    import sounddevice as sd
+
+    config = _load_config_from_path(config_path)
+    current = config.recording.device
+    default_idx = sd.default.device[0]
+
+    print("\nAvailable microphones:\n")
+    for dev in sd.query_devices():
+        if dev["max_input_channels"] > 0:  # type: ignore[index]
+            name = dev["name"]  # type: ignore[index]
+            idx = dev["index"]  # type: ignore[index]
+            ch = dev["max_input_channels"]  # type: ignore[index]
+            markers = []
+            if idx == default_idx:
+                markers.append("system default")
+            if name == current:
+                markers.append("active")
+            suffix = f"  ({', '.join(markers)})" if markers else ""
+            print(f"  {name} [{ch}ch]{suffix}")
+
+    if current:
+        print(f"\nConfigured: {current}")
+    else:
+        print("\nConfigured: System Default")
+    print("Change via: whisper-dic set recording.device \"Device Name\"")
+    return 0
+
+
 def command_run(config_path: Path) -> int:
     if not _check_single_instance():
         return 1
@@ -450,6 +479,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run with menu bar icon",
     )
     subparsers.add_parser(
+        "devices",
+        parents=[config_parent],
+        help="List available microphones",
+    )
+    subparsers.add_parser(
         "discover",
         parents=[config_parent],
         help="Discover audio devices on the local network",
@@ -502,6 +536,8 @@ def main() -> int:
         return command_provider(config_path, args.provider)
     if command == "set":
         return command_set(config_path, args.key, args.value)
+    if command == "devices":
+        return command_devices(config_path)
     if command == "discover":
         from audio_control import discover
         discover(config_path)
