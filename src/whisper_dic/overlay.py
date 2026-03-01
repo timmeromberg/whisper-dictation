@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 from AppKit import (
+    NSAnimationContext,
     NSAttributedString,
     NSBezierPath,
     NSColor,
@@ -16,6 +18,7 @@ from AppKit import (
     NSForegroundColorAttributeName,
     NSMakeRect,
     NSMakeSize,
+    NSRightTextAlignment,
     NSScreen,
     NSTextField,
     NSView,
@@ -114,28 +117,44 @@ class PreviewOverlay:
     MAX_WIDTH = 500
     MAX_HEIGHT = 300
     PADDING = 10
-    STATUS_HEIGHT = 18  # height reserved for status badges
-    STATUS_GAP = 4  # gap between status line and text
-    CURSOR_OFFSET_Y = 20  # pixels above the cursor
+    STATUS_HEIGHT = 18
+    STATUS_GAP = 4
+    TIME_HEIGHT = 14
+    CURSOR_OFFSET_Y = 20
     FONT_SIZE = 13.0
     STATUS_FONT_SIZE = 10.0
-    _TRACK_INTERVAL = 0.08  # seconds between cursor position updates
+    TIME_FONT_SIZE = 10.0
+    FADE_IN_DURATION = 0.15
+    FADE_OUT_DURATION = 0.20
+    _TRACK_INTERVAL = 0.08
 
     def __init__(self) -> None:
         self._window: NSWindow | None = None
         self._label: NSTextField | None = None
         self._status_label: NSTextField | None = None
+        self._time_label: NSTextField | None = None
         self._tracking_stop = threading.Event()
         self._tracking_thread: threading.Thread | None = None
         self._visible = False
         self._badges: list[str] = []
+        self._recording_start: float = 0.0
+        self._last_text_time: float = 0.0
+        self._progress_phase = 0
 
     def set_badges(self, badges: list[str]) -> None:
-        """Set status badges (e.g. ["AI Rewrite", "Auto-Send"]). Thread-safe."""
+        """Set status badges (e.g. ["EN", "AI Rewrite", "Auto-Send"]). Thread-safe."""
         self._badges = badges
+
+    def set_recording_start(self, t: float) -> None:
+        """Set the recording start timestamp for elapsed time display."""
+        self._recording_start = t
+        self._last_text_time = t
+        self._progress_phase = 0
 
     def show(self, text: str) -> None:
         """Show or update preview text near cursor. Safe to call from any thread."""
+        self._last_text_time = time.monotonic()
+        self._progress_phase = 0
         callAfter(self._show, text)
 
     def hide(self) -> None:
@@ -161,7 +180,7 @@ class PreviewOverlay:
         window.setBackgroundColor_(
             NSColor.colorWithCalibratedRed_green_blue_alpha_(0.08, 0.08, 0.10, 0.85)
         )
-        window.setAlphaValue_(0.95)
+        window.setAlphaValue_(0.0)  # start invisible for fade-in
         window.setHasShadow_(True)
 
         content = window.contentView()
@@ -194,13 +213,31 @@ class PreviewOverlay:
         label.setTextColor_(NSColor.whiteColor())
         label.setFont_(NSFont.systemFontOfSize_(self.FONT_SIZE))
         label.setStringValue_("")
-        label.setMaximumNumberOfLines_(0)  # unlimited lines
+        label.setMaximumNumberOfLines_(0)
         label.setPreferredMaxLayoutWidth_(self.MAX_WIDTH - 2 * self.PADDING)
         content.addSubview_(label)
+
+        # Elapsed time + progress indicator (top-right corner)
+        time_label = NSTextField.alloc().initWithFrame_(
+            NSMakeRect(self.PADDING, 0, self.MAX_WIDTH - 2 * self.PADDING, self.TIME_HEIGHT)
+        )
+        time_label.setEditable_(False)
+        time_label.setSelectable_(False)
+        time_label.setBezeled_(False)
+        time_label.setDrawsBackground_(False)
+        time_label.setTextColor_(
+            NSColor.colorWithCalibratedWhite_alpha_(0.5, 1.0)
+        )
+        time_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(self.TIME_FONT_SIZE, 0.0))
+        time_label.setAlignment_(NSRightTextAlignment)
+        time_label.setStringValue_("")
+        time_label.setMaximumNumberOfLines_(1)
+        content.addSubview_(time_label)
 
         self._window = window
         self._label = label
         self._status_label = status_label
+        self._time_label = time_label
 
     def _resize_to_fit(self) -> None:
         """Resize window to fit label content. MUST be called on main thread."""
@@ -210,9 +247,9 @@ class PreviewOverlay:
         max_label_w = self.MAX_WIDTH - 2 * self.PADDING
         has_status = self._badges and self._status_label is not None
         status_total = (self.STATUS_HEIGHT + self.STATUS_GAP) if has_status else 0
-        max_text_h = self.MAX_HEIGHT - 2 * self.PADDING - status_total
+        time_total = self.TIME_HEIGHT + 2  # small gap above time
+        max_text_h = self.MAX_HEIGHT - 2 * self.PADDING - status_total - time_total
 
-        # Calculate text size
         ideal = self._label.cell().cellSizeForBounds_(
             NSMakeRect(0, 0, max_label_w, max_text_h)
         )
@@ -220,9 +257,9 @@ class PreviewOverlay:
         label_h = min(ideal.height, max_text_h)
 
         win_w = label_w + 2 * self.PADDING
-        win_h = label_h + 2 * self.PADDING + status_total
+        win_h = label_h + 2 * self.PADDING + status_total + time_total
 
-        # Position status at bottom, text above it
+        # Position status at bottom, text above, time at top
         if has_status and self._status_label is not None:
             self._status_label.setFrame_(
                 NSMakeRect(self.PADDING, self.PADDING, label_w, self.STATUS_HEIGHT)
@@ -235,6 +272,13 @@ class PreviewOverlay:
             label_y = self.PADDING
 
         self._label.setFrame_(NSMakeRect(self.PADDING, label_y, label_w, label_h))
+
+        if self._time_label is not None:
+            time_y = win_h - self.PADDING - self.TIME_HEIGHT
+            self._time_label.setFrame_(
+                NSMakeRect(self.PADDING, time_y, label_w, self.TIME_HEIGHT)
+            )
+
         frame = self._window.frame()
         frame.size = NSMakeSize(win_w, win_h)
         self._window.setFrame_display_(frame, True)
@@ -257,25 +301,41 @@ class PreviewOverlay:
         w = win_frame.size.width
         h = win_frame.size.height
 
-        # Center horizontally on cursor, place above cursor
         x = mouse.x - w / 2
         y = mouse.y + self.CURSOR_OFFSET_Y
 
-        # If window would go above visible area, place below cursor instead
         if y + h > vy + vh:
             y = mouse.y - h - self.CURSOR_OFFSET_Y
 
-        # Clamp to visible screen bounds
         x = max(vx, min(x, vx + vw - w))
         y = max(vy, min(y, vy + vh - h))
 
         self._window.setFrameOrigin_((x, y))
 
+    def _update_time_display(self) -> None:
+        """Update elapsed time and progress indicator. MUST be called on main thread."""
+        if self._time_label is None or self._recording_start <= 0:
+            return
+
+        now = time.monotonic()
+        elapsed = now - self._recording_start
+        minutes = int(elapsed) // 60
+        seconds = int(elapsed) % 60
+        time_str = f"{minutes}:{seconds:02d}"
+
+        # Progress dots cycle every 0.4s since last text update
+        since_text = now - self._last_text_time
+        if since_text > 0.8:
+            dots = "." * (1 + (int(since_text / 0.4) % 3))
+            time_str = f"{dots}  {time_str}"
+
+        self._time_label.setStringValue_(time_str)
+
     _BADGE_COLORS: dict[str, tuple[float, float, float]] = {
-        "AI Rewrite": (0.55, 0.36, 0.95),  # purple
-        "Auto-Send": (0.20, 0.70, 0.45),   # green
+        "AI Rewrite": (0.55, 0.36, 0.95),
+        "Auto-Send": (0.20, 0.70, 0.45),
     }
-    _BADGE_DEFAULT_COLOR = (0.45, 0.55, 0.65)  # grey-blue
+    _BADGE_DEFAULT_COLOR = (0.45, 0.55, 0.65)
 
     def _render_badges(self) -> None:
         """Update the status label with colored badge text."""
@@ -309,21 +369,42 @@ class PreviewOverlay:
 
         self._label.setStringValue_(text)
         self._render_badges()
+        self._update_time_display()
         self._resize_to_fit()
-
         self._position_near_cursor()
+
         if self._window is not None:
-            self._window.orderFront_(None)
+            if not self._visible:
+                # Fade in
+                self._window.setAlphaValue_(0.0)
+                self._window.orderFront_(None)
+                NSAnimationContext.beginGrouping()
+                NSAnimationContext.currentContext().setDuration_(self.FADE_IN_DURATION)
+                self._window.animator().setAlphaValue_(0.95)
+                NSAnimationContext.endGrouping()
+            else:
+                self._window.orderFront_(None)
 
         if not self._visible:
             self._visible = True
             self._start_cursor_tracking()
 
     def _hide(self) -> None:
-        """Main-thread: hide window."""
+        """Main-thread: fade out then hide window."""
         self._visible = False
+        self._recording_start = 0.0
         self._stop_cursor_tracking()
         if self._window is not None:
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.currentContext().setDuration_(self.FADE_OUT_DURATION)
+            self._window.animator().setAlphaValue_(0.0)
+            NSAnimationContext.endGrouping()
+            # Schedule orderOut after animation completes
+            callAfter(self._deferred_order_out)
+
+    def _deferred_order_out(self) -> None:
+        """Hide window after fade-out animation. MUST be called on main thread."""
+        if not self._visible and self._window is not None:
             self._window.orderOut_(None)
 
     def _start_cursor_tracking(self) -> None:
@@ -335,9 +416,14 @@ class PreviewOverlay:
         self._tracking_thread.start()
 
     def _track_cursor_loop(self) -> None:
-        """Periodically dispatch cursor reposition to main thread."""
+        """Periodically dispatch cursor reposition and time update to main thread."""
         while not self._tracking_stop.wait(self._TRACK_INTERVAL):
-            callAfter(self._position_near_cursor)
+            callAfter(self._track_tick)
+
+    def _track_tick(self) -> None:
+        """Main-thread: reposition and update time."""
+        self._position_near_cursor()
+        self._update_time_display()
 
     def _stop_cursor_tracking(self) -> None:
         """Stop the cursor tracking thread."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import signal
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -309,6 +310,7 @@ class DictationMenuBar(rumps.App):
     def _update_preview_badges(self) -> None:
         """Sync preview overlay badges with current config state."""
         badges: list[str] = []
+        badges.append(self.config.whisper.language.upper())
         if self.config.rewrite.enabled:
             badges.append("AI Rewrite")
         if self.config.paste.auto_send:
@@ -323,6 +325,7 @@ class DictationMenuBar(rumps.App):
             self._level_timer.start()
             self._overlay.show_recording()
             self._update_preview_badges()
+            self._preview_overlay.set_recording_start(time.monotonic())
         elif state == "transcribing":
             self._is_recording = False
             self._level_timer.stop()
