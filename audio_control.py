@@ -293,7 +293,9 @@ class AudioController:
             return
 
         if config.mute_local:
-            self._devices.append(LocalMacDevice())
+            import sys
+            if sys.platform == "darwin":
+                self._devices.append(LocalMacDevice())
 
         for dev_cfg in config.devices:
             dev_type = dev_cfg.get("type", "")

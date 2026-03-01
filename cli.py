@@ -7,6 +7,7 @@ import atexit
 import os
 import signal
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -248,9 +249,16 @@ def command_setup(config_path: Path) -> int:
     return 0
 
 
-_PLIST_LABEL = "com.whisper.dictation"
-_PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
-_LOG_PATH = str(Path.home() / "Library" / "Logs" / "whisper-dictation.log")
+if sys.platform == "darwin":
+    _PLIST_LABEL = "com.whisper.dictation"
+    _PLIST_PATH: Path | None = Path.home() / "Library" / "LaunchAgents" / f"{_PLIST_LABEL}.plist"
+    _LOG_PATH = str(Path.home() / "Library" / "Logs" / "whisper-dictation.log")
+else:
+    _PLIST_LABEL = None
+    _PLIST_PATH = None
+    _log_dir = Path.home() / "AppData" / "Local" / "whisper-dictation"
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _LOG_PATH = str(_log_dir / "whisper-dictation.log")
 _LOG_MAX_BYTES = 100 * 1024  # 100 KB
 _LOG_KEEP_LINES = 1000
 
@@ -307,8 +315,21 @@ def command_logs(lines_arg: str) -> int:
         print("[logs] Start whisper-dic to create it.")
         return 1
 
+    if sys.platform == "win32":
+        # Windows: read with Python (no tail)
+        try:
+            n = int(lines_arg) if lines_arg.lower() != "f" else 50
+        except ValueError:
+            print(f"[logs] Invalid line count: {lines_arg}")
+            return 1
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for line in lines[-n:]:
+            print(line)
+        if lines_arg.lower() == "f":
+            print("[logs] Live follow (-n f) is not supported on Windows.")
+        return 0
+
     if lines_arg.lower() == "f":
-        import os
         os.execlp("tail", "tail", "-f", str(log_path))
     else:
         try:
@@ -316,13 +337,17 @@ def command_logs(lines_arg: str) -> int:
         except ValueError:
             print(f"[logs] Invalid line count: {lines_arg}")
             return 1
-        import os
         os.execlp("tail", "tail", f"-n{n}", str(log_path))
 
     return 0
 
 
 def command_install() -> int:
+    if _PLIST_PATH is None:
+        print("[install] Auto-start installation is not yet supported on this platform.")
+        print("[install] Run 'whisper-dic run' directly instead.")
+        return 1
+
     if _PLIST_PATH.exists():
         print(f"[install] Already installed at {_PLIST_PATH}")
         print("[install] Run 'whisper-dic uninstall' first to reinstall.")
@@ -343,6 +368,10 @@ def command_install() -> int:
 
 
 def command_uninstall() -> int:
+    if _PLIST_PATH is None:
+        print("[uninstall] Auto-start installation is not supported on this platform.")
+        return 1
+
     if not _PLIST_PATH.exists():
         print("[uninstall] Not installed.")
         return 1
@@ -363,7 +392,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser = argparse.ArgumentParser(
-        description="System-wide hold-to-dictate for macOS.",
+        description="System-wide hold-to-dictate.",
         parents=[config_parent],
     )
     subparsers = parser.add_subparsers(dest="command")
@@ -459,6 +488,10 @@ def main() -> int:
     if command == "run":
         return command_run(config_path)
     if command == "menubar":
+        if sys.platform != "darwin":
+            print("[menubar] Menu bar UI is only available on macOS.")
+            print("[menubar] Use 'whisper-dic run' for CLI mode.")
+            return 1
         from menubar import run_menubar
         return run_menubar(config_path)
     if command == "setup":
