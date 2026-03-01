@@ -5,6 +5,23 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-01
+
+### Added
+- pip/pipx installable: `pipx install whisper-dic` or `pip install whisper-dic`
+- macOS extras: `pipx install "whisper-dic[macos]"` for menu bar support
+- `python -m whisper_dic` support
+- Auto-created config at `~/.config/whisper-dic/config.toml` on first run
+
+### Changed
+- Restructured source into `src/whisper_dic/` package (src layout)
+- All intra-package imports converted to relative imports
+- Config path default changed from repo-relative to XDG config directory
+- `pyproject.toml` now defines build-system, entry points, and all dependencies
+- Removed `requirements.txt` (pyproject.toml is the single source of truth)
+- Minimum Python version raised to 3.12
+- CI installs via `pip install -e .` instead of `requirements.txt`
+
 ## [0.6.1] - 2026-03-01
 
 ### Fixed

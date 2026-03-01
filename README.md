@@ -26,42 +26,35 @@ System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release �
 ### 1. Prerequisites
 
 - **macOS** 10.13+ or **Windows** 10+
-- Python 3.10+
+- Python 3.12+
 - A Whisper provider: [Groq API key](https://console.groq.com/) (free tier available) **or** a local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) server
 
 ### 2. Install
 
-**macOS / Linux:**
+**Recommended (pipx):**
 
 ```bash
-git clone https://github.com/timmeromberg/whisper-dictation.git
-cd whisper-dictation
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+# macOS — includes menu bar support
+pipx install "whisper-dic[macos]"
+
+# Windows
+pipx install whisper-dic
 ```
 
-**Windows:**
+Don't have pipx? Install it with `pip install --user pipx && pipx ensurepath`.
 
-```powershell
-git clone https://github.com/timmeromberg/whisper-dictation.git
-cd whisper-dictation
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+**Alternative (pip):**
+
+```bash
+pip install "whisper-dic[macos]"    # macOS
+pip install whisper-dic             # Windows
 ```
 
 ### 3. Configure
 
-**macOS / Linux:**
-```bash
-cp config.example.toml config.toml
-```
+On first run, whisper-dic creates a config file at `~/.config/whisper-dic/config.toml` (macOS/Linux) or `%APPDATA%/whisper-dic/config.toml` (Windows) from the bundled template.
 
-**Windows:**
-```powershell
-copy config.example.toml config.toml
-```
-
-Edit `config.toml`:
+Edit it to set your provider:
 
 ```toml
 [whisper]
@@ -74,7 +67,7 @@ api_key = "gsk_your_key"    # get from console.groq.com
 Or use the interactive setup (macOS only):
 
 ```bash
-./whisper-dic setup
+whisper-dic setup
 ```
 
 ### 4. Permissions
@@ -92,21 +85,12 @@ If permissions are missing, whisper-dic will show a notification telling you whi
 
 ### 5. Run
 
-**macOS:**
-
 ```bash
-# Menu bar mode (recommended)
-./whisper-dic menubar
+# Menu bar mode (recommended, macOS only)
+whisper-dic menubar
 
-# Or foreground mode
-./whisper-dic run
-```
-
-**Windows:**
-
-```powershell
-# Foreground mode (menu bar not available on Windows)
-whisper-dic.bat run
+# Foreground mode (all platforms)
+whisper-dic run
 ```
 
 ### 6. Test
@@ -186,11 +170,11 @@ whisper-dic uninstall        # Remove login item (macOS only)
 whisper-dic version          # Show version
 ```
 
-On Windows, use `whisper-dic.bat` instead of `./whisper-dic`.
+When installed via pip/pipx, `whisper-dic` is available as a command on all platforms.
 
 ## Configuration
 
-All settings are in `config.toml`. See `config.example.toml` for the full reference.
+All settings are in `config.toml` (at `~/.config/whisper-dic/config.toml`). See the bundled `config.example.toml` for the full reference.
 
 ### Whisper Provider
 
@@ -307,13 +291,13 @@ Use with Option + Shift (macOS) or Alt + Shift (Windows).
 
 ```bash
 # Install (creates launchd plist, starts at login, auto-restarts on crash)
-./whisper-dic install
+whisper-dic install
 
 # View logs
 tail -f ~/Library/Logs/whisper-dictation.log
 
 # Uninstall
-./whisper-dic uninstall
+whisper-dic uninstall
 ```
 
 Not available on Windows. Use Task Scheduler or a startup shortcut instead.
@@ -362,36 +346,48 @@ Not available on Windows — use `whisper-dic.bat run` for foreground mode.
 - Run `whisper-dic devices` to see available mics
 - Set `device` under `[recording]` in config.toml, or switch from the menu bar (macOS)
 
+## Development
+
+```bash
+git clone https://github.com/timmeromberg/whisper-dictation.git
+cd whisper-dictation
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[macos]"    # macOS (or just `pip install -e .` on Windows)
+pytest tests/ -v
+```
+
 ## Project Structure
 
 ```
 whisper-dictation/
-├── whisper-dic              # entry point (macOS/Linux bash wrapper)
-├── whisper-dic.bat          # entry point (Windows batch wrapper)
-├── VERSION                  # semantic version (read by cli.py)
-├── cli.py                   # CLI commands, argparse, main()
-├── config.py                # config loading, validation, live-reload
-├── dictation.py             # core hold-to-dictate engine
-├── menubar.py               # menu bar UI (macOS only)
-├── recorder.py              # microphone capture
-├── transcriber.py           # Whisper API clients
-├── hotkey.py                # global hotkey listener
-├── commands.py              # voice command table
-├── cleaner.py               # text cleanup
-├── paster.py                # clipboard + paste
-├── history.py               # persistent transcription history
-├── overlay.py               # floating status overlay (macOS only)
-├── audio_control.py         # device muting
-├── log.py                   # logging
-├── menu.py                  # setup TUI (macOS only)
-├── compat/                  # platform abstraction (macOS + Windows)
-│   ├── _macos.py            # Quartz/AppKit backends
-│   └── _windows.py          # Win32 backends
+├── src/whisper_dic/         # pip-installable package
+│   ├── __init__.py          # package init, __version__
+│   ├── __main__.py          # python -m whisper_dic support
+│   ├── cli.py               # CLI commands, argparse, main()
+│   ├── config.py            # config loading, validation, live-reload
+│   ├── dictation.py         # core hold-to-dictate engine
+│   ├── menubar.py           # menu bar UI (macOS only)
+│   ├── recorder.py          # microphone capture
+│   ├── transcriber.py       # Whisper API clients
+│   ├── hotkey.py            # global hotkey listener
+│   ├── commands.py          # voice command table
+│   ├── cleaner.py           # text cleanup
+│   ├── paster.py            # clipboard + paste
+│   ├── history.py           # persistent transcription history
+│   ├── overlay.py           # floating status overlay (macOS only)
+│   ├── audio_control.py     # device muting
+│   ├── log.py               # logging
+│   ├── menu.py              # setup TUI (macOS only)
+│   ├── VERSION              # semantic version
+│   ├── config.example.toml  # bundled config template
+│   └── compat/              # platform abstraction (macOS + Windows)
+│       ├── _macos.py        # Quartz/AppKit backends
+│       └── _windows.py      # Win32 backends
 ├── tests/                   # pytest test suite
-├── pyproject.toml           # project config (ruff, pytest)
-├── config.example.toml      # config template
-├── config.toml              # your config (gitignored)
-└── requirements.txt         # dependencies
+├── pyproject.toml           # build config, dependencies, tool settings
+├── whisper-dic              # dev wrapper (macOS/Linux)
+└── whisper-dic.bat          # dev wrapper (Windows)
 ```
 
 ## License
