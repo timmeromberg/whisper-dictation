@@ -31,7 +31,7 @@ System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release �
 
 ### 2. Install
 
-**Recommended (pipx):**
+**Option A — pipx (recommended):**
 
 ```bash
 # macOS — includes menu bar support
@@ -43,11 +43,21 @@ pipx install whisper-dic
 
 Don't have pipx? Install it with `pip install --user pipx && pipx ensurepath`.
 
-**Alternative (pip):**
+**Option B — pip:**
 
 ```bash
 pip install "whisper-dic[macos]"    # macOS
 pip install whisper-dic             # Windows
+```
+
+**Option C — from source:**
+
+```bash
+git clone https://github.com/timmeromberg/whisper-dictation.git
+cd whisper-dictation
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[macos]"          # Windows: pip install -e .
 ```
 
 ### 3. Configure
