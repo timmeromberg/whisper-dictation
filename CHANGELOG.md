@@ -5,6 +5,13 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-03-01
+
+### Fixed
+- Menubar config template lookup now uses package data instead of sibling file
+- mypy type error in plist generation (shutil.which returns str)
+- simple_term_menu added back to macOS optional deps and mypy ignore list
+
 ## [0.7.0] - 2026-03-01
 
 ### Added
