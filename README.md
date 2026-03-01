@@ -51,8 +51,14 @@ python -m venv .venv
 
 ### 3. Configure
 
+**macOS / Linux:**
 ```bash
 cp config.example.toml config.toml
+```
+
+**Windows:**
+```powershell
+copy config.example.toml config.toml
 ```
 
 Edit `config.toml`:
@@ -129,7 +135,7 @@ Hold Option + Shift (macOS) or Alt + Shift (Windows) and say any of these:
 | paste / paste that | Cmd+V | Ctrl+V |
 | select all | Cmd+A | Ctrl+A |
 | undo / undo that | Cmd+Z | Ctrl+Z |
-| redo | Cmd+Shift+Z | Ctrl+Y |
+| redo | Cmd+Shift+Z | Ctrl+Shift+Z |
 | save / save file | Cmd+S | Ctrl+S |
 | find | Cmd+F | Ctrl+F |
 | delete / backspace | Delete | Delete |
@@ -140,8 +146,8 @@ Hold Option + Shift (macOS) or Alt + Shift (Windows) and say any of these:
 | new tab | Cmd+T | Ctrl+T |
 | new window | Cmd+N | Ctrl+N |
 | bold | Cmd+B | Ctrl+B |
-| screenshot | Cmd+Ctrl+Shift+4 | Win+Shift+S |
-| full screenshot | Cmd+Ctrl+Shift+3 | PrintScreen |
+| screenshot | Cmd+Ctrl+Shift+4 | *(macOS only)* |
+| full screenshot | Cmd+Ctrl+Shift+3 | *(macOS only)* |
 
 Common Whisper mishearings are handled automatically ("peace" -> "paste", "coffee" -> "copy", etc.).
 
@@ -154,12 +160,14 @@ When enabled, spoken punctuation is converted automatically:
 | period / full stop | . |
 | comma | , |
 | question mark | ? |
-| exclamation mark | ! |
+| exclamation mark / exclamation point | ! |
 | new line | newline |
 | new paragraph | blank line |
 | open quote / close quote | curly quotes |
+| open paren / close paren | ( / ) |
 | colon / semicolon | : / ; |
 | dash / em dash | — |
+| hyphen | - |
 
 ## CLI Commands
 
@@ -360,6 +368,7 @@ Not available on Windows — use `whisper-dic.bat run` for foreground mode.
 whisper-dictation/
 ├── whisper-dic              # entry point (macOS/Linux bash wrapper)
 ├── whisper-dic.bat          # entry point (Windows batch wrapper)
+├── VERSION                  # semantic version (read by cli.py)
 ├── cli.py                   # CLI commands, argparse, main()
 ├── config.py                # config loading, validation, live-reload
 ├── dictation.py             # core hold-to-dictate engine

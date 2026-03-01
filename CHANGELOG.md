@@ -5,6 +5,16 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-03-01
+
+### Fixed
+- "new tab" voice command now sends Cmd+T (was incorrectly sending Cmd+Tab / app switcher)
+- Default hotkey fallback corrected to `left_option` (was `right_option` when config section absent)
+- Voice commands table: redo on Windows is Ctrl+Shift+Z (not Ctrl+Y)
+- Screenshot/full screenshot voice commands marked macOS-only (no Windows equivalent)
+- Text commands table: added missing open/close paren, hyphen, exclamation point
+- Configure step in README now shows Windows `copy` command
+
 ## [0.6.0] - 2026-03-01
 
 ### Added
