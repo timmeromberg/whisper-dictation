@@ -35,8 +35,9 @@ sleep 0.5
 SMOKE_CONFIG="/tmp/smoke-test-whisper-dic.toml"
 cp "$SCRIPT_DIR/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null || true
 
+SMOKE_LOG="/tmp/smoke-menubar-$$.log"
 echo "[smoke] Starting menubar app..."
-"$PYTHON" "$SCRIPT_DIR/cli.py" menubar --config "$SMOKE_CONFIG" >/dev/null 2>&1 &
+"$PYTHON" "$SCRIPT_DIR/cli.py" menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
 PID=$!
 
 sleep 3
@@ -46,13 +47,17 @@ if kill -0 "$PID" 2>/dev/null; then
   kill -9 "$PID" 2>/dev/null
   wait "$PID" 2>/dev/null || true
   sleep 0.5
+elif grep -q "already running" "$SMOKE_LOG" 2>/dev/null; then
+  echo "[smoke] Startup: skipped (another instance running)"
 else
   wait "$PID" 2>/dev/null
   EXIT_CODE=$?
   echo "[smoke] FAIL: app exited with code $EXIT_CODE within 3 seconds"
-  rm -f "$SMOKE_CONFIG"
+  cat "$SMOKE_LOG" 2>/dev/null
+  rm -f "$SMOKE_CONFIG" "$SMOKE_LOG"
   exit 1
 fi
+rm -f "$SMOKE_LOG"
 
 # Step 4: Dictation pipeline test — record, transcribe, clean
 echo "[smoke] Pipeline test..."

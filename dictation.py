@@ -40,6 +40,7 @@ class DictationApp:
 
         self.recorder = Recorder(
             sample_rate=config.recording.sample_rate,
+            device=config.recording.device,
         )
         self.transcriber = create_transcriber(config.whisper)
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)

@@ -9,6 +9,8 @@ min_duration = 0.3
 # Recordings longer than max_duration are discarded (safety limit)
 max_duration = 300.0
 sample_rate = 16000
+# Microphone to use (run 'whisper-dic devices' to list available mics)
+# device = "MacBook Pro Microphone"
 
 [whisper]
 # Provider: "groq" (cloud, fast, free tier) or "local" (offline, needs whisper.cpp server)

@@ -30,10 +30,12 @@ class Recorder:
         sample_rate: int = 16000,
         channels: int = 1,
         dtype: str = "int16",
+        device: str | int | None = None,
     ) -> None:
         self.sample_rate = sample_rate
         self.channels = channels
         self.dtype = dtype
+        self.device = device
 
         self._lock = threading.Lock()
         self._stream: Optional[sd.InputStream] = None
@@ -79,6 +81,7 @@ class Recorder:
 
             try:
                 self._stream = sd.InputStream(
+                    device=self.device,
                     samplerate=self.sample_rate,
                     channels=self.channels,
                     dtype=self.dtype,
