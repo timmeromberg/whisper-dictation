@@ -346,13 +346,18 @@ class DictationApp:
             return
 
         if command_mode:
-            # Triple short beep for command mode
+            # Triple short beep for command mode (sequential)
+            dur = self.config.audio_feedback.duration_seconds
             self.play_beep(1320.0)
+            time.sleep(dur + 0.02)
             self.play_beep(1320.0)
+            time.sleep(dur + 0.02)
             self.play_beep(1320.0)
         elif auto_send:
-            # Double beep for auto-send
+            # Double beep for auto-send (sequential)
+            dur = self.config.audio_feedback.duration_seconds
             self.play_beep(1100.0)
+            time.sleep(dur + 0.02)
             self.play_beep(1100.0)
         else:
             self.play_beep(self.config.audio_feedback.stop_frequency)

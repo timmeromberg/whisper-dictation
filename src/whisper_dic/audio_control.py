@@ -201,7 +201,7 @@ class ChromecastDevice:
             )
             if chromecasts:
                 self._cast = chromecasts[0]
-                self._cast.wait()
+                self._cast.wait(timeout=10)
                 return self._cast
         except Exception as exc:
             log("audio_ctrl", f"Chromecast discovery failed for '{self.name}': {exc}")
@@ -255,18 +255,21 @@ class UpnpDevice:
 
         async def _do_mute():
             requester = AiohttpRequester()
-            factory = UpnpFactory(requester)
-            device = await factory.async_create_device(self._location)
-            rc = device.service("urn:schemas-upnp-org:service:RenderingControl:1")
-            if rc is None:
-                log("audio_ctrl", f"No RenderingControl service on {self.name}")
-                return
-            action = rc.action("SetMute")
-            await action.async_call(
-                InstanceID=0,
-                Channel="Master",
-                DesiredMute=muted,
-            )
+            try:
+                factory = UpnpFactory(requester)
+                device = await factory.async_create_device(self._location)
+                rc = device.service("urn:schemas-upnp-org:service:RenderingControl:1")
+                if rc is None:
+                    log("audio_ctrl", f"No RenderingControl service on {self.name}")
+                    return
+                action = rc.action("SetMute")
+                await action.async_call(
+                    InstanceID=0,
+                    Channel="Master",
+                    DesiredMute=muted,
+                )
+            finally:
+                await requester.async_close()
 
         loop = asyncio.new_event_loop()
         try:
@@ -288,6 +291,7 @@ class AudioController:
     def __init__(self, config: AudioControlConfig) -> None:
         self._enabled = config.enabled
         self._devices: list[AudioDevice] = []
+        self._op_lock = threading.Lock()
 
         if not config.enabled:
             return
@@ -336,7 +340,7 @@ class AudioController:
         devices = list(self._devices)
         threading.Thread(
             target=self._mute_all,
-            args=(devices,),
+            args=(devices, self._op_lock),
             daemon=True,
             name="audio-mute",
         ).start()
@@ -349,30 +353,32 @@ class AudioController:
         devices = list(self._devices)
         threading.Thread(
             target=self._unmute_all,
-            args=(devices,),
+            args=(devices, self._op_lock),
             daemon=True,
             name="audio-unmute",
         ).start()
 
     @staticmethod
-    def _mute_all(devices: list[AudioDevice]) -> None:
+    def _mute_all(devices: list[AudioDevice], lock: threading.Lock) -> None:
         import time as _time
-        # Brief delay to let PortAudio input stream fully stabilize
-        # before we touch CoreAudio (osascript mute) or spawn subprocesses
-        _time.sleep(0.1)
-        for dev in devices:
-            try:
-                dev.mute()
-            except Exception as exc:
-                log("audio_ctrl", f"Mute error ({dev.name}): {exc}")
+        with lock:
+            # Brief delay to let PortAudio input stream fully stabilize
+            # before we touch CoreAudio (osascript mute) or spawn subprocesses
+            _time.sleep(0.1)
+            for dev in devices:
+                try:
+                    dev.mute()
+                except Exception as exc:
+                    log("audio_ctrl", f"Mute error ({dev.name}): {exc}")
 
     @staticmethod
-    def _unmute_all(devices: list[AudioDevice]) -> None:
-        for dev in devices:
-            try:
-                dev.unmute()
-            except Exception as exc:
-                log("audio_ctrl", f"Unmute error ({dev.name}): {exc}")
+    def _unmute_all(devices: list[AudioDevice], lock: threading.Lock) -> None:
+        with lock:
+            for dev in devices:
+                try:
+                    dev.unmute()
+                except Exception as exc:
+                    log("audio_ctrl", f"Unmute error ({dev.name}): {exc}")
 
 
 def _discover_all() -> list[dict]:

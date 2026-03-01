@@ -50,9 +50,10 @@ class TextPaster:
                     log("paste", "Sending Return")
                     post_keycode(VK_RETURN)
 
-            # Restore previous clipboard after a brief delay for the paste
+            # Restore previous clipboard after a delay for the paste
             # to be processed by the target application.
-            time.sleep(0.1)
+            # 0.3s is needed for Electron apps (VS Code, Slack) which are slower.
+            time.sleep(0.3)
             try:
                 pyperclip.copy(saved_clipboard)
             except Exception:
