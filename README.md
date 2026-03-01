@@ -266,10 +266,10 @@ Show a floating text overlay with live transcription while you hold the dictatio
 ```toml
 [recording]
 streaming_preview = true
-preview_interval = 4.0  # seconds between preview updates
+preview_interval = 3.0  # seconds between preview updates
 ```
 
-**Note:** Each preview update sends a transcription request. On Groq's free tier (20 req/min), the default 4-second interval uses ~15 req/min, leaving room for the final transcription. Increase the interval if you hit rate limits.
+**Note:** Each preview update sends a transcription request. On Groq's free tier (20 req/min), the default 3-second interval uses ~20 req/min. Increase the interval if you hit rate limits.
 
 On macOS, toggle live preview from the menu bar.
 

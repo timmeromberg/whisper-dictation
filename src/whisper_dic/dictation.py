@@ -462,17 +462,25 @@ class DictationApp:
         transcriber = self._preview_transcriber
         if transcriber is None:
             return
+        # First update fires sooner for faster initial feedback
+        first_wait = min(1.5, interval)
+        if not self._preview_stop.wait(first_wait):
+            self._do_preview(transcriber)
         while not self._preview_stop.wait(interval):
-            audio = self.recorder.get_accumulated_audio()
-            if audio is None:
-                continue
-            try:
-                text = transcriber.transcribe(audio)
-                if text.strip():
-                    self._emit_state("preview", text.strip())
-            except Exception as exc:
-                log("preview", f"Preview transcription failed: {exc}")
+            self._do_preview(transcriber)
         self._emit_state("preview", "")
+
+    def _do_preview(self, transcriber: WhisperTranscriber) -> None:
+        """Transcribe accumulated audio and emit preview state."""
+        audio = self.recorder.get_accumulated_audio()
+        if audio is None:
+            return
+        try:
+            text = transcriber.transcribe(audio)
+            if text.strip():
+                self._emit_state("preview", text.strip())
+        except Exception as exc:
+            log("preview", f"Preview transcription failed: {exc}")
 
     def run(self) -> int:
         missing = self.check_permissions()

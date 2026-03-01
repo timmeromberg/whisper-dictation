@@ -111,10 +111,14 @@ class PreviewOverlay:
     PADDING = 8
     CURSOR_OFFSET_Y = 20  # pixels above the cursor
     MAX_DISPLAY_CHARS = 120
+    _TRACK_INTERVAL = 0.08  # seconds between cursor position updates
 
     def __init__(self) -> None:
         self._window: NSWindow | None = None
         self._label: NSTextField | None = None
+        self._tracking_stop = threading.Event()
+        self._tracking_thread: threading.Thread | None = None
+        self._visible = False
 
     def show(self, text: str) -> None:
         """Show or update preview text near cursor. Safe to call from any thread."""
@@ -214,7 +218,33 @@ class PreviewOverlay:
         if self._window is not None:
             self._window.orderFront_(None)
 
+        if not self._visible:
+            self._visible = True
+            self._start_cursor_tracking()
+
     def _hide(self) -> None:
         """Main-thread: hide window."""
+        self._visible = False
+        self._stop_cursor_tracking()
         if self._window is not None:
             self._window.orderOut_(None)
+
+    def _start_cursor_tracking(self) -> None:
+        """Start a background thread that repositions the window near the cursor."""
+        self._tracking_stop.clear()
+        self._tracking_thread = threading.Thread(
+            target=self._track_cursor_loop, daemon=True, name="cursor-track",
+        )
+        self._tracking_thread.start()
+
+    def _track_cursor_loop(self) -> None:
+        """Periodically dispatch cursor reposition to main thread."""
+        while not self._tracking_stop.wait(self._TRACK_INTERVAL):
+            callAfter(self._position_near_cursor)
+
+    def _stop_cursor_tracking(self) -> None:
+        """Stop the cursor tracking thread."""
+        self._tracking_stop.set()
+        if self._tracking_thread is not None:
+            self._tracking_thread.join(timeout=0.5)
+            self._tracking_thread = None

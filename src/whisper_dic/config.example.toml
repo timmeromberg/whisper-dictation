@@ -13,7 +13,7 @@ sample_rate = 16000
 # device = "MacBook Pro Microphone"
 # Show live transcription preview while recording (uses extra API calls)
 # streaming_preview = false
-# preview_interval = 4.0  # seconds between preview updates
+# preview_interval = 3.0  # seconds between preview updates
 
 [whisper]
 # Provider: "groq" (cloud, fast, free tier) or "local" (offline, needs whisper.cpp server)
