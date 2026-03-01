@@ -12,6 +12,7 @@ System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release �
 - **Text commands** — say "period", "new line", "question mark" for punctuation
 - **AI rewriting** — optional LLM-powered cleanup of transcriptions (grammar, punctuation, capitalization)
 - **Filler removal** — automatically strips "um", "uh", "you know", etc.
+- **Live preview** — see transcription text appearing in real-time while you speak (opt-in)
 - **Provider failover** — automatically tries the other provider when the primary fails
 - **Whisper prompt** — bias transcription toward domain-specific vocabulary
 - **Persistent history** — transcription history saved across sessions
@@ -257,6 +258,20 @@ prompt = "You are a dictation assistant. Clean up the following transcription: f
 ```
 
 On macOS, toggle AI rewriting live from the menu bar. When disabled, raw transcriptions are pasted as before.
+
+### Live Preview
+
+Show a floating text overlay with live transcription while you hold the dictation key. The preview updates every few seconds by transcribing the audio accumulated so far:
+
+```toml
+[recording]
+streaming_preview = true
+preview_interval = 4.0  # seconds between preview updates
+```
+
+**Note:** Each preview update sends a transcription request. On Groq's free tier (20 req/min), the default 4-second interval uses ~15 req/min, leaving room for the final transcription. Increase the interval if you hit rate limits.
+
+On macOS, toggle live preview from the menu bar.
 
 ### Audio Feedback
 

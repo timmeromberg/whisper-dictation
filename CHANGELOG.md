@@ -5,6 +5,14 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-01
+
+### Added
+- Live transcription preview: see text appearing in a floating overlay while recording
+- Periodic batch transcription of accumulated audio during recording
+- Configurable preview interval (`recording.preview_interval`, default 4s)
+- Menu bar toggle for Live Preview (macOS)
+
 ## [0.8.0] - 2026-03-01
 
 ### Added
