@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from typing import Any
@@ -42,11 +43,16 @@ class RecordingOverlay:
     """Floating dot indicator for recording/transcribing state."""
 
     DOT_SIZE = 12
+    _PULSE_INTERVAL = 0.08  # match tracking interval for smooth updates
+    _PULSE_SPEED = 2.5  # cycles per second
 
     def __init__(self) -> None:
         self._window: NSWindow | None = None
         self._dot: _DotView | None = None
         self._lock = threading.Lock()
+        self._pulsing = False
+        self._pulse_stop = threading.Event()
+        self._pulse_thread: threading.Thread | None = None
 
     def _ensure_window(self) -> None:
         """Create the window. MUST be called on main thread."""
@@ -83,18 +89,19 @@ class RecordingOverlay:
         self._dot = dot
 
     def show_recording(self) -> None:
-        """Show a red dot (recording). Safe to call from any thread."""
-        callAfter(self._show, NSColor.redColor())
+        """Show a pulsing red dot (recording). Safe to call from any thread."""
+        callAfter(self._show, NSColor.redColor(), True)
 
     def show_transcribing(self) -> None:
-        """Show an orange dot (transcribing). Safe to call from any thread."""
-        callAfter(self._show, NSColor.orangeColor())
+        """Show a static orange dot (transcribing). Safe to call from any thread."""
+        callAfter(self._show, NSColor.orangeColor(), False)
 
     def hide(self) -> None:
         """Hide the dot. Safe to call from any thread."""
+        self._stop_pulse()
         callAfter(self._hide)
 
-    def _show(self, color: Any) -> None:
+    def _show(self, color: Any, pulse: bool) -> None:
         """Main-thread: create window if needed, set color, show."""
         self._ensure_window()
         if self._dot is None:
@@ -102,12 +109,81 @@ class RecordingOverlay:
         self._dot._color = color
         self._dot.setNeedsDisplay_(True)
         if self._window is not None:
+            self._window.setAlphaValue_(0.85)
             self._window.orderFront_(None)
+        if pulse:
+            self._start_pulse()
+        else:
+            self._stop_pulse()
 
     def _hide(self) -> None:
         """Main-thread: hide window."""
         if self._window is not None:
             self._window.orderOut_(None)
+
+    def _start_pulse(self) -> None:
+        """Start the pulsing animation thread."""
+        if self._pulsing:
+            return
+        self._pulsing = True
+        self._pulse_stop.clear()
+        self._pulse_thread = threading.Thread(
+            target=self._pulse_loop, daemon=True, name="dot-pulse",
+        )
+        self._pulse_thread.start()
+
+    def _stop_pulse(self) -> None:
+        """Stop the pulsing animation thread."""
+        self._pulsing = False
+        self._pulse_stop.set()
+        if self._pulse_thread is not None:
+            self._pulse_thread.join(timeout=0.5)
+            self._pulse_thread = None
+
+    def _pulse_loop(self) -> None:
+        """Background thread: cycle alpha between 0.4 and 1.0."""
+        while not self._pulse_stop.wait(self._PULSE_INTERVAL):
+            t = time.monotonic()
+            # Sine wave oscillation: 0.4 .. 1.0
+            phase = math.sin(t * self._PULSE_SPEED * 2 * math.pi)
+            alpha = 0.7 + 0.3 * phase  # range: 0.4 to 1.0
+            callAfter(self._set_alpha, alpha)
+
+    def _set_alpha(self, alpha: float) -> None:
+        """Main-thread: update window alpha."""
+        if self._window is not None and self._pulsing:
+            self._window.setAlphaValue_(alpha)
+
+
+class _LevelBarView(NSView):
+    """Thin horizontal bar showing current microphone level."""
+
+    _level: float = 0.0
+
+    def drawRect_(self, rect):  # noqa: N802 — AppKit naming convention
+        bounds = self.bounds()
+        w = bounds.size.width
+        h = bounds.size.height
+
+        # Background track
+        NSColor.colorWithCalibratedWhite_alpha_(0.2, 0.6).set()
+        NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(bounds, h / 2, h / 2).fill()
+
+        if self._level <= 0.01:
+            return
+
+        # Filled portion
+        fill_w = max(h, w * self._level)  # at least a circle
+        fill_rect = NSMakeRect(0, 0, fill_w, h)
+
+        # Color: green → yellow → red
+        level = self._level
+        if level < 0.5:
+            r, g = level * 2 * 0.9, 0.75
+        else:
+            r, g = 0.9, 0.75 * (1.0 - (level - 0.5) * 2)
+        NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, 0.15, 0.9).set()
+        NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(fill_rect, h / 2, h / 2).fill()
 
 
 class PreviewOverlay:
@@ -119,11 +195,11 @@ class PreviewOverlay:
     PADDING = 10
     STATUS_HEIGHT = 18
     STATUS_GAP = 4
-    TIME_HEIGHT = 14
     CURSOR_OFFSET_Y = 20
     FONT_SIZE = 13.0
     STATUS_FONT_SIZE = 10.0
-    TIME_FONT_SIZE = 10.0
+    LEVEL_BAR_HEIGHT = 3
+    LEVEL_BAR_GAP = 4
     FADE_IN_DURATION = 0.15
     FADE_OUT_DURATION = 0.20
     _TRACK_INTERVAL = 0.08
@@ -137,9 +213,11 @@ class PreviewOverlay:
         self._tracking_thread: threading.Thread | None = None
         self._visible = False
         self._badges: list[str] = []
+        self._level_bar: _LevelBarView | None = None
         self._recording_start: float = 0.0
         self._last_text_time: float = 0.0
         self._progress_phase = 0
+        self._show_level = False
 
     def set_badges(self, badges: list[str]) -> None:
         """Set status badges (e.g. ["EN", "AI Rewrite", "Auto-Send"]). Thread-safe."""
@@ -150,6 +228,16 @@ class PreviewOverlay:
         self._recording_start = t
         self._last_text_time = t
         self._progress_phase = 0
+
+    def set_level(self, peak: float) -> None:
+        """Update the mic level bar (0.0 to 1.0). Safe to call from any thread."""
+        callAfter(self._update_level, peak)
+
+    def show_level_bar(self, visible: bool) -> None:
+        """Show or hide the level bar. Safe to call from any thread."""
+        self._show_level = visible
+        if not visible:
+            callAfter(self._update_level, 0.0)
 
     def show(self, text: str) -> None:
         """Show or update preview text near cursor. Safe to call from any thread."""
@@ -217,9 +305,9 @@ class PreviewOverlay:
         label.setPreferredMaxLayoutWidth_(self.MAX_WIDTH - 2 * self.PADDING)
         content.addSubview_(label)
 
-        # Elapsed time + progress indicator (top-right corner)
+        # Elapsed time + progress indicator (right-aligned, same row as badges)
         time_label = NSTextField.alloc().initWithFrame_(
-            NSMakeRect(self.PADDING, 0, self.MAX_WIDTH - 2 * self.PADDING, self.TIME_HEIGHT)
+            NSMakeRect(self.PADDING, self.PADDING, self.MAX_WIDTH - 2 * self.PADDING, self.STATUS_HEIGHT)
         )
         time_label.setEditable_(False)
         time_label.setSelectable_(False)
@@ -228,16 +316,24 @@ class PreviewOverlay:
         time_label.setTextColor_(
             NSColor.colorWithCalibratedWhite_alpha_(0.5, 1.0)
         )
-        time_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(self.TIME_FONT_SIZE, 0.0))
+        time_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(self.STATUS_FONT_SIZE, 0.0))
         time_label.setAlignment_(NSRightTextAlignment)
         time_label.setStringValue_("")
         time_label.setMaximumNumberOfLines_(1)
         content.addSubview_(time_label)
 
+        # Mic level bar (just below time label)
+        level_bar = _LevelBarView.alloc().initWithFrame_(
+            NSMakeRect(self.PADDING, 0, self.MAX_WIDTH - 2 * self.PADDING, self.LEVEL_BAR_HEIGHT)
+        )
+        level_bar.setHidden_(True)
+        content.addSubview_(level_bar)
+
         self._window = window
         self._label = label
         self._status_label = status_label
         self._time_label = time_label
+        self._level_bar = level_bar
 
     def _resize_to_fit(self) -> None:
         """Resize window to fit label content. MUST be called on main thread."""
@@ -245,10 +341,9 @@ class PreviewOverlay:
             return
 
         max_label_w = self.MAX_WIDTH - 2 * self.PADDING
-        has_status = self._badges and self._status_label is not None
-        status_total = (self.STATUS_HEIGHT + self.STATUS_GAP) if has_status else 0
-        time_total = self.TIME_HEIGHT + 2  # small gap above time
-        max_text_h = self.MAX_HEIGHT - 2 * self.PADDING - status_total - time_total
+        has_bottom = (self._badges and self._status_label is not None) or self._recording_start > 0
+        bottom_total = (self.STATUS_HEIGHT + self.STATUS_GAP) if has_bottom else 0
+        max_text_h = self.MAX_HEIGHT - 2 * self.PADDING - bottom_total
 
         ideal = self._label.cell().cellSizeForBounds_(
             NSMakeRect(0, 0, max_label_w, max_text_h)
@@ -257,27 +352,41 @@ class PreviewOverlay:
         label_h = min(ideal.height, max_text_h)
 
         win_w = label_w + 2 * self.PADDING
-        win_h = label_h + 2 * self.PADDING + status_total + time_total
+        win_h = label_h + 2 * self.PADDING + bottom_total
 
-        # Position status at bottom, text above, time at top
-        if has_status and self._status_label is not None:
-            self._status_label.setFrame_(
-                NSMakeRect(self.PADDING, self.PADDING, label_w, self.STATUS_HEIGHT)
-            )
-            self._status_label.setHidden_(False)
+        # Bottom row: badges (left) + time (right) on the same line
+        if has_bottom:
+            if self._status_label is not None:
+                self._status_label.setFrame_(
+                    NSMakeRect(self.PADDING, self.PADDING, label_w, self.STATUS_HEIGHT)
+                )
+                self._status_label.setHidden_(not self._badges)
+            if self._time_label is not None:
+                self._time_label.setFrame_(
+                    NSMakeRect(self.PADDING, self.PADDING, label_w, self.STATUS_HEIGHT)
+                )
+                self._time_label.setHidden_(False)
             label_y = self.PADDING + self.STATUS_HEIGHT + self.STATUS_GAP
         else:
             if self._status_label is not None:
                 self._status_label.setHidden_(True)
+            if self._time_label is not None:
+                self._time_label.setHidden_(True)
             label_y = self.PADDING
 
         self._label.setFrame_(NSMakeRect(self.PADDING, label_y, label_w, label_h))
 
-        if self._time_label is not None:
-            time_y = win_h - self.PADDING - self.TIME_HEIGHT
-            self._time_label.setFrame_(
-                NSMakeRect(self.PADDING, time_y, label_w, self.TIME_HEIGHT)
-            )
+        # Level bar sits just above the text
+        has_level = self._show_level and self._level_bar is not None
+        if self._level_bar is not None:
+            if has_level:
+                level_y = win_h - self.PADDING - self.LEVEL_BAR_HEIGHT
+                self._level_bar.setFrame_(
+                    NSMakeRect(self.PADDING, level_y, label_w, self.LEVEL_BAR_HEIGHT)
+                )
+                self._level_bar.setHidden_(False)
+            else:
+                self._level_bar.setHidden_(True)
 
         frame = self._window.frame()
         frame.size = NSMakeSize(win_w, win_h)
@@ -406,6 +515,13 @@ class PreviewOverlay:
         """Hide window after fade-out animation. MUST be called on main thread."""
         if not self._visible and self._window is not None:
             self._window.orderOut_(None)
+
+    def _update_level(self, peak: float) -> None:
+        """Main-thread: update level bar."""
+        if self._level_bar is None:
+            return
+        self._level_bar._level = peak
+        self._level_bar.setNeedsDisplay_(True)
 
     def _start_cursor_tracking(self) -> None:
         """Start a background thread that repositions the window near the cursor."""
