@@ -453,6 +453,21 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[config_parent],
         help="Run diagnostic checks",
     )
+    setup_local_parser = subparsers.add_parser(
+        "setup-local",
+        parents=[config_parent],
+        help="Install whisper.cpp server and model for local transcription",
+    )
+    setup_local_parser.add_argument(
+        "--model",
+        choices=["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"],
+        help="Model size to download (default: interactive prompt)",
+    )
+    setup_local_parser.add_argument(
+        "--autostart",
+        action="store_true",
+        help="Install as login item (macOS only)",
+    )
     subparsers.add_parser(
         "status",
         parents=[config_parent],
@@ -547,6 +562,9 @@ def main() -> int:
     if command == "doctor":
         from .doctor import run_doctor
         return run_doctor(config_path)
+    if command == "setup-local":
+        from .local_setup import run_setup_local
+        return run_setup_local(config_path, args.model, args.autostart)
     if command == "setup":
         return command_setup(config_path)
     if command == "status":
