@@ -819,15 +819,13 @@ def run_menubar(config_path: Path) -> int:
     # Ensure config exists — copy template on first run
     first_run = False
     if not config_path.exists():
-        example = config_path.parent / "config.example.toml"
-        if example.exists():
-            import shutil
-            shutil.copy2(example, config_path)
-            config_path.chmod(0o600)
-            first_run = True
-        else:
-            print(f"[error] No config template at {example}")
-            return 1
+        import shutil
+        from importlib.resources import files
+        example = files("whisper_dic").joinpath("config.example.toml")
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(example), config_path)
+        config_path.chmod(0o600)
+        first_run = True
 
     app = DictationMenuBar(config_path)
 
