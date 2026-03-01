@@ -534,11 +534,13 @@ class DictationMenuBar(rumps.App):
         print(f"[menubar] Auto-Send: {'on' if new_val else 'off'}")
 
     def _toggle_audio_control(self, _sender: Any) -> None:
+        from .audio_control import AudioController
         current = self.config.audio_control.enabled
         new_val = not current
         self._set_config("audio_control.enabled", "true" if new_val else "false")
         self.config.audio_control.enabled = new_val
-        self._app.audio_controller._enabled = new_val
+        # Recreate controller so devices are set up when toggling on
+        self._app.audio_controller = AudioController(self.config.audio_control)
         self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
@@ -906,8 +908,14 @@ class DictationMenuBar(rumps.App):
             self._app.cleaner.text_commands = new_config.text_commands.enabled
             self._textcmds_item.title = f"Text Commands: {'on' if new_config.text_commands.enabled else 'off'}"
 
-        if new_config.audio_control.enabled != old.audio_control.enabled:
-            self._app.audio_controller._enabled = new_config.audio_control.enabled
+        ac_changed = (
+            new_config.audio_control.enabled != old.audio_control.enabled
+            or new_config.audio_control.mute_local != old.audio_control.mute_local
+            or new_config.audio_control.devices != old.audio_control.devices
+        )
+        if ac_changed:
+            from .audio_control import AudioController
+            self._app.audio_controller = AudioController(new_config.audio_control)
             self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
 
         if new_config.whisper.failover != old.whisper.failover:
