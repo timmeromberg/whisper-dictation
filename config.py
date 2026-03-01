@@ -131,7 +131,7 @@ def load_config(path: Path) -> AppConfig:
 
     config = AppConfig(
         hotkey=HotkeyConfig(
-            key=str(hotkey_data.get("key", "right_option")),
+            key=str(hotkey_data.get("key", "left_option")),
         ),
         recording=RecordingConfig(
             min_duration=float(recording_data.get("min_duration", 0.3)),

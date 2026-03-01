@@ -35,8 +35,8 @@ _COMMANDS: dict[str, tuple[int, int]] = {
     "save file": (_VK["s"], FLAG_CMD),
     "save it": (_VK["s"], FLAG_CMD),
     "find": (_VK["f"], FLAG_CMD),
-    "new tab": (_VK["tab"], FLAG_CMD),
-    "close tab": (_VK["x"], FLAG_CMD),  # Cmd+W would be better but no 'w' in _VK
+    "new tab": (_VK["t"], FLAG_CMD),
+    "close tab": (_VK["w"], FLAG_CMD),
     "delete": (_VK["delete"], 0),
     "delete that": (_VK["delete"], 0),
     "delete it": (_VK["delete"], 0),
@@ -47,7 +47,6 @@ _COMMANDS: dict[str, tuple[int, int]] = {
     "escape": (_VK["escape"], 0),
 }
 
-_COMMANDS["close tab"] = (_VK["w"], FLAG_CMD)
 _COMMANDS["close window"] = (_VK["w"], FLAG_CMD)
 _COMMANDS["new window"] = (_VK["n"], FLAG_CMD)
 _COMMANDS["print"] = (_VK["p"], FLAG_CMD)
