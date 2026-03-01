@@ -38,6 +38,8 @@ class DictationMenuBar(rumps.App):
         self._is_recording = False
         self._level_timer = rumps.Timer(self._update_level, 0.15)
         self._health_timer = rumps.Timer(self._periodic_health_check, 60)
+        self._device_timer = rumps.Timer(self._check_device_changes, 5)
+        self._known_input_devices: set[str] = self._get_input_device_names()
         self._provider_healthy = True
         self._health_notified = False
         self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
@@ -395,6 +397,37 @@ class DictationMenuBar(rumps.App):
         bar_index = min(int(normalized * len(self._LEVEL_BARS)), len(self._LEVEL_BARS) - 1)
         self.title = f"\U0001f534{self._LEVEL_BARS[bar_index]}"
         self._preview_overlay.set_level(normalized)
+
+    @staticmethod
+    def _get_input_device_names() -> set[str]:
+        try:
+            return {str(d["name"]) for d in sd.query_devices() if d["max_input_channels"] > 0}  # type: ignore[index]
+        except Exception:
+            return set()
+
+    def _check_device_changes(self, _timer: Any) -> None:
+        current = self._get_input_device_names()
+        if current != self._known_input_devices:
+            self._known_input_devices = current
+            self._rebuild_mic_menu()
+
+    def _rebuild_mic_menu(self) -> None:
+        """Rebuild microphone submenu items to reflect connected devices."""
+        current = self.config.recording.device
+        self._mic_menu.clear()
+        default_item = rumps.MenuItem("System Default", callback=self._switch_microphone)
+        default_item._mic_device = None  # type: ignore[attr-defined]
+        if current is None:
+            default_item.state = 1
+        self._mic_menu.add(default_item)
+        for name in sorted(self._known_input_devices):
+            item = rumps.MenuItem(name, callback=self._switch_microphone)
+            item._mic_device = name  # type: ignore[attr-defined]
+            if name == current:
+                item.state = 1
+            self._mic_menu.add(item)
+        label = current or "System Default"
+        self._mic_menu.title = f"Microphone: {label}"
 
     # --- Setting actions ---
 
@@ -1100,6 +1133,7 @@ class DictationMenuBar(rumps.App):
         """Main-thread: start listener and timers after health checks pass."""
         self._app.start_listener()
         self._health_timer.start()
+        self._device_timer.start()
         self._config_watcher.start()
         key = self.config.hotkey.key.replace("_", " ")
         rumps.notification("whisper-dic", "Ready",
