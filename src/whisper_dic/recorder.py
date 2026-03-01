@@ -44,6 +44,8 @@ class Recorder:
         self._sample_count = 0
         self._started_at = 0.0
         self._peak: float = 0.0
+        self._combined_cache: np.ndarray | None = None
+        self._combined_chunk_count = 0
 
     @property
     def is_recording(self) -> bool:
@@ -78,6 +80,8 @@ class Recorder:
             self._sample_count = 0
             self._started_at = time.monotonic()
             self._recording = True
+            self._combined_cache = None
+            self._combined_chunk_count = 0
 
             try:
                 self._stream = sd.InputStream(
@@ -100,7 +104,7 @@ class Recorder:
         with self._lock:
             if not self._recording or not self._chunks:
                 return None
-            audio = np.concatenate(self._chunks, axis=0)
+            audio = self._snapshot_audio_locked()
 
         buffer = io.BytesIO()
         sf.write(buffer, audio, self.sample_rate, format="FLAC")
@@ -121,13 +125,17 @@ class Recorder:
 
         with self._lock:
             chunks = self._chunks
-            self._chunks = []
             sample_count = self._sample_count
+            audio: np.ndarray | None = None
+            if chunks:
+                audio = self._snapshot_audio_locked()
+            self._chunks = []
+            self._combined_cache = None
+            self._combined_chunk_count = 0
 
-        if not chunks:
+        if not chunks or audio is None:
             return None
 
-        audio = np.concatenate(chunks, axis=0)
         buffer = io.BytesIO()
         sf.write(buffer, audio, self.sample_rate, format="FLAC")
 
@@ -146,3 +154,18 @@ class Recorder:
                 stream.close()
             except Exception:
                 pass
+
+    def _snapshot_audio_locked(self) -> np.ndarray:
+        """Return concatenated audio for current chunks. Caller must hold _lock."""
+        if self._combined_cache is None:
+            self._combined_cache = np.concatenate(self._chunks, axis=0)
+            self._combined_chunk_count = len(self._chunks)
+        elif self._combined_chunk_count < len(self._chunks):
+            new_parts = self._chunks[self._combined_chunk_count:]
+            if new_parts:
+                appended = np.concatenate(new_parts, axis=0)
+                self._combined_cache = np.concatenate((self._combined_cache, appended), axis=0)
+                self._combined_chunk_count = len(self._chunks)
+
+        # Return a copy so callers can safely use it outside the lock.
+        return self._combined_cache.copy()

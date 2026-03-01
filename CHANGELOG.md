@@ -5,6 +5,12 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.9] - 2026-03-02
+
+### Fixed
+- Restored `Recorder` incremental-audio cache fields and snapshot path to keep streaming-preview tests green across Python 3.13 CI
+- Passed `GITHUB_TOKEN` to macOS and Linux E2E runs so `setup-local` avoids GitHub API rate-limit failures when resolving whisper.cpp releases
+
 ## [0.9.8] - 2026-03-02
 
 ### Fixed

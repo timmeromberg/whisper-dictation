@@ -22,9 +22,11 @@ jobs:
           path: /tmp/whisper-dic-cache
           key: e2e-linux-whisper-data-v1
       - name: Build and run E2E
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker compose build e2e
-          docker compose run -v /tmp/whisper-dic-cache:/root/.local/share/whisper-dic e2e
+          docker compose run -e GITHUB_TOKEN="$GITHUB_TOKEN" -v /tmp/whisper-dic-cache:/root/.local/share/whisper-dic e2e
 
   e2e-macos:
     runs-on: macos-latest
@@ -46,6 +48,8 @@ jobs:
         run: |
           pip install -e ".[macos]"
       - name: Run E2E
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/e2e-test.sh
 
   e2e-windows:
