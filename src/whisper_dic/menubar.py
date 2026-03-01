@@ -736,12 +736,12 @@ class DictationMenuBar(rumps.App):
         cur = self.config.recording.preview_interval
         val = self._prompt_float(
             "Preview Interval",
-            "Seconds between live preview updates (1.0–30.0).\n"
+            "Seconds between live preview updates (0.5–30.0).\n"
             "Lower = more responsive but uses more API calls.",
             cur,
         )
         if val is not None:
-            val = max(1.0, min(30.0, val))
+            val = max(0.5, min(30.0, val))
             self._set_config("recording.preview_interval", str(val))
             self.config.recording.preview_interval = val
             self._app.config.recording.preview_interval = val
