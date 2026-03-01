@@ -43,6 +43,14 @@ CONFIG="$CONFIG_DIR/config.toml"
 TEST_AUDIO="$SCRIPT_DIR/tests/e2e/test_audio.flac"
 VERSION_FILE="$SCRIPT_DIR/src/whisper_dic/VERSION"
 
+# On Windows (Git Bash), curl needs native paths for -F file=@
+# MSYS2 paths like /d/a/... cause "read error" (exit 26)
+if command -v cygpath >/dev/null 2>&1; then
+    TEST_AUDIO_CURL=$(cygpath -w "$TEST_AUDIO")
+else
+    TEST_AUDIO_CURL="$TEST_AUDIO"
+fi
+
 echo ""
 echo "=== whisper-dic E2E Test ==="
 echo "  Platform:   $(uname -s) $(uname -m)"
@@ -557,7 +565,7 @@ else
 fi
 
 TRANSCRIBE_FAIL=$(curl -sf -X POST http://localhost:2022/v1/audio/transcriptions \
-    -F "file=@$TEST_AUDIO;type=audio/flac" \
+    -F "file=@$TEST_AUDIO_CURL;type=audio/flac" \
     -F "model=tiny" \
     -F "language=en" 2>&1 || echo "CURL_FAILED")
 if [ "$TRANSCRIBE_FAIL" = "CURL_FAILED" ]; then
@@ -613,7 +621,7 @@ sleep 2
 if [ -f "$TEST_AUDIO" ]; then
     CURL_EXIT=0
     RESPONSE=$(curl -s --max-time 30 -X POST http://localhost:2022/v1/audio/transcriptions \
-        -F "file=@$TEST_AUDIO;type=audio/flac" \
+        -F "file=@$TEST_AUDIO_CURL;type=audio/flac" \
         -F "model=tiny" \
         -F "language=en" 2>&1) || CURL_EXIT=$?
 
