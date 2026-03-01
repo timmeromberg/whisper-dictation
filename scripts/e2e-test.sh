@@ -6,6 +6,10 @@
 
 set -euo pipefail
 
+# Prevent Git Bash (MSYS2) from converting /unix/paths to C:\windows\paths
+# Without this, --inference-path "/v1/audio/..." becomes "C:/v1/audio/..."
+export MSYS_NO_PATHCONV=1
+
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PASSED=0
 FAILED=0
@@ -130,8 +134,9 @@ fi
 echo ""
 echo "--- Step 2: Start server ---"
 
-# On Windows, run the exe directly (bat files + Git Bash backgrounding is unreliable)
+# Run the server binary directly (portable across all platforms)
 MODEL_PATH=$(ls "$DATA_DIR"/models/ggml-*.bin 2>/dev/null | head -1)
+# MSYS_NO_PATHCONV prevents Git Bash from converting /v1/audio/... to C:\v1\audio\...
 "$SERVER_BIN" \
     --model "$MODEL_PATH" \
     --host 127.0.0.1 \
