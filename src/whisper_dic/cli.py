@@ -449,6 +449,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser(
+        "doctor",
+        parents=[config_parent],
+        help="Run diagnostic checks",
+    )
+    subparsers.add_parser(
         "status",
         parents=[config_parent],
         help="Show current config and endpoint reachability",
@@ -539,6 +544,9 @@ def main() -> int:
             return 1
         from .menubar import run_menubar
         return run_menubar(config_path)
+    if command == "doctor":
+        from .doctor import run_doctor
+        return run_doctor(config_path)
     if command == "setup":
         return command_setup(config_path)
     if command == "status":
