@@ -175,3 +175,172 @@ class HotkeyListener:
 
         if listener is not None:
             listener.stop()
+
+
+# ---------------------------------------------------------------------------
+# macOS key codes for NSEvent-based listener
+# ---------------------------------------------------------------------------
+
+_NS_KEYCODE_MAP: dict[str, int] = {
+    "left_option": 58, "alt_l": 58, "left_alt": 58,
+    "right_option": 61, "alt_r": 61, "right_alt": 61,
+    "left_command": 55, "right_command": 54,
+    "left_shift": 56, "right_shift": 60,
+}
+
+# Modifier flag corresponding to each key type
+_NS_FLAG_FOR_KEY: dict[int, int] = {
+    58: 0x80000,   # NSEventModifierFlagOption
+    61: 0x80000,
+    55: 0x100000,  # NSEventModifierFlagCommand
+    54: 0x100000,
+    56: 0x20000,   # NSEventModifierFlagShift
+    60: 0x20000,
+}
+
+_NS_CTRL_KEYCODES = {59, 62}
+_NS_SHIFT_KEYCODES = {56, 60}
+_NS_CTRL_FLAG = 0x40000   # NSEventModifierFlagControl
+_NS_SHIFT_FLAG = 0x20000  # NSEventModifierFlagShift
+
+
+class NSEventHotkeyListener:
+    """Hotkey listener using macOS NSEvent monitors (main-thread safe).
+
+    Unlike pynput's CGEventTap listener, NSEvent monitors run callbacks on
+    the main thread, avoiding the SIGTRAP caused by TSM calls from background
+    threads on macOS 14+.  Requires an active NSApplication run loop (rumps).
+    """
+
+    def __init__(
+        self,
+        on_hold_start: Callable[[], None],
+        on_hold_end: Callable[[bool, bool], None],
+        key_name: str = "right_option",
+    ) -> None:
+        if key_name not in _NS_KEYCODE_MAP:
+            raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(_NS_KEYCODE_MAP)}")
+
+        self._target_keycode = _NS_KEYCODE_MAP[key_name]
+        self._target_flag = _NS_FLAG_FOR_KEY[self._target_keycode]
+        self._key_name = key_name
+        self._on_hold_start = on_hold_start
+        self._on_hold_end = on_hold_end
+
+        self._lock = threading.Lock()
+        self._pressed = False
+        self._ctrl_held = False
+        self._ctrl_last_seen: float = 0.0
+        self._shift_held = False
+        self._shift_last_seen: float = 0.0
+
+        self._global_monitor: object | None = None
+        self._local_monitor: object | None = None
+
+    def set_key(self, key_name: str) -> None:
+        """Change the hotkey at runtime (no restart needed)."""
+        if key_name not in _NS_KEYCODE_MAP:
+            raise ValueError(f"Unsupported hotkey '{key_name}'. Supported: {', '.join(_NS_KEYCODE_MAP)}")
+        self._target_keycode = _NS_KEYCODE_MAP[key_name]
+        self._target_flag = _NS_FLAG_FOR_KEY[self._target_keycode]
+        self._key_name = key_name
+
+    def _modifier_recent(self, held: bool, last_seen: float, mask: int, now: float) -> bool:
+        """Check if a modifier was active: currently held, OS says so, or within window."""
+        return (
+            held
+            or modifier_is_pressed(mask)
+            or (now - last_seen) < _MODIFIER_WINDOW_SECONDS
+        )
+
+    def _handle_flags_changed(self, event: object) -> None:
+        """Process a modifier key state change."""
+        keycode: int = event.keyCode()  # type: ignore[attr-defined]
+        flags: int = event.modifierFlags()  # type: ignore[attr-defined]
+
+        # Track Ctrl
+        if keycode in _NS_CTRL_KEYCODES:
+            with self._lock:
+                self._ctrl_held = bool(flags & _NS_CTRL_FLAG)
+                self._ctrl_last_seen = time.monotonic()
+            return
+
+        # Track Shift (unless Shift IS the target key)
+        if keycode in _NS_SHIFT_KEYCODES and keycode != self._target_keycode:
+            with self._lock:
+                self._shift_held = bool(flags & _NS_SHIFT_FLAG)
+                self._shift_last_seen = time.monotonic()
+            return
+
+        # Target key
+        if keycode != self._target_keycode:
+            return
+
+        is_down = bool(flags & self._target_flag)
+
+        if is_down:
+            should_fire = False
+            with self._lock:
+                if not self._pressed:
+                    self._pressed = True
+                    should_fire = True
+            if should_fire:
+                threading.Thread(
+                    target=self._on_hold_start, daemon=True, name="hotkey-start",
+                ).start()
+        else:
+            should_fire = False
+            auto_send = False
+            command_mode = False
+            with self._lock:
+                if self._pressed:
+                    self._pressed = False
+                    now = time.monotonic()
+                    auto_send = self._modifier_recent(
+                        self._ctrl_held, self._ctrl_last_seen, MASK_CONTROL, now,
+                    )
+                    command_mode = self._modifier_recent(
+                        self._shift_held, self._shift_last_seen, MASK_SHIFT, now,
+                    )
+                    cd = now - self._ctrl_last_seen
+                    sd = now - self._shift_last_seen
+                    log("hotkey", f"Release: send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s")
+                    should_fire = True
+            if should_fire:
+                threading.Thread(
+                    target=self._on_hold_end, args=(auto_send, command_mode),
+                    daemon=True, name="hotkey-end",
+                ).start()
+
+    def _handle_local_event(self, event: object) -> object:
+        """Local monitor wrapper — must return event to pass it along."""
+        self._handle_flags_changed(event)
+        return event
+
+    def start(self) -> None:
+        from AppKit import NSEvent  # type: ignore[import-untyped]
+
+        ns_flags_changed_mask = 1 << 12  # NSEventMaskFlagsChanged
+
+        with self._lock:
+            if self._global_monitor is not None:
+                return
+
+            self._global_monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+                ns_flags_changed_mask, self._handle_flags_changed,
+            )
+            self._local_monitor = NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+                ns_flags_changed_mask, self._handle_local_event,
+            )
+
+    def stop(self) -> None:
+        from AppKit import NSEvent  # type: ignore[import-untyped]
+
+        with self._lock:
+            if self._global_monitor is not None:
+                NSEvent.removeMonitor_(self._global_monitor)
+                self._global_monitor = None
+            if self._local_monitor is not None:
+                NSEvent.removeMonitor_(self._local_monitor)
+                self._local_monitor = None
+            self._pressed = False

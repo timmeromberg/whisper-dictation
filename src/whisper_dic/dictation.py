@@ -22,7 +22,7 @@ from .compat import notify as _platform_notify
 from .compat import play_wav_file as _platform_play
 from .config import LANG_NAMES, AppConfig
 from .history import TranscriptionHistory
-from .hotkey import KEY_MAP, HotkeyListener
+from .hotkey import KEY_MAP, HotkeyListener, NSEventHotkeyListener
 from .log import log
 from .paster import TextPaster
 from .recorder import Recorder, RecordingResult
@@ -36,7 +36,7 @@ if hasattr(keyboard.Key, "shift_r"):
 
 
 class DictationApp:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, listener_class: type | None = None) -> None:
         self.config = config
 
         self.recorder = Recorder(
@@ -61,7 +61,8 @@ class DictationApp:
         if config.custom_commands:
             commands.register_custom(config.custom_commands)
 
-        self._listener = HotkeyListener(
+        cls = listener_class or HotkeyListener
+        self._listener: HotkeyListener | NSEventHotkeyListener = cls(
             on_hold_start=self._on_hold_start,
             on_hold_end=self._on_hold_end,
             key_name=config.hotkey.key,
@@ -119,7 +120,7 @@ class DictationApp:
         self.transcriber.language = lang
 
     @property
-    def listener(self) -> HotkeyListener:
+    def listener(self) -> HotkeyListener | NSEventHotkeyListener:
         return self._listener
 
     def start_listener(self) -> None:
