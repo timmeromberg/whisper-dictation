@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import rumps
+import sounddevice as sd
 
 from cli import _PLIST_PATH, command_install, command_uninstall
 from config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
@@ -47,6 +48,7 @@ class DictationMenuBar(rumps.App):
         self._provider_menu = self._build_provider_menu()
         self._hotkey_menu = self._build_hotkey_menu()
         self._volume_menu, self._volume_slider = self._build_volume_menu()
+        self._mic_menu = self._build_microphone_menu()
         self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item = (
             self._build_toggle_items()
         )
@@ -61,6 +63,7 @@ class DictationMenuBar(rumps.App):
             self._provider_menu,
             self._hotkey_menu,
             self._volume_menu,
+            self._mic_menu,
             self._textcmds_item,
             self._autosend_item,
             self._audioctrl_item,
@@ -120,6 +123,30 @@ class DictationMenuBar(rumps.App):
         )
         menu.add(slider)
         return menu, slider
+
+    def _build_microphone_menu(self) -> rumps.MenuItem:
+        current = self.config.recording.device
+        label = current or "System Default"
+        menu = rumps.MenuItem(f"Microphone: {label}")
+        # "System Default" option
+        default_item = rumps.MenuItem("System Default", callback=self._switch_microphone)
+        default_item._mic_device = None  # type: ignore[attr-defined]
+        if current is None:
+            default_item.state = 1
+        menu.add(default_item)
+        # List all input devices
+        try:
+            for dev in sd.query_devices():
+                if dev["max_input_channels"] > 0:  # type: ignore[index]
+                    name = str(dev["name"])  # type: ignore[index]
+                    item = rumps.MenuItem(name, callback=self._switch_microphone)
+                    item._mic_device = name  # type: ignore[attr-defined]
+                    if name == current:
+                        item.state = 1
+                    menu.add(item)
+        except Exception:
+            pass
+        return menu
 
     def _build_toggle_items(self) -> tuple[rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem]:
         tc_on = self.config.text_commands.enabled
@@ -381,6 +408,22 @@ class DictationMenuBar(rumps.App):
             item.state = 1 if getattr(item, '_hotkey_value', None) == hk else 0
         print(f"[menubar] Hotkey: {hk}")
 
+    def _switch_microphone(self, sender: Any) -> None:
+        device = sender._mic_device
+        if device == self.config.recording.device:
+            return
+        if device is None:
+            self._set_config("recording.device", "")
+        else:
+            self._set_config("recording.device", device)
+        self.config.recording.device = device
+        self._app.recorder.device = device
+        label = device or "System Default"
+        self._mic_menu.title = f"Microphone: {label}"
+        for item in self._mic_menu.values():
+            item.state = 1 if getattr(item, "_mic_device", object()) == device else 0
+        print(f"[menubar] Microphone: {label}")
+
     def _on_volume_slide(self, sender: Any) -> None:
         import time as _time
         pct = int(sender.value)
@@ -622,6 +665,13 @@ class DictationMenuBar(rumps.App):
         if new_config.whisper.failover != old.whisper.failover:
             self._app.config.whisper.failover = new_config.whisper.failover
             self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
+
+        if new_config.recording.device != old.recording.device:
+            self._app.recorder.device = new_config.recording.device
+            label = new_config.recording.device or "System Default"
+            self._mic_menu.title = f"Microphone: {label}"
+            for item in self._mic_menu.values():
+                item.state = 1 if getattr(item, "_mic_device", object()) == new_config.recording.device else 0
 
         rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
 

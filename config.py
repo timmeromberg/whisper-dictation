@@ -137,7 +137,7 @@ def load_config(path: Path) -> AppConfig:
             min_duration=float(recording_data.get("min_duration", 0.3)),
             max_duration=float(recording_data.get("max_duration", 300.0)),
             sample_rate=int(recording_data.get("sample_rate", 16000)),
-            device=recording_data.get("device", None),
+            device=recording_data.get("device", None) or None,
         ),
         paste=PasteConfig(
             auto_send=bool(paste_data.get("auto_send", False)),
