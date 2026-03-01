@@ -1,0 +1,50 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/e2e-test.sh'
+      - 'Dockerfile.e2e'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+jobs:
+  e2e-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run E2E
+        run: docker compose run e2e
+
+  e2e-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e ".[macos]"
+      - name: Run E2E
+        run: bash scripts/e2e-test.sh
+
+  e2e-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Install build tools
+        run: choco install cmake git -y
+      - name: Run E2E
+        shell: bash
+        run: bash scripts/e2e-test.sh
