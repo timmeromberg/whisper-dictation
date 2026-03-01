@@ -9,6 +9,7 @@ from typing import Any
 
 import rumps
 import sounddevice as sd
+from PyObjCTools.AppHelper import callAfter
 
 from .cli import _PLIST_PATH, command_install, command_uninstall
 from .config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
@@ -1002,6 +1003,26 @@ class DictationMenuBar(rumps.App):
                 rumps.notification("whisper-dic", "Startup Failed",
                                    "Whisper provider is unreachable. Run: whisper-dic status")
             return
+
+        # Start listener on main thread — macOS 14+ requires TSM calls from main queue
+        callAfter(self._finish_startup)
+
+    def _finish_startup(self) -> None:
+        """Main-thread: start listener and timers after health checks pass."""
+        # Pre-initialize input sources on main thread to avoid SIGTRAP in pynput.
+        # macOS 14+ requires TSMGetInputSourceProperty on the main dispatch queue;
+        # warming the cache here satisfies that requirement.
+        try:
+            import ctypes
+            import ctypes.util
+            carbon_path = ctypes.util.find_library("Carbon")
+            if carbon_path is None:
+                raise OSError("Carbon framework not found")
+            carbon = ctypes.cdll.LoadLibrary(carbon_path)
+            carbon.TISCopyCurrentKeyboardInputSource.restype = ctypes.c_void_p
+            carbon.TISCopyCurrentKeyboardInputSource()
+        except Exception:
+            pass
 
         self._app.start_listener()
         self._health_timer.start()
