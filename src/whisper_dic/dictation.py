@@ -440,7 +440,11 @@ class DictationApp:
         self._preview_stop.clear()
         if self._preview_transcriber is None:
             try:
-                self._preview_transcriber = create_transcriber(self.config.whisper)
+                pp = self.config.recording.preview_provider
+                if pp:
+                    self._preview_transcriber = create_transcriber_for(self.config.whisper, pp)
+                else:
+                    self._preview_transcriber = create_transcriber(self.config.whisper)
             except Exception as exc:
                 log("preview", f"Failed to create preview transcriber: {exc}")
                 return

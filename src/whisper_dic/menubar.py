@@ -679,10 +679,12 @@ class DictationMenuBar(rumps.App):
             f"Preview Interval: {self.config.recording.preview_interval}s",
             callback=self._edit_preview_interval,
         )
+        self._preview_provider_menu = self._build_preview_provider_menu()
         menu.add(self._min_dur_item)
         menu.add(self._max_dur_item)
         menu.add(self._timeout_item)
         menu.add(self._preview_interval_item)
+        menu.add(self._preview_provider_menu)
         return menu
 
     def _prompt_float(self, title: str, message: str, current: float) -> float | None:
@@ -746,6 +748,35 @@ class DictationMenuBar(rumps.App):
             self.config.recording.preview_interval = val
             self._app.config.recording.preview_interval = val
             self._preview_interval_item.title = f"Preview Interval: {val}s"
+
+    def _build_preview_provider_menu(self) -> rumps.MenuItem:
+        current = self.config.recording.preview_provider or self.config.whisper.provider
+        menu = rumps.MenuItem(f"Preview Provider: {current}")
+        for option in PROVIDER_OPTIONS:
+            item = rumps.MenuItem(option, callback=self._switch_preview_provider)
+            item.state = 1 if option == current else 0
+            menu.add(item)
+        return menu
+
+    def _switch_preview_provider(self, sender: Any) -> None:
+        provider = sender.title
+        current = self.config.recording.preview_provider or self.config.whisper.provider
+        if provider == current:
+            return
+        if provider == "groq" and not self.config.whisper.groq.api_key.strip():
+            if not self._prompt_groq_key():
+                return
+        self._set_config("recording.preview_provider", provider)
+        self.config.recording.preview_provider = provider
+        self._app.config.recording.preview_provider = provider
+        # Force preview transcriber recreation on next dictation
+        if self._app._preview_transcriber is not None:
+            self._app._preview_transcriber.close()
+            self._app._preview_transcriber = None
+        self._preview_provider_menu.title = f"Preview Provider: {provider}"
+        for item in self._preview_provider_menu.values():
+            item.state = 1 if item.title == provider else 0
+        print(f"[menubar] Preview Provider: {provider}")
 
     def _build_service_menu(self) -> rumps.MenuItem:
         menu = rumps.MenuItem("Service")
@@ -895,6 +926,17 @@ class DictationMenuBar(rumps.App):
             self._app.config.recording.preview_interval = new_config.recording.preview_interval
             self.config.recording.preview_interval = new_config.recording.preview_interval
             self._preview_interval_item.title = f"Preview Interval: {new_config.recording.preview_interval}s"
+
+        if new_config.recording.preview_provider != old.recording.preview_provider:
+            self._app.config.recording.preview_provider = new_config.recording.preview_provider
+            self.config.recording.preview_provider = new_config.recording.preview_provider
+            if self._app._preview_transcriber is not None:
+                self._app._preview_transcriber.close()
+                self._app._preview_transcriber = None
+            label = new_config.recording.preview_provider or new_config.whisper.provider
+            self._preview_provider_menu.title = f"Preview Provider: {label}"
+            for item in self._preview_provider_menu.values():
+                item.state = 1 if item.title == label else 0
 
         if new_config.recording.device != old.recording.device:
             self._app.recorder.device = new_config.recording.device

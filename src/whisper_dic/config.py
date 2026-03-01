@@ -35,6 +35,7 @@ class RecordingConfig:
     device: str | None = None
     streaming_preview: bool = False
     preview_interval: float = 3.0
+    preview_provider: str = ""
 
 
 @dataclass
@@ -151,6 +152,7 @@ def load_config(path: Path) -> AppConfig:
             device=recording_data.get("device", None) or None,
             streaming_preview=bool(recording_data.get("streaming_preview", False)),
             preview_interval=float(recording_data.get("preview_interval", 3.0)),
+            preview_provider=str(recording_data.get("preview_provider", "")),
         ),
         paste=PasteConfig(
             auto_send=bool(paste_data.get("auto_send", False)),
@@ -227,6 +229,10 @@ def _validate_config(config: AppConfig) -> AppConfig:
         clamped = max(0.1, min(30.0, config.recording.preview_interval))
         log("config", f"preview_interval={config.recording.preview_interval} out of range, clamped to {clamped}")
         config.recording.preview_interval = clamped
+
+    if config.recording.preview_provider and config.recording.preview_provider not in {"local", "groq"}:
+        log("config", f"preview_provider='{config.recording.preview_provider}' invalid, clearing")
+        config.recording.preview_provider = ""
 
     if not 0.0 <= config.audio_feedback.volume <= 1.0:
         clamped = max(0.0, min(1.0, config.audio_feedback.volume))
