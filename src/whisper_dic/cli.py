@@ -312,8 +312,8 @@ def _rotate_log_if_needed() -> None:
 
 def _generate_plist() -> str:
     import shutil
-    script_path = shutil.which("whisper-dic") or "whisper-dic"
-    script_path = Path(script_path).resolve()
+    found = shutil.which("whisper-dic") or "whisper-dic"
+    script_path = Path(found).resolve()
     return f"""\
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
