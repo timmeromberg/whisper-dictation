@@ -607,14 +607,18 @@ fi
 echo ""
 echo "--- Step 13: Transcription ---"
 
+# Give the model a moment to load after restart (health check passes before model is ready)
+sleep 2
+
 if [ -f "$TEST_AUDIO" ]; then
-    RESPONSE=$(curl -sf -X POST http://localhost:2022/v1/audio/transcriptions \
+    RESPONSE=$(curl -s --max-time 30 -X POST http://localhost:2022/v1/audio/transcriptions \
         -F "file=@$TEST_AUDIO;type=audio/flac" \
         -F "model=tiny" \
-        -F "language=en" 2>&1 || echo "CURL_FAILED")
+        -F "language=en" 2>&1)
+    CURL_EXIT=$?
 
-    if [ "$RESPONSE" = "CURL_FAILED" ]; then
-        fail "Transcription: curl failed"
+    if [ "$CURL_EXIT" -ne 0 ] || [ -z "$RESPONSE" ]; then
+        fail "Transcription: curl failed (exit=$CURL_EXIT)"
     else
         # Check valid JSON
         if echo "$RESPONSE" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
