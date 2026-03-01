@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Question or Discussion
-    url: https://github.com/timmeromberg/whisper-dic/issues
-    about: For questions, open a regular issue with the "question" label.
+  - name: Ask a Question
+    url: https://github.com/timmeromberg/whisper-dic/discussions/categories/q-a
+    about: Ask questions and get help from the community.
+  - name: Share an Idea
+    url: https://github.com/timmeromberg/whisper-dic/discussions/categories/ideas
+    about: Suggest ideas and discuss features before opening an issue.

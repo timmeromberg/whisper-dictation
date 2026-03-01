@@ -10,6 +10,10 @@ description = "System-wide hold-to-dictate for macOS and Windows using Whisper"
 license = {text = "MIT"}
 authors = [{name = "Tim Romberg"}]
 readme = "README.md"
+keywords = [
+    "whisper", "dictation", "speech-to-text", "voice-typing",
+    "transcription", "accessibility", "macos", "windows",
+]
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",

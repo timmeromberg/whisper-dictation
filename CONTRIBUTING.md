@@ -104,5 +104,6 @@ scripts/          # Smoke test, E2E test
 
 ## Need Help?
 
-- Open an [issue](https://github.com/timmeromberg/whisper-dic/issues) for bugs or feature ideas
+- Ask in [Discussions](https://github.com/timmeromberg/whisper-dic/discussions) for questions and ideas
+- Open an [issue](https://github.com/timmeromberg/whisper-dic/issues) for bugs or feature requests
 - Check existing issues for things to work on — look for `good first issue` labels
