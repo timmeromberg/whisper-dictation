@@ -8,6 +8,37 @@ from .log import log
 
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# (description, system prompt)
+REWRITE_PRESETS: dict[str, tuple[str, str]] = {
+    "light": (
+        "Fix punctuation and capitalization only",
+        "You are a dictation assistant. Fix only punctuation and capitalization in the "
+        "following transcription. Do not change any words, phrasing, or sentence structure. "
+        "Return only the corrected text, nothing else.",
+    ),
+    "medium": (
+        "Fix grammar, punctuation, keep original words",
+        "You are a dictation assistant. Fix grammar, punctuation, and capitalization in the "
+        "following transcription. Keep the original words and meaning as much as possible. "
+        "Return only the corrected text, nothing else.",
+    ),
+    "full": (
+        "Reshape into polished prose",
+        "You are a dictation assistant. Rewrite the following transcription into clear, "
+        "polished prose. Fix grammar, improve sentence structure, and remove redundancy "
+        "while preserving the original meaning. Return only the rewritten text, nothing else.",
+    ),
+}
+
+REWRITE_MODES = list(REWRITE_PRESETS.keys()) + ["custom"]
+
+
+def prompt_for_mode(mode: str, custom_prompt: str) -> str:
+    """Return the system prompt for a given rewrite mode."""
+    if mode in REWRITE_PRESETS:
+        return REWRITE_PRESETS[mode][1]
+    return custom_prompt
+
 
 class Rewriter:
     """Rewrites transcribed text using an LLM via Groq's chat completions API."""

@@ -26,7 +26,7 @@ from .hotkey import KEY_MAP, HotkeyListener
 from .log import log
 from .paster import TextPaster
 from .recorder import Recorder, RecordingResult
-from .rewriter import Rewriter
+from .rewriter import Rewriter, prompt_for_mode
 from .transcriber import create_transcriber, create_transcriber_for
 
 if hasattr(keyboard.Key, "cmd_r"):
@@ -53,7 +53,7 @@ class DictationApp:
             self._rewriter = Rewriter(
                 api_key=config.whisper.groq.api_key,
                 model=config.rewrite.model,
-                prompt=config.rewrite.prompt,
+                prompt=prompt_for_mode(config.rewrite.mode, config.rewrite.prompt),
             )
 
         self.history = TranscriptionHistory()

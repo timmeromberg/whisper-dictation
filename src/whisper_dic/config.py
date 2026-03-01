@@ -82,12 +82,9 @@ class AudioFeedbackConfig:
 @dataclass
 class RewriteConfig:
     enabled: bool = False
+    mode: str = "light"
     model: str = "llama-3.3-70b-versatile"
-    prompt: str = (
-        "You are a dictation assistant. Clean up the following transcription: "
-        "fix grammar, punctuation, and capitalization. Keep the original meaning "
-        "and words as much as possible. Return only the corrected text, nothing else."
-    )
+    prompt: str = ""  # only used when mode = "custom"
 
 
 @dataclass
@@ -198,8 +195,9 @@ def load_config(path: Path) -> AppConfig:
         ),
         rewrite=RewriteConfig(
             enabled=bool(rewrite_data.get("enabled", False)),
+            mode=str(rewrite_data.get("mode", "light")),
             model=str(rewrite_data.get("model", "llama-3.3-70b-versatile")),
-            prompt=str(rewrite_data.get("prompt", RewriteConfig.prompt)),
+            prompt=str(rewrite_data.get("prompt", "")),
         ),
         custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
     )

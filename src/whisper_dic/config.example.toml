@@ -81,9 +81,15 @@ mute_local = true
 # AI-powered rewriting of transcriptions using Groq LLM
 # Requires a Groq API key (reuses whisper.groq.api_key)
 enabled = false
+# Mode: "light", "medium", "full", or "custom"
+#   light  — fix punctuation and capitalization only
+#   medium — fix grammar, punctuation, keep original words
+#   full   — reshape into polished prose
+#   custom — use your own prompt (see below)
+mode = "light"
 model = "llama-3.3-70b-versatile"
-# Customize the rewriting behavior by changing this prompt
-prompt = "You are a dictation assistant. Clean up the following transcription: fix grammar, punctuation, and capitalization. Keep the original meaning and words as much as possible. Return only the corrected text, nothing else."
+# Custom prompt (only used when mode = "custom")
+# prompt = "Rewrite this transcription in a professional tone."
 
 [audio_feedback]
 enabled = true
