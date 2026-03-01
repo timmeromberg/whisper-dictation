@@ -675,9 +675,14 @@ class DictationMenuBar(rumps.App):
             f"Timeout: {self.config.whisper.timeout_seconds}s",
             callback=self._edit_timeout,
         )
+        self._preview_interval_item = rumps.MenuItem(
+            f"Preview Interval: {self.config.recording.preview_interval}s",
+            callback=self._edit_preview_interval,
+        )
         menu.add(self._min_dur_item)
         menu.add(self._max_dur_item)
         menu.add(self._timeout_item)
+        menu.add(self._preview_interval_item)
         return menu
 
     def _prompt_float(self, title: str, message: str, current: float) -> float | None:
@@ -726,6 +731,21 @@ class DictationMenuBar(rumps.App):
             self.config.whisper.timeout_seconds = val
             self._app.config.whisper.timeout_seconds = val
             self._timeout_item.title = f"Timeout: {val}s"
+
+    def _edit_preview_interval(self, _sender: Any) -> None:
+        cur = self.config.recording.preview_interval
+        val = self._prompt_float(
+            "Preview Interval",
+            "Seconds between live preview updates (1.0–30.0).\n"
+            "Lower = more responsive but uses more API calls.",
+            cur,
+        )
+        if val is not None:
+            val = max(1.0, min(30.0, val))
+            self._set_config("recording.preview_interval", str(val))
+            self.config.recording.preview_interval = val
+            self._app.config.recording.preview_interval = val
+            self._preview_interval_item.title = f"Preview Interval: {val}s"
 
     def _build_service_menu(self) -> rumps.MenuItem:
         menu = rumps.MenuItem("Service")
@@ -873,6 +893,8 @@ class DictationMenuBar(rumps.App):
 
         if new_config.recording.preview_interval != old.recording.preview_interval:
             self._app.config.recording.preview_interval = new_config.recording.preview_interval
+            self.config.recording.preview_interval = new_config.recording.preview_interval
+            self._preview_interval_item.title = f"Preview Interval: {new_config.recording.preview_interval}s"
 
         if new_config.recording.device != old.recording.device:
             self._app.recorder.device = new_config.recording.device
