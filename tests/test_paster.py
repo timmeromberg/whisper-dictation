@@ -33,12 +33,16 @@ class TestTextPaster:
             p.paste("   ")
             mock_clip.copy.assert_not_called()
 
-    def test_paste_copies_to_clipboard(self) -> None:
+    def test_paste_copies_to_clipboard_and_restores(self) -> None:
         from paster import TextPaster
         p = TextPaster(paste_delay_seconds=0)
         with patch("paster.pyperclip") as mock_clip, patch("paster.time"):
+            mock_clip.paste.return_value = "old clipboard"
             p.paste("hello world")
-            mock_clip.copy.assert_called_once_with("hello world")
+            # First call sets dictated text, second restores previous clipboard
+            assert mock_clip.copy.call_count == 2
+            mock_clip.copy.assert_any_call("hello world")
+            mock_clip.copy.assert_any_call("old clipboard")
 
     def test_auto_send_in_terminal(self) -> None:
         from paster import TextPaster

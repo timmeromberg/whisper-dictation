@@ -26,6 +26,13 @@ class TextPaster:
             return
 
         with self._lock:
+            # Save current clipboard so we can restore it after pasting.
+            # This prevents accidental re-paste of dictated text.
+            try:
+                saved_clipboard = pyperclip.paste()
+            except Exception:
+                saved_clipboard = ""
+
             log("paste", f"Copying {len(text)} chars to clipboard")
             pyperclip.copy(text)
             time.sleep(self.paste_delay_seconds)
@@ -42,3 +49,11 @@ class TextPaster:
                     time.sleep(0.3)
                     log("paste", "Sending Return")
                     post_keycode(VK_RETURN)
+
+            # Restore previous clipboard after a brief delay for the paste
+            # to be processed by the target application.
+            time.sleep(0.1)
+            try:
+                pyperclip.copy(saved_clipboard)
+            except Exception:
+                pass
