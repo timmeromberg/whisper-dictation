@@ -122,7 +122,16 @@ fi
 echo ""
 echo "--- Step 2: Start server ---"
 
-"$START_SCRIPT" > /tmp/whisper-e2e-server.log 2>&1 &
+# On Windows, run the exe directly (bat files + Git Bash backgrounding is unreliable)
+MODEL_PATH=$(ls "$DATA_DIR"/models/ggml-*.bin 2>/dev/null | head -1)
+"$SERVER_BIN" \
+    --model "$MODEL_PATH" \
+    --host 127.0.0.1 \
+    --port 2022 \
+    --inference-path "/v1/audio/transcriptions" \
+    --convert \
+    --print-progress \
+    > /tmp/whisper-e2e-server.log 2>&1 &
 SERVER_PID=$!
 echo "  Server PID: $SERVER_PID"
 
@@ -564,7 +573,14 @@ fi
 echo ""
 echo "--- Step 12: Server restart ---"
 
-"$START_SCRIPT" > /tmp/whisper-e2e-server.log 2>&1 &
+"$SERVER_BIN" \
+    --model "$MODEL_PATH" \
+    --host 127.0.0.1 \
+    --port 2022 \
+    --inference-path "/v1/audio/transcriptions" \
+    --convert \
+    --print-progress \
+    > /tmp/whisper-e2e-server.log 2>&1 &
 SERVER_PID=$!
 
 HEALTHY=false

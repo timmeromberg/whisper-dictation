@@ -196,16 +196,21 @@ def _acquire_server_windows(data_dir: Path) -> Path:
     print("  Downloading whisper-server...")
     _download_file(zip_url, zip_path, "whisper-bin-x64.zip")
 
-    print("  Extracting whisper-server.exe...")
+    print("  Extracting whisper-server.exe + DLLs...")
     bin_dir.mkdir(parents=True, exist_ok=True)
     found = False
     with zipfile.ZipFile(zip_path) as zf:
         for name in zf.namelist():
-            if name.endswith("whisper-server.exe"):
-                with zf.open(name) as src, server_path.open("wb") as dst:
+            basename = Path(name).name
+            if not basename:
+                continue  # skip directory entries
+            # Extract server exe and all DLLs it depends on
+            if basename == "whisper-server.exe" or basename.endswith(".dll"):
+                dest_file = bin_dir / basename
+                with zf.open(name) as src, dest_file.open("wb") as dst:
                     shutil.copyfileobj(src, dst)
-                found = True
-                break
+                if basename == "whisper-server.exe":
+                    found = True
 
     zip_path.unlink(missing_ok=True)
     tmp_dir.rmdir()
