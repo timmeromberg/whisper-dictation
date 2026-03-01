@@ -33,6 +33,9 @@ whisper-dic setup
 # Unit tests
 pytest
 
+# Coverage (optional, mirrors CI visibility check)
+pytest --cov=src/whisper_dic --cov-report=term-missing
+
 # Linting
 ruff check src/ tests/
 
@@ -43,11 +46,11 @@ mypy src/whisper_dic/
 bash scripts/smoke-test.sh
 ```
 
-All of these run automatically via pre-commit hooks when you commit.
+Run these checks before opening a PR.
 
-## Pre-commit Hooks
+## Optional Pre-commit Hooks
 
-The repo has pre-commit hooks that run lint, compile check, and smoke tests on every commit. They're installed automatically if you have a `.git/hooks/` directory. If a commit fails the hooks, fix the issue and commit again.
+If you want local commit-time checks, install and configure pre-commit in your environment. The repository does not currently ship a mandatory pre-commit hook configuration.
 
 ## Making Changes
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
@@ -10,7 +12,16 @@ from pathlib import Path
 
 from .log import log
 
-_DEFAULT_PERSIST_PATH = Path.home() / ".config" / "whisper-dic" / "history.json"
+
+def _default_persist_path() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "whisper-dic" / "history.json"
+
+
+_DEFAULT_PERSIST_PATH = _default_persist_path()
 _SAVE_DEBOUNCE_SECONDS = 5.0
 
 

@@ -13,7 +13,60 @@ from typing import Any
 
 from .config import AppConfig, _to_toml_literal, load_config, set_config_value
 
-_PID_FILE = Path("/tmp/whisper-dic.pid")
+_SECRET_KEY_TOKENS = ("api_key", "token", "secret", "password")
+
+
+def _read_process_identity(pid: int) -> str:
+    import subprocess as _sp
+
+    try:
+        if sys.platform == "win32":
+            result = _sp.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            return result.stdout.lower()
+        result = _sp.run(
+            ["ps", "-p", str(pid), "-o", "args="],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return result.stdout.lower()
+    except Exception:
+        return ""
+
+
+def _state_dir() -> Path:
+    """Return a per-user writable state directory."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+
+    path = base / "whisper-dic"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32":
+            path.chmod(0o700)
+        return path
+    except OSError:
+        # Fallback for unusual environments where state dir is not writable.
+        if sys.platform != "win32":
+            uid = os.getuid()
+            fallback = Path("/tmp") / f"whisper-dic-{uid}"
+            fallback.mkdir(parents=True, exist_ok=True)
+            return fallback
+        raise
+
+
+def _pid_file_path() -> Path:
+    return _state_dir() / "whisper-dic.pid"
+
+
+_PID_FILE = _pid_file_path()
 
 
 def _default_config_path() -> Path:
@@ -32,12 +85,11 @@ def _check_single_instance() -> bool:
             pid = int(_PID_FILE.read_text().strip())
             os.kill(pid, 0)  # check if process alive
             # Verify the process is actually whisper-dic (PID recycling)
-            import subprocess as _sp
-            result = _sp.run(["ps", "-p", str(pid), "-o", "comm="],
-                             capture_output=True, text=True, timeout=3)
-            if "whisper" in result.stdout.lower() or "python" in result.stdout.lower():
+            cmdline = _read_process_identity(pid)
+            markers = ("whisper-dic", "whisper_dic", "com.whisper.dictation")
+            if any(marker in cmdline for marker in markers):
                 print(f"[error] whisper-dic is already running (PID {pid}).")
-                print("[error] Stop it first, or remove /tmp/whisper-dic.pid if stale.")
+                print(f"[error] Stop it first, or remove {_PID_FILE} if stale.")
                 return False
             # PID exists but is not whisper-dic — stale file
         except (ProcessLookupError, ValueError):
@@ -78,7 +130,7 @@ def _load_config_from_path(config_path: Path) -> AppConfig:
 
     # Fix permissions if config is world-readable (it may contain API keys)
     mode = config_path.stat().st_mode & 0o777
-    if mode & 0o044:
+    if mode & 0o077:
         config_path.chmod(0o600)
         print(f"[security] Fixed {config_path.name} permissions (was {oct(mode)}, now 0600).")
 
@@ -206,7 +258,12 @@ def command_set(config_path: Path, key: str, value: str) -> int:
         print(f"Failed to set '{key}': {exc}")
         return 1
 
-    print(f"[config] Set {key} = {_to_toml_literal(value)}")
+    key_lower = key.lower()
+    if any(token in key_lower for token in _SECRET_KEY_TOKENS):
+        shown = '"***"'
+    else:
+        shown = _to_toml_literal(value)
+    print(f"[config] Set {key} = {shown}")
     return 0
 
 
@@ -279,6 +336,11 @@ def command_run(config_path: Path) -> int:
 
 
 def command_setup(config_path: Path) -> int:
+    if sys.platform != "darwin":
+        print("[setup] Interactive setup is currently supported on macOS only.")
+        print("[setup] Use 'whisper-dic set KEY VALUE' to configure on this platform.")
+        return 1
+
     try:
         _load_config_from_path(config_path)
     except Exception as exc:

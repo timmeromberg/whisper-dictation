@@ -61,7 +61,7 @@ pip install whisper-dic             # Windows
 
 ```bash
 git clone https://github.com/timmeromberg/whisper-dic.git
-cd whisper-dictation
+cd whisper-dic
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[macos]"          # Windows: pip install -e .
@@ -512,7 +512,7 @@ Run `whisper-dic doctor` for a quick diagnostic check of your setup.
 
 ```bash
 git clone https://github.com/timmeromberg/whisper-dic.git
-cd whisper-dictation
+cd whisper-dic
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[macos]"    # macOS (or just `pip install -e .` on Windows)

@@ -54,6 +54,29 @@ class TestGetAccumulatedAudio:
             r.get_accumulated_audio()
             assert len(r._chunks) == 1  # chunks still there
 
+    def test_uses_incremental_cache(self) -> None:
+        with patch("whisper_dic.recorder.sd"), patch("whisper_dic.recorder.sf") as mock_sf:
+            r = Recorder(sample_rate=16000)
+            r._recording = True
+            first = np.zeros((800, 1), dtype=np.int16)
+            second = np.ones((800, 1), dtype=np.int16)
+            r._chunks = [first]
+
+            def fake_write(buf, audio, sr, format):
+                buf.write(b"x")
+
+            mock_sf.write.side_effect = fake_write
+            r.get_accumulated_audio()
+            cache_after_first = r._combined_cache.copy()
+            assert r._combined_chunk_count == 1
+
+            r._chunks.append(second)
+            r.get_accumulated_audio()
+            assert r._combined_chunk_count == 2
+            assert r._combined_cache is not None
+            assert len(r._combined_cache) == 1600
+            assert len(cache_after_first) == 800
+
 
 class TestPreviewLoop:
     def test_preview_loop_stops_on_event(self) -> None:
@@ -175,3 +198,64 @@ class TestPreviewLoop:
             app._preview_stop.set()
             thread.join(timeout=2.0)
             assert not thread.is_alive()  # Should not crash
+
+
+def _base_config() -> MagicMock:
+    config = MagicMock()
+    config.recording.sample_rate = 16000
+    config.recording.device = None
+    config.recording.min_duration = 0.3
+    config.recording.max_duration = 300.0
+    config.recording.streaming_preview = True
+    config.recording.preview_interval = 0.1
+    config.recording.preview_provider = ""
+    config.text_commands.enabled = True
+    config.paste.auto_send = False
+    config.whisper.provider = "local"
+    config.whisper.language = "en"
+    config.whisper.languages = ["en"]
+    config.whisper.timeout_seconds = 120.0
+    config.whisper.prompt = ""
+    config.whisper.failover = False
+    config.whisper.local.url = "http://localhost:2022/v1/audio/transcriptions"
+    config.whisper.local.model = "large-v3"
+    config.whisper.groq.api_key = ""
+    config.hotkey.key = "left_option"
+    config.audio_feedback.enabled = False
+    config.audio_feedback.start_frequency = 880.0
+    config.audio_feedback.stop_frequency = 660.0
+    config.audio_feedback.volume = 0.0
+    config.audio_feedback.duration_seconds = 0.08
+    config.audio_control.enabled = False
+    config.audio_control.mute_local = False
+    config.audio_control.devices = []
+    config.rewrite.enabled = False
+    config.rewrite.mode = "light"
+    config.rewrite.model = "llama-3.3-70b-versatile"
+    config.rewrite.prompt = ""
+    config.custom_commands = {}
+    return config
+
+
+class TestPreviewShutdown:
+    def test_stop_joins_preview_thread_before_close(self) -> None:
+        from whisper_dic.dictation import DictationApp
+
+        with (
+            patch("whisper_dic.recorder.sd"),
+            patch("whisper_dic.dictation.HotkeyListener"),
+            patch("whisper_dic.dictation.check_accessibility", return_value=[]),
+        ):
+            app = DictationApp(_base_config())
+            app._preview_stop.clear()
+            t = threading.Thread(target=lambda: app._preview_stop.wait(5.0), daemon=True)
+            app._preview_thread = t
+            t.start()
+
+            preview = MagicMock()
+            app._preview_transcriber = preview
+
+            app.stop()
+
+            assert not t.is_alive()
+            preview.close.assert_called_once()

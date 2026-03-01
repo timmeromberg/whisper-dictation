@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import io
+import os
 import tempfile
 import threading
 import time
@@ -122,6 +123,19 @@ class DictationApp:
             if lang in self._languages:
                 self._lang_index = self._languages.index(lang)
         self.transcriber.language = lang
+
+    def set_languages(self, languages: list[str], active_language: str | None = None) -> None:
+        """Replace the configured language list in a thread-safe way."""
+        if not languages:
+            return
+        with self._lang_lock:
+            self._languages = list(languages)
+            if active_language and active_language in self._languages:
+                self._lang_index = self._languages.index(active_language)
+            elif self._lang_index >= len(self._languages):
+                self._lang_index = 0
+            current = self._languages[self._lang_index]
+        self.transcriber.language = current
 
     @property
     def listener(self) -> HotkeyListener | NSEventHotkeyListener:
@@ -411,7 +425,10 @@ class DictationApp:
                             raise
                     else:
                         raise
-                log("pipeline", f"Transcript: '{transcript}'")
+                if os.environ.get("WHISPER_DIC_LOG_TRANSCRIPTS", "").strip().lower() in {"1", "true", "yes", "on"}:
+                    log("pipeline", f"Transcript: '{transcript}'")
+                else:
+                    log("pipeline", f"Transcript received ({len(transcript)} chars).")
 
                 cleaned = transcript
                 try:
@@ -544,6 +561,7 @@ class DictationApp:
 
         self._listener.stop()
         self.recorder.stop()
+        self._stop_preview()
 
         with self._threads_lock:
             threads = list(self._pipeline_threads)

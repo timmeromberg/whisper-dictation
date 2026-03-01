@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -39,8 +42,12 @@ MODELS: dict[str, dict[str, str | int]] = {
     "large-v3-turbo":  {"file": "ggml-large-v3-turbo.bin",  "size_mb": 1620},
 }
 
-HF_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+HF_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve"
+HF_TREE_URL = "https://huggingface.co/api/models/ggerganov/whisper.cpp/tree"
+HF_MODEL_INFO_URL = "https://huggingface.co/api/models/ggerganov/whisper.cpp"
 WHISPER_CPP_REPO = "https://github.com/ggml-org/whisper.cpp.git"
+WHISPER_CPP_RELEASE_URL = "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest"
+_ALLOW_INSECURE_DOWNLOADS_ENV = "WHISPER_DIC_ALLOW_INSECURE_DOWNLOADS"
 
 # launchd
 _LOCAL_SERVER_LABEL = "com.whisper-dic.local-server"
@@ -49,6 +56,57 @@ _LOCAL_SERVER_LABEL = "com.whisper-dic.local-server"
 # ---------------------------------------------------------------------------
 # Download helper
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReleaseAsset:
+    name: str
+    url: str
+    sha256: str | None
+
+
+@dataclass(frozen=True)
+class ReleaseInfo:
+    tag_name: str
+    assets: dict[str, ReleaseAsset]
+
+
+def _allow_insecure_downloads() -> bool:
+    val = os.environ.get(_ALLOW_INSECURE_DOWNLOADS_ENV, "").strip().lower()
+    return val in {"1", "true", "yes", "on"}
+
+
+def _parse_sha256_digest(value: str | None) -> str | None:
+    if not value:
+        return None
+    raw = value.strip().lower()
+    if raw.startswith("sha256:"):
+        raw = raw.split(":", 1)[1]
+    if re.fullmatch(r"[0-9a-f]{64}", raw):
+        return raw
+    return None
+
+
+def _sha256_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _assert_integrity(label: str, expected_sha256: str | None, actual_sha256: str) -> None:
+    expected = _parse_sha256_digest(expected_sha256)
+    if expected is None:
+        if _allow_insecure_downloads():
+            print(f"  [security] Warning: no checksum for {label}; continuing due {_ALLOW_INSECURE_DOWNLOADS_ENV}=1")
+            return
+        raise RuntimeError(
+            f"Missing checksum for {label}. "
+            f"Set {_ALLOW_INSECURE_DOWNLOADS_ENV}=1 to bypass (not recommended)."
+        )
+    if actual_sha256 != expected:
+        raise RuntimeError(f"Checksum mismatch for {label}: expected {expected}, got {actual_sha256}")
 
 def _print_progress(label: str, downloaded: int, total: int) -> None:
     if total > 0:
@@ -64,23 +122,64 @@ def _print_progress(label: str, downloaded: int, total: int) -> None:
         print(f"\r  {dl_mb:.0f} MB downloaded — {label}", end="", flush=True)
 
 
-def _download_file(url: str, dest: Path, label: str) -> None:
+def _download_file(url: str, dest: Path, label: str, expected_sha256: str | None = None) -> None:
     """Download a file with progress indicator. Atomic via .part rename."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
+    hasher = hashlib.sha256()
 
-    with httpx.stream("GET", url, follow_redirects=True, timeout=600.0) as response:
-        response.raise_for_status()
-        total = int(response.headers.get("content-length", 0))
-        downloaded = 0
-        with part.open("wb") as f:
-            for chunk in response.iter_bytes(chunk_size=1024 * 1024):
-                f.write(chunk)
-                downloaded += len(chunk)
-                _print_progress(label, downloaded, total)
+    try:
+        with httpx.stream("GET", url, follow_redirects=True, timeout=600.0) as response:
+            response.raise_for_status()
+            total = int(response.headers.get("content-length", 0))
+            downloaded = 0
+            with part.open("wb") as f:
+                for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                    f.write(chunk)
+                    hasher.update(chunk)
+                    downloaded += len(chunk)
+                    _print_progress(label, downloaded, total)
 
-    part.rename(dest)
-    print()  # newline after progress bar
+        actual_sha256 = hasher.hexdigest()
+        _assert_integrity(label, expected_sha256, actual_sha256)
+        part.rename(dest)
+        print()  # newline after progress bar
+        print(f"  Verified SHA256 for {label}: {actual_sha256[:12]}...")
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
+
+
+def _resolve_hf_revision() -> str:
+    """Resolve the current immutable commit SHA for ggerganov/whisper.cpp on HF."""
+    response = httpx.get(HF_MODEL_INFO_URL, follow_redirects=True, timeout=30.0)
+    response.raise_for_status()
+    payload = response.json()
+    sha = str(payload.get("sha", "")).strip().lower() if isinstance(payload, dict) else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("Could not resolve immutable Hugging Face revision SHA.")
+    return sha
+
+
+def _resolve_model_checksums(revision: str) -> dict[str, str]:
+    """Resolve model SHA256 checksums from Hugging Face metadata."""
+    response = httpx.get(f"{HF_TREE_URL}/{revision}?recursive=1", follow_redirects=True, timeout=30.0)
+    response.raise_for_status()
+    checksums: dict[str, str] = {}
+    payload = response.json()
+    if not isinstance(payload, list):
+        return checksums
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        lfs = entry.get("lfs")
+        if not isinstance(path, str) or not isinstance(lfs, dict):
+            continue
+        sha = _parse_sha256_digest(str(lfs.get("oid", "")))
+        if sha:
+            checksums[path] = sha
+    return checksums
 
 
 # ---------------------------------------------------------------------------
@@ -92,14 +191,53 @@ def _download_model(data_dir: Path, model_name: str) -> Path:
     model_file = str(info["file"])
     model_path = data_dir / "models" / model_file
 
+    try:
+        revision = _resolve_hf_revision()
+    except Exception as exc:
+        if _allow_insecure_downloads():
+            revision = "main"
+            print(
+                "  [security] Warning: could not resolve immutable HF revision "
+                f"({exc}); using moving ref 'main' due {_ALLOW_INSECURE_DOWNLOADS_ENV}=1"
+            )
+        else:
+            raise RuntimeError(
+                "Could not resolve immutable Hugging Face revision for model download."
+            ) from exc
+
+    try:
+        checksums = _resolve_model_checksums(revision)
+    except Exception as exc:
+        if _allow_insecure_downloads():
+            checksums = {}
+            print(
+                "  [security] Warning: could not resolve model checksums "
+                f"({exc}); continuing due {_ALLOW_INSECURE_DOWNLOADS_ENV}=1"
+            )
+        else:
+            raise RuntimeError("Could not resolve model checksums from Hugging Face metadata.") from exc
+    expected_sha = checksums.get(model_file)
+
+    if expected_sha is None and not _allow_insecure_downloads():
+        raise RuntimeError(
+            f"Could not resolve checksum for {model_file}. "
+            f"Set {_ALLOW_INSECURE_DOWNLOADS_ENV}=1 to bypass (not recommended)."
+        )
+
     if model_path.exists():
-        print(f"  Model {model_file} already downloaded, skipping.")
-        return model_path
+        actual_sha = _sha256_file(model_path)
+        try:
+            _assert_integrity(model_file, expected_sha, actual_sha)
+            print(f"  Model {model_file} already downloaded and verified, skipping.")
+            return model_path
+        except RuntimeError:
+            print(f"  Existing model failed checksum verification, re-downloading: {model_file}")
+            model_path.unlink(missing_ok=True)
 
     size_mb = info["size_mb"]
     print(f"  Downloading {model_file} ({size_mb} MB)...")
-    url = f"{HF_BASE_URL}/{model_file}"
-    _download_file(url, model_path, model_file)
+    url = f"{HF_BASE_URL}/{revision}/{model_file}"
+    _download_file(url, model_path, model_file, expected_sha256=expected_sha)
     return model_path
 
 
@@ -112,7 +250,7 @@ def _require_command(name: str, install_hint: str) -> None:
         raise RuntimeError(f"'{name}' not found. {install_hint}")
 
 
-def _acquire_server_build(data_dir: Path) -> Path:
+def _acquire_server_build(data_dir: Path, release_tag: str) -> Path:
     """Build whisper-server from source (macOS / Linux)."""
     bin_dir = data_dir / "bin"
     server_path = bin_dir / "whisper-server"
@@ -126,14 +264,15 @@ def _acquire_server_build(data_dir: Path) -> Path:
 
     src_dir = data_dir / "src" / "whisper.cpp"
     if not src_dir.exists():
-        print("  Cloning whisper.cpp...")
+        print(f"  Cloning whisper.cpp ({release_tag})...")
         subprocess.run(
-            ["git", "clone", "--depth", "1", WHISPER_CPP_REPO, str(src_dir)],
+            ["git", "clone", "--depth", "1", "--branch", release_tag, WHISPER_CPP_REPO, str(src_dir)],
             check=True,
         )
     else:
-        print("  Updating whisper.cpp...")
-        subprocess.run(["git", "pull"], cwd=src_dir, check=True)
+        print(f"  Updating whisper.cpp to {release_tag}...")
+        subprocess.run(["git", "fetch", "--depth", "1", "origin", release_tag], cwd=src_dir, check=True)
+        subprocess.run(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=src_dir, check=True)
 
     build_dir = src_dir / "build"
     build_dir.mkdir(exist_ok=True)
@@ -159,29 +298,41 @@ def _acquire_server_build(data_dir: Path) -> Path:
     return server_path
 
 
-def _resolve_latest_release_asset(asset_name: str) -> str:
-    """Find download URL for a GitHub release asset."""
+def _resolve_latest_release() -> ReleaseInfo:
+    """Resolve latest whisper.cpp release metadata and asset checksums."""
     headers: dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     response = httpx.get(
-        "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest",
+        WHISPER_CPP_RELEASE_URL,
         headers=headers,
         follow_redirects=True,
         timeout=30.0,
     )
     response.raise_for_status()
-    for asset in response.json().get("assets", []):
-        if asset["name"] == asset_name:
-            return str(asset["browser_download_url"])
-    raise RuntimeError(
-        f"Asset '{asset_name}' not found in latest whisper.cpp release. "
-        "Check https://github.com/ggml-org/whisper.cpp/releases"
-    )
+    payload = response.json()
+    tag_name = str(payload.get("tag_name", "")).strip()
+    if not tag_name:
+        raise RuntimeError("Could not resolve whisper.cpp release tag from GitHub API.")
+
+    assets: dict[str, ReleaseAsset] = {}
+    for raw in payload.get("assets", []):
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name", "")).strip()
+        url = str(raw.get("browser_download_url", "")).strip()
+        if not name or not url:
+            continue
+        assets[name] = ReleaseAsset(
+            name=name,
+            url=url,
+            sha256=_parse_sha256_digest(str(raw.get("digest", ""))),
+        )
+    return ReleaseInfo(tag_name=tag_name, assets=assets)
 
 
-def _acquire_server_windows(data_dir: Path) -> Path:
+def _acquire_server_windows(data_dir: Path, release: ReleaseInfo) -> Path:
     """Download prebuilt whisper-server.exe from GitHub releases."""
     bin_dir = data_dir / "bin"
     server_path = bin_dir / "whisper-server.exe"
@@ -190,15 +341,20 @@ def _acquire_server_windows(data_dir: Path) -> Path:
         print("  whisper-server.exe already exists, skipping download.")
         return server_path
 
-    print("  Finding latest whisper.cpp release...")
-    zip_url = _resolve_latest_release_asset("whisper-bin-x64.zip")
+    print(f"  Using whisper.cpp release {release.tag_name}...")
+    asset = release.assets.get("whisper-bin-x64.zip")
+    if asset is None:
+        raise RuntimeError(
+            "Asset 'whisper-bin-x64.zip' not found in latest whisper.cpp release. "
+            "Check https://github.com/ggml-org/whisper.cpp/releases"
+        )
 
     tmp_dir = data_dir / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     zip_path = tmp_dir / "whisper-bin-x64.zip"
 
     print("  Downloading whisper-server...")
-    _download_file(zip_url, zip_path, "whisper-bin-x64.zip")
+    _download_file(asset.url, zip_path, asset.name, expected_sha256=asset.sha256)
 
     print("  Extracting whisper-server.exe + DLLs...")
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -360,13 +516,25 @@ def run_setup_local(config_path: Path, model: str | None, autostart: bool) -> in
 
     print(f"\n[setup-local] Data directory: {data_dir}")
 
+    print("\n[setup-local] Resolving trusted release metadata...")
+    try:
+        release = _resolve_latest_release()
+        print(f"  whisper.cpp release: {release.tag_name}")
+    except Exception as exc:
+        print(f"  Failed to resolve release metadata: {exc}")
+        if _allow_insecure_downloads():
+            print(f"  Continuing due {_ALLOW_INSECURE_DOWNLOADS_ENV}=1")
+            release = ReleaseInfo(tag_name="main", assets={})
+        else:
+            return 1
+
     # Step 2: Acquire server binary
     print("\n[setup-local] Step 1/4 — Server binary")
     try:
         if sys.platform == "win32":
-            server_path = _acquire_server_windows(data_dir)
+            server_path = _acquire_server_windows(data_dir, release)
         else:
-            server_path = _acquire_server_build(data_dir)
+            server_path = _acquire_server_build(data_dir, release.tag_name)
     except Exception as exc:
         print(f"\n  Failed to acquire whisper-server: {exc}")
         print("  See manual setup: https://github.com/ggml-org/whisper.cpp")

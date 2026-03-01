@@ -5,6 +5,23 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.8] - 2026-03-02
+
+### Fixed
+- Hardened single-instance PID lock to use a per-user state directory instead of a shared global temp path
+- Stopped preview thread during shutdown before closing transcriber resources
+- Tightened config permission hardening to enforce owner-only access when any group/other bits are set
+- Local model downloads now resolve/check against an immutable Hugging Face revision SHA instead of moving `main`
+- History default persistence path now uses `%APPDATA%` on Windows for consistency with config location
+- `whisper-dic setup` now clearly guards non-macOS usage with an actionable message
+- Corrected source checkout directory names in README examples
+- Corrected CONTRIBUTING pre-commit wording to match repository reality
+- Updated Code of Conduct reporting channel guidance
+
+### Added
+- CI coverage visibility step (`pytest-cov`) on macOS Python 3.12
+- Regression tests for PID pathing, setup platform guard, config permission tightening, pinned model revision URLs, history default paths, and preview shutdown lifecycle
+
 ## [0.9.7] - 2026-03-02
 
 ### Fixed

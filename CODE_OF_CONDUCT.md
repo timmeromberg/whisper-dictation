@@ -6,6 +6,8 @@ By participating, you agree to uphold a welcoming, inclusive, and respectful env
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to the project maintainer via [GitHub Security Advisories](https://github.com/timmeromberg/whisper-dic/security/advisories/new) or by opening a private issue.
+Instances of unacceptable behavior may be reported to the project maintainer at `timmeromberg@gmail.com`.
+
+For security vulnerabilities, use the process in [SECURITY.md](SECURITY.md) instead of Code of Conduct channels.
 
 The maintainer will review and respond to all reports promptly and fairly.

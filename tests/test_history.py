@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import whisper_dic.history as history_mod
 from whisper_dic.history import TranscriptionHistory
 
 
@@ -127,3 +128,15 @@ class TestPersistence:
         # deque maxlen keeps last 5 appended (entries 5-9)
         assert len(h) == 5
         assert h.entries()[0].text == "entry 9"
+
+
+class TestDefaultPath:
+    def test_default_path_posix_uses_xdg_config_home(self, monkeypatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(history_mod.sys, "platform", "darwin")
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        assert history_mod._default_persist_path() == tmp_path / "whisper-dic" / "history.json"
+
+    def test_default_path_windows_uses_appdata(self, monkeypatch, tmp_path: Path) -> None:
+        monkeypatch.setattr(history_mod.sys, "platform", "win32")
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        assert history_mod._default_persist_path() == tmp_path / "whisper-dic" / "history.json"
