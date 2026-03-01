@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+# Build tools for whisper.cpp
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake git g++ make curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install whisper-dic from local source
+COPY pyproject.toml README.md ./
+COPY src/ src/
+COPY tests/ tests/
+COPY scripts/ scripts/
+
+RUN pip install --no-cache-dir -e .
+
+# Run E2E tests
+ENTRYPOINT ["bash", "scripts/e2e-test.sh"]
