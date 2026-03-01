@@ -5,6 +5,14 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-01
+
+### Added
+- AI rewriting: optional LLM-powered cleanup of transcriptions via Groq chat completions
+- Configurable rewrite prompt in `[rewrite]` config section
+- Menu bar toggle for AI rewriting (macOS)
+- Rewrite status shown in `whisper-dic status` output
+
 ## [0.7.1] - 2026-03-01
 
 ### Fixed

@@ -10,6 +10,7 @@ System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release �
 - **Auto-send** — hold Option/Alt + Ctrl to auto-press Return after pasting (for chat/terminal)
 - **Multi-language** — double-tap the hotkey to cycle between configured languages
 - **Text commands** — say "period", "new line", "question mark" for punctuation
+- **AI rewriting** — optional LLM-powered cleanup of transcriptions (grammar, punctuation, capitalization)
 - **Filler removal** — automatically strips "um", "uh", "you know", etc.
 - **Provider failover** — automatically tries the other provider when the primary fails
 - **Whisper prompt** — bias transcription toward domain-specific vocabulary
@@ -232,6 +233,20 @@ prompt = "whisper-dic, macOS, Groq, PyAudio"
 language = "en"
 languages = ["en", "nl", "de"]  # double-tap cycles through these
 ```
+
+### AI Rewriting
+
+Use an LLM to clean up transcriptions (fix grammar, punctuation, capitalization). Requires a Groq API key (reuses your existing `whisper.groq.api_key`):
+
+```toml
+[rewrite]
+enabled = true
+model = "llama-3.3-70b-versatile"
+# Customize rewriting behavior by changing this prompt
+prompt = "You are a dictation assistant. Clean up the following transcription: fix grammar, punctuation, and capitalization. Keep the original meaning and words as much as possible. Return only the corrected text, nothing else."
+```
+
+On macOS, toggle AI rewriting live from the menu bar. When disabled, raw transcriptions are pasted as before.
 
 ### Audio Feedback
 
