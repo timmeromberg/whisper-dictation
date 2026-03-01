@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import AppConfig, _to_toml_literal, load_config, set_config_value
-from .dictation import DictationApp
-from .transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
 
 _PID_FILE = Path("/tmp/whisper-dic.pid")
 
@@ -105,6 +103,8 @@ def _print_status(config_path: Path, config: AppConfig) -> None:
 
 
 def _check_endpoint_reachability(config: AppConfig) -> tuple[bool, bool, bool]:
+    from .transcriber import GroqWhisperTranscriber, LocalWhisperTranscriber, create_transcriber
+
     local = LocalWhisperTranscriber(
         url=config.whisper.local.url,
         language=config.whisper.language,
@@ -235,6 +235,8 @@ def command_run(config_path: Path) -> int:
         return 1
 
     try:
+        from .dictation import DictationApp
+
         app = DictationApp(config)
     except Exception as exc:
         print(f"Failed to initialize app: {exc}")
