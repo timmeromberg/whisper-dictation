@@ -13,7 +13,7 @@ import sounddevice as sd
 from .cli import _PLIST_PATH, command_install, command_uninstall
 from .config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
 from .dictation import DictationApp
-from .overlay import RecordingOverlay
+from .overlay import PreviewOverlay, RecordingOverlay
 from .transcriber import create_transcriber
 
 PROVIDER_OPTIONS = ["local", "groq"]
@@ -39,6 +39,7 @@ class DictationMenuBar(rumps.App):
         self._health_notified = False
         self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
         self._overlay = RecordingOverlay()
+        self._preview_overlay = PreviewOverlay()
         self._volume_last_change = 0.0
 
         self._status_item = rumps.MenuItem("Status: Idle")
@@ -51,6 +52,11 @@ class DictationMenuBar(rumps.App):
         self._mic_menu = self._build_microphone_menu()
         self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item = (
             self._build_toggle_items()
+        )
+        sp_on = self.config.recording.streaming_preview
+        self._preview_item = rumps.MenuItem(
+            f"Live Preview: {'on' if sp_on else 'off'}",
+            callback=self._toggle_preview,
         )
         self._rewrite_menu = self._build_rewrite_menu()
         self._help_menu = self._build_help_menu()
@@ -69,6 +75,7 @@ class DictationMenuBar(rumps.App):
             self._autosend_item,
             self._audioctrl_item,
             self._failover_item,
+            self._preview_item,
             self._rewrite_menu,
             None,
             self._history_menu,
@@ -310,12 +317,18 @@ class DictationMenuBar(rumps.App):
             self.title = "\u23f3"
             self._status_item.title = "Status: Transcribing..."
             self._overlay.show_transcribing()
+        elif state == "preview":
+            if detail:
+                self._preview_overlay.show(detail)
+            else:
+                self._preview_overlay.hide()
         elif state == "idle":
             self._is_recording = False
             self._level_timer.stop()
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
             self._overlay.hide()
+            self._preview_overlay.hide()
             self._rebuild_history_menu()
         elif state == "language_changed":
             self.title = "\U0001f3a4"
@@ -519,6 +532,15 @@ class DictationMenuBar(rumps.App):
         self._app.config.whisper.failover = new_val
         self._failover_item.title = f"Failover: {'on' if new_val else 'off'}"
         print(f"[menubar] Failover: {'on' if new_val else 'off'}")
+
+    def _toggle_preview(self, _sender: Any) -> None:
+        current = self.config.recording.streaming_preview
+        new_val = not current
+        self._set_config("recording.streaming_preview", "true" if new_val else "false")
+        self.config.recording.streaming_preview = new_val
+        self._app.config.recording.streaming_preview = new_val
+        self._preview_item.title = f"Live Preview: {'on' if new_val else 'off'}"
+        print(f"[menubar] Live Preview: {'on' if new_val else 'off'}")
 
     def _toggle_rewrite(self, _sender: Any) -> None:
         current = self.config.rewrite.enabled
@@ -841,6 +863,14 @@ class DictationMenuBar(rumps.App):
             self._update_rewrite_labels()
             for m, item in self._rewrite_mode_items.items():
                 item.state = 1 if m == new_config.rewrite.mode else 0
+
+        if new_config.recording.streaming_preview != old.recording.streaming_preview:
+            self._app.config.recording.streaming_preview = new_config.recording.streaming_preview
+            sp_on = new_config.recording.streaming_preview
+            self._preview_item.title = f"Live Preview: {'on' if sp_on else 'off'}"
+
+        if new_config.recording.preview_interval != old.recording.preview_interval:
+            self._app.config.recording.preview_interval = new_config.recording.preview_interval
 
         if new_config.recording.device != old.recording.device:
             self._app.recorder.device = new_config.recording.device

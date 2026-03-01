@@ -27,7 +27,7 @@ from .log import log
 from .paster import TextPaster
 from .recorder import Recorder, RecordingResult
 from .rewriter import Rewriter, prompt_for_mode
-from .transcriber import create_transcriber, create_transcriber_for
+from .transcriber import WhisperTranscriber, create_transcriber, create_transcriber_for
 
 if hasattr(keyboard.Key, "cmd_r"):
     KEY_MAP.setdefault("right_command", keyboard.Key.cmd_r)
@@ -80,8 +80,12 @@ class DictationApp:
         self._threads_lock = threading.Lock()
         self._pipeline_threads: set[threading.Thread] = set()
 
+        self._preview_stop = threading.Event()
+        self._preview_thread: threading.Thread | None = None
+        self._preview_transcriber: WhisperTranscriber | None = None
+
         # Optional callback for UI updates: fn(state: str, detail: str)
-        # States: "idle", "recording", "transcribing", "language_changed"
+        # States: "idle", "recording", "transcribing", "preview", "language_changed"
         self.on_state_change: Callable[[str, str], None] | None = None
 
         atexit.register(self._atexit_cleanup)
@@ -302,11 +306,13 @@ class DictationApp:
             log("recording", "Started.")
             self._emit_state("recording")
             self.play_beep(self.config.audio_feedback.start_frequency)
+            self._start_preview()
 
     def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
         if self.stopped:
             return
 
+        self._stop_preview()
         result = self.recorder.stop()
 
         # Unmute audio devices after recording stops
@@ -425,6 +431,47 @@ class DictationApp:
             with self._threads_lock:
                 self._pipeline_threads.discard(current)
 
+    def _start_preview(self) -> None:
+        """Start the live preview thread if streaming preview is enabled."""
+        if not self.config.recording.streaming_preview:
+            return
+        self._preview_stop.clear()
+        if self._preview_transcriber is None:
+            try:
+                self._preview_transcriber = create_transcriber(self.config.whisper)
+            except Exception as exc:
+                log("preview", f"Failed to create preview transcriber: {exc}")
+                return
+        self._preview_thread = threading.Thread(
+            target=self._run_preview_loop, daemon=True, name="preview",
+        )
+        self._preview_thread.start()
+
+    def _stop_preview(self) -> None:
+        """Stop the live preview thread."""
+        self._preview_stop.set()
+        if self._preview_thread is not None:
+            self._preview_thread.join(timeout=2.0)
+            self._preview_thread = None
+
+    def _run_preview_loop(self) -> None:
+        """Periodically transcribe accumulated audio and emit preview state."""
+        interval = self.config.recording.preview_interval
+        transcriber = self._preview_transcriber
+        if transcriber is None:
+            return
+        while not self._preview_stop.wait(interval):
+            audio = self.recorder.get_accumulated_audio()
+            if audio is None:
+                continue
+            try:
+                text = transcriber.transcribe(audio)
+                if text.strip():
+                    self._emit_state("preview", text.strip())
+            except Exception as exc:
+                log("preview", f"Preview transcription failed: {exc}")
+        self._emit_state("preview", "")
+
     def run(self) -> int:
         missing = self.check_permissions()
         for perm in missing:
@@ -468,6 +515,8 @@ class DictationApp:
         self.cleaner.close()
         if self._rewriter is not None:
             self._rewriter.close()
+        if self._preview_transcriber is not None:
+            self._preview_transcriber.close()
         log("shutdown", "Complete.")
 
     def _atexit_cleanup(self) -> None:

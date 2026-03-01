@@ -33,6 +33,8 @@ class RecordingConfig:
     max_duration: float = 300.0
     sample_rate: int = 16000
     device: str | None = None
+    streaming_preview: bool = False
+    preview_interval: float = 4.0
 
 
 @dataclass
@@ -147,6 +149,8 @@ def load_config(path: Path) -> AppConfig:
             max_duration=float(recording_data.get("max_duration", 300.0)),
             sample_rate=int(recording_data.get("sample_rate", 16000)),
             device=recording_data.get("device", None) or None,
+            streaming_preview=bool(recording_data.get("streaming_preview", False)),
+            preview_interval=float(recording_data.get("preview_interval", 4.0)),
         ),
         paste=PasteConfig(
             auto_send=bool(paste_data.get("auto_send", False)),
@@ -218,6 +222,11 @@ def _validate_config(config: AppConfig) -> AppConfig:
     if config.recording.sample_rate not in valid_rates:
         log("config", f"sample_rate={config.recording.sample_rate} invalid, clamped to 16000")
         config.recording.sample_rate = 16000
+
+    if not 2.0 <= config.recording.preview_interval <= 30.0:
+        clamped = max(2.0, min(30.0, config.recording.preview_interval))
+        log("config", f"preview_interval={config.recording.preview_interval} out of range, clamped to {clamped}")
+        config.recording.preview_interval = clamped
 
     if not 0.0 <= config.audio_feedback.volume <= 1.0:
         clamped = max(0.0, min(1.0, config.audio_feedback.volume))

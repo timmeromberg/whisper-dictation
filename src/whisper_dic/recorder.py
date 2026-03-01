@@ -95,6 +95,17 @@ class Recorder:
 
         return True
 
+    def get_accumulated_audio(self) -> bytes | None:
+        """Snapshot accumulated audio as FLAC bytes without stopping recording."""
+        with self._lock:
+            if not self._recording or not self._chunks:
+                return None
+            audio = np.concatenate(self._chunks, axis=0)
+
+        buffer = io.BytesIO()
+        sf.write(buffer, audio, self.sample_rate, format="FLAC")
+        return buffer.getvalue()
+
     def stop(self) -> Optional[RecordingResult]:
         with self._lock:
             if not self._recording:
