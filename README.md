@@ -53,7 +53,7 @@ pip install whisper-dic             # Windows
 **Option C — from source:**
 
 ```bash
-git clone https://github.com/timmeromberg/whisper-dictation.git
+git clone https://github.com/timmeromberg/whisper-dic.git
 cd whisper-dictation
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
@@ -359,7 +359,7 @@ Not available on Windows — use `whisper-dic.bat run` for foreground mode.
 ## Development
 
 ```bash
-git clone https://github.com/timmeromberg/whisper-dictation.git
+git clone https://github.com/timmeromberg/whisper-dic.git
 cd whisper-dictation
 python3 -m venv .venv
 source .venv/bin/activate
