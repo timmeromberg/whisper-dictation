@@ -14,6 +14,12 @@ DEFAULT_GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_GROQ_MODEL = "whisper-large-v3"
 
 
+def _redact_keys(text: str) -> str:
+    """Replace anything that looks like an API key with a placeholder."""
+    import re
+    return re.sub(r'(gsk_|sk-|Bearer\s+)\S{6,}', r'\1***', text)
+
+
 def _describe_http_error(response: httpx.Response) -> str:
     """Turn HTTP errors into actionable messages."""
     code = response.status_code
@@ -27,7 +33,7 @@ def _describe_http_error(response: httpx.Response) -> str:
         return "Rate limit exceeded. Wait a moment and try again."
     if code >= 500:
         return f"Server error ({code}). The provider may be temporarily down."
-    return f"HTTP {code}: {response.text[:200]}"
+    return f"HTTP {code}: {_redact_keys(response.text[:200])}"
 
 
 class WhisperTranscriber(ABC):

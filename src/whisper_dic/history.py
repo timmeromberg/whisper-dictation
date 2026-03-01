@@ -66,6 +66,7 @@ class TranscriptionHistory:
             self._persist_path.parent.mkdir(parents=True, exist_ok=True)
             data = [asdict(e) for e in self._entries]
             self._persist_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            self._persist_path.chmod(0o600)
             self._last_save_time = now
             self._dirty = False
         except OSError as exc:

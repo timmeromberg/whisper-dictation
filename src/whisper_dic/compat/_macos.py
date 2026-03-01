@@ -135,6 +135,7 @@ def notify(message: str, title: str = "whisper-dic") -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
+            timeout=5,
         )
     except Exception as exc:
         log("notify", f"Notification failed: {exc}")
@@ -143,7 +144,7 @@ def notify(message: str, title: str = "whisper-dic") -> None:
 def play_wav_file(path: str) -> None:
     """Play a WAV file via macOS afplay."""
     try:
-        subprocess.run(["afplay", path], timeout=5)
+        subprocess.run(["afplay", path], capture_output=True, timeout=5)
     except Exception as exc:
         log("audio", f"Playback failed: {exc}")
 

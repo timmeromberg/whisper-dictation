@@ -31,13 +31,29 @@ def _check_single_instance() -> bool:
         try:
             pid = int(_PID_FILE.read_text().strip())
             os.kill(pid, 0)  # check if process alive
-            print(f"[error] whisper-dic is already running (PID {pid}).")
-            print("[error] Stop it first, or remove /tmp/whisper-dic.pid if stale.")
-            return False
+            # Verify the process is actually whisper-dic (PID recycling)
+            import subprocess as _sp
+            result = _sp.run(["ps", "-p", str(pid), "-o", "comm="],
+                             capture_output=True, text=True, timeout=3)
+            if "whisper" in result.stdout.lower() or "python" in result.stdout.lower():
+                print(f"[error] whisper-dic is already running (PID {pid}).")
+                print("[error] Stop it first, or remove /tmp/whisper-dic.pid if stale.")
+                return False
+            # PID exists but is not whisper-dic — stale file
         except (ProcessLookupError, ValueError):
             pass  # stale PID file — overwrite
+        except PermissionError:
+            # PID file owned by another user — remove and recreate
+            try:
+                _PID_FILE.unlink()
+            except OSError:
+                pass
 
-    _PID_FILE.write_text(str(os.getpid()))
+    try:
+        _PID_FILE.write_text(str(os.getpid()))
+    except PermissionError:
+        print("[warning] Cannot write PID file, continuing without single-instance lock.")
+        return True
     atexit.register(_cleanup_pid)
     return True
 

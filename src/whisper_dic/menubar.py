@@ -362,24 +362,26 @@ class DictationMenuBar(rumps.App):
         def _run():
             ok = self._app.transcriber.health_check()
             if not ok and self._provider_healthy:
-                # Provider just went down
-                self._provider_healthy = False
-                self._status_item.title = "Status: Provider Unreachable"
-                self.title = "\u26a0\ufe0f"  # warning emoji
-                if not self._health_notified:
-                    provider = self.config.whisper.provider
-                    rumps.notification("whisper-dic", "Provider Unreachable",
-                                       f"{provider} is not responding. Dictation may fail.")
-                    self._health_notified = True
+                def _update_down():
+                    self._provider_healthy = False
+                    self._status_item.title = "Status: Provider Unreachable"
+                    self.title = "\u26a0\ufe0f"  # warning emoji
+                    if not self._health_notified:
+                        provider = self.config.whisper.provider
+                        rumps.notification("whisper-dic", "Provider Unreachable",
+                                           f"{provider} is not responding. Dictation may fail.")
+                        self._health_notified = True
+                callAfter(_update_down)
             elif ok and not self._provider_healthy:
-                # Provider recovered
-                self._provider_healthy = True
-                self._health_notified = False
-                if not self._is_recording:
-                    self._status_item.title = "Status: Idle"
-                    self.title = "\U0001f3a4"
-                rumps.notification("whisper-dic", "Provider Online",
-                                   "Connection restored. Dictation is ready.")
+                def _update_up():
+                    self._provider_healthy = True
+                    self._health_notified = False
+                    if not self._is_recording:
+                        self._status_item.title = "Status: Idle"
+                        self.title = "\U0001f3a4"
+                    rumps.notification("whisper-dic", "Provider Online",
+                                       "Connection restored. Dictation is ready.")
+                callAfter(_update_up)
         threading.Thread(target=_run, daemon=True).start()
 
     def _update_level(self, _timer: Any) -> None:
@@ -906,40 +908,25 @@ class DictationMenuBar(rumps.App):
         old = self.config
         self.config = new_config
 
+        # Non-UI state updates (safe from any thread)
         if new_config.whisper.provider != old.whisper.provider:
             self._app.transcriber.close()
             self._app.transcriber = create_transcriber(new_config.whisper)
-            self._provider_menu.title = f"Provider: {new_config.whisper.provider}"
-            for item in self._provider_menu.values():
-                item.state = 1 if item.title == new_config.whisper.provider else 0
 
         if new_config.whisper.language != old.whisper.language:
             self._app.set_language(new_config.whisper.language)
-            display = LANG_NAMES.get(new_config.whisper.language, new_config.whisper.language)
-            self._lang_menu.title = f"Language: {display}"
-            for item in self._lang_menu.values():
-                lang_code = item.title.split("(")[-1].rstrip(")") if "(" in item.title else ""
-                item.state = 1 if lang_code == new_config.whisper.language else 0
 
         if new_config.hotkey.key != old.hotkey.key:
             self._app._listener.set_key(new_config.hotkey.key)
-            self._hotkey_menu.title = f"Hotkey: {new_config.hotkey.key.replace('_', ' ')}"
-            for item in self._hotkey_menu.values():
-                item.state = 1 if getattr(item, "_hotkey_value", None) == new_config.hotkey.key else 0
 
         if new_config.audio_feedback.volume != old.audio_feedback.volume:
             self._app.config.audio_feedback.volume = new_config.audio_feedback.volume
-            pct = int(new_config.audio_feedback.volume * 100)
-            self._volume_menu.title = f"Volume: {pct}%"
-            self._volume_slider.value = pct
 
         if new_config.paste.auto_send != old.paste.auto_send:
             self._app.config.paste.auto_send = new_config.paste.auto_send
-            self._autosend_item.title = f"Auto-Send: {'on' if new_config.paste.auto_send else 'off'}"
 
         if new_config.text_commands.enabled != old.text_commands.enabled:
             self._app.cleaner.text_commands = new_config.text_commands.enabled
-            self._textcmds_item.title = f"Text Commands: {'on' if new_config.text_commands.enabled else 'off'}"
 
         ac_changed = (
             new_config.audio_control.enabled != old.audio_control.enabled
@@ -949,11 +936,9 @@ class DictationMenuBar(rumps.App):
         if ac_changed:
             from .audio_control import AudioController
             self._app.audio_controller = AudioController(new_config.audio_control)
-            self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
 
         if new_config.whisper.failover != old.whisper.failover:
             self._app.config.whisper.failover = new_config.whisper.failover
-            self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
 
         rw_changed = (
             new_config.rewrite.enabled != old.rewrite.enabled
@@ -970,19 +955,6 @@ class DictationMenuBar(rumps.App):
                 if self._app._rewriter is not None:
                     self._app._rewriter.close()
                     self._app._rewriter = None
-            self._update_rewrite_labels()
-            for m, item in self._rewrite_mode_items.items():
-                item.state = 1 if m == new_config.rewrite.mode else 0
-
-        if new_config.recording.streaming_preview != old.recording.streaming_preview:
-            self._app.config.recording.streaming_preview = new_config.recording.streaming_preview
-            sp_on = new_config.recording.streaming_preview
-            self._preview_item.title = f"Live Preview: {'on' if sp_on else 'off'}"
-
-        if new_config.recording.preview_interval != old.recording.preview_interval:
-            self._app.config.recording.preview_interval = new_config.recording.preview_interval
-            self.config.recording.preview_interval = new_config.recording.preview_interval
-            self._preview_interval_item.title = f"Preview Interval: {new_config.recording.preview_interval}s"
 
         if new_config.recording.preview_provider != old.recording.preview_provider:
             self._app.config.recording.preview_provider = new_config.recording.preview_provider
@@ -990,19 +962,117 @@ class DictationMenuBar(rumps.App):
             if self._app._preview_transcriber is not None:
                 self._app._preview_transcriber.close()
                 self._app._preview_transcriber = None
-            label = new_config.recording.preview_provider or new_config.whisper.provider
-            self._preview_provider_menu.title = f"Preview Provider: {label}"
-            for item in self._preview_provider_menu.values():
-                item.state = 1 if item.title == label else 0
 
-        if new_config.recording.device != old.recording.device:
-            self._app.recorder.device = new_config.recording.device
-            label = new_config.recording.device or "System Default"
-            self._mic_menu.title = f"Microphone: {label}"
-            for item in self._mic_menu.values():
-                item.state = 1 if getattr(item, "_mic_device", object()) == new_config.recording.device else 0
+        if new_config.recording.streaming_preview != old.recording.streaming_preview:
+            self._app.config.recording.streaming_preview = new_config.recording.streaming_preview
 
-        rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
+        if new_config.recording.preview_interval != old.recording.preview_interval:
+            self._app.config.recording.preview_interval = new_config.recording.preview_interval
+            self.config.recording.preview_interval = new_config.recording.preview_interval
+
+        # Recording settings
+        if new_config.recording.min_duration != old.recording.min_duration:
+            self._app.config.recording.min_duration = new_config.recording.min_duration
+
+        if new_config.recording.max_duration != old.recording.max_duration:
+            self._app.config.recording.max_duration = new_config.recording.max_duration
+
+        if new_config.recording.sample_rate != old.recording.sample_rate:
+            self._app.config.recording.sample_rate = new_config.recording.sample_rate
+            self._app.recorder.sample_rate = new_config.recording.sample_rate
+
+        # Whisper settings that require transcriber recreation
+        whisper_params_changed = (
+            new_config.whisper.timeout_seconds != old.whisper.timeout_seconds
+            or new_config.whisper.prompt != old.whisper.prompt
+        )
+        if whisper_params_changed:
+            self._app.transcriber.close()
+            self._app.transcriber = create_transcriber(new_config.whisper)
+
+        # Language list
+        if new_config.whisper.languages != old.whisper.languages:
+            self._app._languages = list(new_config.whisper.languages)
+
+        # Custom commands
+        if new_config.custom_commands != old.custom_commands:
+            from . import commands
+            if new_config.custom_commands:
+                commands.register_custom(new_config.custom_commands)
+
+        # UI updates — must dispatch to main thread
+        def _sync_ui():
+            if new_config.whisper.provider != old.whisper.provider:
+                self._provider_menu.title = f"Provider: {new_config.whisper.provider}"
+                for item in self._provider_menu.values():
+                    item.state = 1 if item.title == new_config.whisper.provider else 0
+
+            if new_config.whisper.language != old.whisper.language:
+                display = LANG_NAMES.get(new_config.whisper.language, new_config.whisper.language)
+                self._lang_menu.title = f"Language: {display}"
+                for item in self._lang_menu.values():
+                    lang_code = item.title.split("(")[-1].rstrip(")") if "(" in item.title else ""
+                    item.state = 1 if lang_code == new_config.whisper.language else 0
+
+            if new_config.hotkey.key != old.hotkey.key:
+                self._hotkey_menu.title = f"Hotkey: {new_config.hotkey.key.replace('_', ' ')}"
+                for item in self._hotkey_menu.values():
+                    item.state = 1 if getattr(item, "_hotkey_value", None) == new_config.hotkey.key else 0
+
+            if new_config.audio_feedback.volume != old.audio_feedback.volume:
+                pct = int(new_config.audio_feedback.volume * 100)
+                self._volume_menu.title = f"Volume: {pct}%"
+                self._volume_slider.value = pct
+
+            if new_config.paste.auto_send != old.paste.auto_send:
+                self._autosend_item.title = f"Auto-Send: {'on' if new_config.paste.auto_send else 'off'}"
+
+            if new_config.text_commands.enabled != old.text_commands.enabled:
+                self._textcmds_item.title = f"Text Commands: {'on' if new_config.text_commands.enabled else 'off'}"
+
+            if ac_changed:
+                self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
+
+            if new_config.whisper.failover != old.whisper.failover:
+                self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
+
+            if rw_changed:
+                self._update_rewrite_labels()
+                for m, item in self._rewrite_mode_items.items():
+                    item.state = 1 if m == new_config.rewrite.mode else 0
+
+            if new_config.recording.streaming_preview != old.recording.streaming_preview:
+                sp_on = new_config.recording.streaming_preview
+                self._preview_item.title = f"Live Preview: {'on' if sp_on else 'off'}"
+
+            if new_config.recording.preview_interval != old.recording.preview_interval:
+                self._preview_interval_item.title = f"Preview Interval: {new_config.recording.preview_interval}s"
+
+            if new_config.recording.preview_provider != old.recording.preview_provider:
+                label = new_config.recording.preview_provider or new_config.whisper.provider
+                self._preview_provider_menu.title = f"Preview Provider: {label}"
+                for item in self._preview_provider_menu.values():
+                    item.state = 1 if item.title == label else 0
+
+            if new_config.recording.min_duration != old.recording.min_duration:
+                self._min_dur_item.title = f"Min Duration: {new_config.recording.min_duration}s"
+
+            if new_config.recording.max_duration != old.recording.max_duration:
+                self._max_dur_item.title = f"Max Duration: {new_config.recording.max_duration}s"
+
+            if whisper_params_changed:
+                self._timeout_item.title = f"Timeout: {new_config.whisper.timeout_seconds}s"
+
+            if new_config.recording.device != old.recording.device:
+                self._app.recorder.device = new_config.recording.device
+                label = new_config.recording.device or "System Default"
+                self._mic_menu.title = f"Microphone: {label}"
+                for item in self._mic_menu.values():
+                    item.state = 1 if getattr(item, "_mic_device", object()) == new_config.recording.device else 0
+
+            rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
+
+        callAfter(_sync_ui)
 
     def _run_wizard(self, _timer: Any = None) -> None:
         """First-run setup wizard — guides through provider, API key, hotkey."""
