@@ -78,6 +78,8 @@ module = [
     "pychromecast.*",
     "async_upnp_client",
     "async_upnp_client.*",
+    "simple_term_menu",
+    "simple_term_menu.*",
     "tomllib",
 ]
 ignore_missing_imports = true
