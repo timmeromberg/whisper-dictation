@@ -435,6 +435,7 @@ class DictationApp:
         """Start the live preview thread if streaming preview is enabled."""
         if not self.config.recording.streaming_preview:
             return
+        log("preview", "Starting live preview thread...")
         self._preview_stop.clear()
         if self._preview_transcriber is None:
             try:

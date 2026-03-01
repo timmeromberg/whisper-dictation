@@ -8,6 +8,7 @@ from typing import Any
 from AppKit import (
     NSBezierPath,
     NSColor,
+    NSEvent,
     NSFloatingWindowLevel,
     NSFont,
     NSMakeRect,
@@ -103,11 +104,12 @@ class RecordingOverlay:
 
 
 class PreviewOverlay:
-    """Floating translucent panel showing live transcription preview text."""
+    """Floating translucent panel showing live transcription preview near the cursor."""
 
     WIDTH = 400
     HEIGHT = 60
     PADDING = 8
+    CURSOR_OFFSET_Y = 20  # pixels above the cursor
     MAX_DISPLAY_CHARS = 120
 
     def __init__(self) -> None:
@@ -115,7 +117,7 @@ class PreviewOverlay:
         self._label: NSTextField | None = None
 
     def show(self, text: str) -> None:
-        """Show or update preview text. Safe to call from any thread."""
+        """Show or update preview text near cursor. Safe to call from any thread."""
         callAfter(self._show, text)
 
     def hide(self) -> None:
@@ -127,14 +129,8 @@ class PreviewOverlay:
         if self._window is not None:
             return
 
-        screen = NSScreen.mainScreen()
-        if screen is None:
-            return
-        frame = screen.frame()
-
-        x = frame.size.width - self.WIDTH - 20
-        y = frame.size.height - 50
-        rect = NSMakeRect(x, y, self.WIDTH, self.HEIGHT)
+        # Initial rect — will be repositioned in _show
+        rect = NSMakeRect(0, 0, self.WIDTH, self.HEIGHT)
 
         window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             rect,
@@ -175,8 +171,36 @@ class PreviewOverlay:
         self._window = window
         self._label = label
 
+    def _position_near_cursor(self) -> None:
+        """Reposition window near the mouse cursor, clamped to screen."""
+        if self._window is None:
+            return
+
+        mouse = NSEvent.mouseLocation()
+        screen = NSScreen.mainScreen()
+        if screen is None:
+            return
+
+        visible = screen.visibleFrame()
+        vx, vy = visible.origin.x, visible.origin.y
+        vw, vh = visible.size.width, visible.size.height
+
+        # Center horizontally on cursor, place above cursor
+        x = mouse.x - self.WIDTH / 2
+        y = mouse.y + self.CURSOR_OFFSET_Y
+
+        # If window would go above visible area, place below cursor instead
+        if y + self.HEIGHT > vy + vh:
+            y = mouse.y - self.HEIGHT - self.CURSOR_OFFSET_Y
+
+        # Clamp to visible screen bounds
+        x = max(vx, min(x, vx + vw - self.WIDTH))
+        y = max(vy, min(y, vy + vh - self.HEIGHT))
+
+        self._window.setFrameOrigin_((x, y))
+
     def _show(self, text: str) -> None:
-        """Main-thread: create window if needed, update text, show."""
+        """Main-thread: create window if needed, update text, show near cursor."""
         self._ensure_window()
         if self._label is None:
             return
@@ -186,6 +210,7 @@ class PreviewOverlay:
             display = "..." + display[-(self.MAX_DISPLAY_CHARS - 3):]
         self._label.setStringValue_(display)
 
+        self._position_near_cursor()
         if self._window is not None:
             self._window.orderFront_(None)
 
