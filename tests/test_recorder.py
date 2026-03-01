@@ -12,24 +12,24 @@ from whisper_dic.recorder import Recorder, RecordingResult
 
 class TestInitialState:
     def test_not_recording(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             assert not r.is_recording
 
     def test_peak_is_zero(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             assert r.read_peak() == 0.0
 
     def test_stop_returns_none(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             assert r.stop() is None
 
 
 class TestCallback:
     def test_accumulates_chunks(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder(sample_rate=16000)
             r._recording = True
             data = np.array([[100], [200], [-300]], dtype=np.int16)
@@ -38,7 +38,7 @@ class TestCallback:
             assert r._sample_count == 3
 
     def test_tracks_peak(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             r._recording = True
             data = np.array([[500], [-1000], [200]], dtype=np.int16)
@@ -46,7 +46,7 @@ class TestCallback:
             assert r._peak == 1000.0
 
     def test_ignored_when_not_recording(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             r._recording = False
             data = np.array([[100]], dtype=np.int16)
@@ -54,7 +54,7 @@ class TestCallback:
             assert len(r._chunks) == 0
 
     def test_read_peak_resets(self) -> None:
-        with patch("recorder.sd"):
+        with patch("whisper_dic.recorder.sd"):
             r = Recorder()
             r._recording = True
             data = np.array([[500]], dtype=np.int16)
@@ -67,7 +67,7 @@ class TestCallback:
 class TestStartStop:
     def test_start_creates_stream(self) -> None:
         mock_stream = MagicMock()
-        with patch("recorder.sd") as mock_sd:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd.InputStream.return_value = mock_stream
             r = Recorder(sample_rate=16000)
             assert r.start() is True
@@ -78,7 +78,7 @@ class TestStartStop:
 
     def test_start_when_already_recording(self) -> None:
         mock_stream = MagicMock()
-        with patch("recorder.sd") as mock_sd:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd.InputStream.return_value = mock_stream
             r = Recorder()
             assert r.start() is True
@@ -86,7 +86,7 @@ class TestStartStop:
             r.stop()
 
     def test_start_failure_resets(self) -> None:
-        with patch("recorder.sd") as mock_sd:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd.InputStream.side_effect = RuntimeError("No device")
             r = Recorder()
             with pytest.raises(RuntimeError):
@@ -95,7 +95,7 @@ class TestStartStop:
 
     def test_stop_returns_result(self) -> None:
         mock_stream = MagicMock()
-        with patch("recorder.sd") as mock_sd, patch("recorder.sf") as mock_sf:
+        with patch("whisper_dic.recorder.sd") as mock_sd, patch("whisper_dic.recorder.sf") as mock_sf:
             mock_sd.InputStream.return_value = mock_stream
             r = Recorder(sample_rate=16000)
             r.start()
@@ -115,7 +115,7 @@ class TestStartStop:
 
     def test_stop_no_chunks_returns_none(self) -> None:
         mock_stream = MagicMock()
-        with patch("recorder.sd") as mock_sd:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd.InputStream.return_value = mock_stream
             r = Recorder()
             r.start()

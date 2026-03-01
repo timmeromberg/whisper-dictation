@@ -1,5 +1,5 @@
 #!/bin/bash
-# System-wide dictation CLI
+# Development wrapper — use `pipx install .` for production installs.
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
   DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
@@ -11,8 +11,8 @@ PYTHON="$SCRIPT_DIR/.venv/bin/python"
 
 if [ ! -x "$PYTHON" ]; then
   echo "Error: Virtual environment not found at $SCRIPT_DIR/.venv"
-  echo "Run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  echo "Run: python3 -m venv .venv && .venv/bin/pip install -e '.[macos]'"
   exit 1
 fi
 
-exec "$PYTHON" "$SCRIPT_DIR/cli.py" "$@"
+exec "$PYTHON" -m whisper_dic "$@"
