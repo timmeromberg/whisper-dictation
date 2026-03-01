@@ -5,6 +5,66 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2026-03-02
+
+### Fixed
+- Race condition on quick hotkey press — recording could get stuck forever
+- UI mutations from background threads now dispatched to main thread (AppKit crash fix)
+- PID file handles recycled PIDs and permission errors
+- API keys redacted from error log messages
+- Clipboard restore delay increased for Electron apps (VS Code, Slack)
+- Beeps in command/auto-send mode no longer overlap
+- Mute/unmute race condition fixed with threading lock
+- Chromecast discovery timeout prevents blocking forever
+- UPnP aiohttp session leak fixed
+
+### Added
+- Config hot-reload for min/max duration, sample rate, timeout, prompt, languages, custom commands
+- History file permissions set to 0600 on write
+
+## [0.9.6] - 2026-03-02
+
+### Added
+- Auto-refresh microphone menu when devices are connected/disconnected (5s polling)
+
+### Fixed
+- AudioController fully recreated on config changes (was only toggling enabled flag)
+
+## [0.9.5] - 2026-03-02
+
+### Changed
+- Windows E2E: removed unnecessary cmake and git from choco install (saves ~2.5 min)
+
+## [0.9.4] - 2026-03-01
+
+### Added
+- GitHub Actions caching for whisper-server binary and model in E2E tests
+
+## [0.9.3] - 2026-03-01
+
+### Added
+- End-to-end test suite with 53 assertions across Linux, macOS, and Windows
+- Docker-based E2E testing for Linux
+- GitHub Actions E2E workflow for all 3 platforms
+
+## [0.9.2] - 2026-03-01
+
+### Added
+- Preview overlay: fade animation, language badge, elapsed time, progress dots
+- Pulsing recording dot with mic level bar in overlay
+- `whisper-dic doctor` diagnostic command
+- `whisper-dic setup-local` for automated local whisper.cpp installation
+
+## [0.9.1] - 2026-03-01
+
+### Added
+- Separate preview provider setting (use local for preview, groq for final)
+- Auto-sizing preview overlay with status badges
+- Press Escape while recording to cancel dictation
+
+### Changed
+- Preview interval minimum lowered to 0.1s
+
 ## [0.9.0] - 2026-03-01
 
 ### Added
