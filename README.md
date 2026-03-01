@@ -181,6 +181,8 @@ When enabled, spoken punctuation is converted automatically:
 whisper-dic run              # Start in foreground
 whisper-dic menubar          # Start with menu bar icon (macOS only)
 whisper-dic setup            # Interactive setup wizard (macOS only)
+whisper-dic setup-local      # Install whisper.cpp server + model for local transcription
+whisper-dic doctor           # Run diagnostic checks (config, provider, mic, permissions)
 whisper-dic status           # Show config and endpoint health
 whisper-dic provider [groq|local]  # Show or switch provider
 whisper-dic set KEY VALUE    # Update a config value (run 'whisper-dic set -h' for examples)
@@ -337,6 +339,109 @@ Map any spoken phrase to a keyboard shortcut:
 
 Use with Option + Shift (macOS) or Alt + Shift (Windows).
 
+## Local Setup (whisper.cpp)
+
+The local provider connects to a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) server running an OpenAI-compatible API at `http://localhost:2022`. You need: a server binary and a model file.
+
+### Automated Setup
+
+The fastest way to get a local server running:
+
+```bash
+whisper-dic setup-local
+```
+
+This will:
+1. Build the whisper-server binary from source (macOS/Linux) or download a prebuilt binary (Windows)
+2. Download a Whisper model from Hugging Face (you choose the size)
+3. Generate a start script
+4. Update your config to use the local provider
+
+On macOS, add `--autostart` to install as a login item:
+```bash
+whisper-dic setup-local --autostart
+```
+
+After setup, verify everything works:
+```bash
+whisper-dic doctor
+```
+
+### Manual Setup
+
+#### macOS
+
+```bash
+# Install build tools
+xcode-select --install
+brew install cmake
+
+# Clone and build
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
+cd whisper.cpp
+mkdir build && cd build
+cmake .. -DWHISPER_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release -j
+
+# Download a model
+cd ..
+curl -L -o models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+
+# Start the server
+./build/bin/whisper-server \
+  --model models/ggml-large-v3-turbo.bin \
+  --host 127.0.0.1 --port 2022 \
+  --inference-path "/v1/audio/transcriptions" \
+  --convert
+```
+
+#### Windows
+
+1. Download `whisper-bin-x64.zip` from the [latest release](https://github.com/ggml-org/whisper.cpp/releases/latest)
+2. Extract `whisper-server.exe`
+3. Download a model from the table below
+4. Run:
+```cmd
+whisper-server.exe --model ggml-large-v3-turbo.bin --host 127.0.0.1 --port 2022 --inference-path "/v1/audio/transcriptions" --convert
+```
+
+#### Linux
+
+Same as macOS, but replace `xcode-select --install` with your distro's build tools:
+```bash
+# Debian/Ubuntu
+sudo apt install build-essential cmake git
+
+# Fedora
+sudo dnf install gcc-c++ cmake git
+```
+
+### Models
+
+| Model | Size | Quality | Speed |
+|-------|------|---------|-------|
+| tiny | 78 MB | Basic | Fastest |
+| base | 148 MB | Decent | Fast |
+| small | 488 MB | Good | Moderate |
+| medium | 1.5 GB | Very good | Slower |
+| large-v3 | 3.1 GB | Best accuracy | Slowest |
+| **large-v3-turbo** | **1.6 GB** | **Near-best** | **Fast** |
+
+**Recommendation:** `large-v3-turbo` — best tradeoff between accuracy and speed.
+
+Download URL pattern: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{model}.bin`
+
+### Verify
+
+```bash
+# Check if the server is running
+curl http://localhost:2022/
+
+# Run all diagnostics
+whisper-dic doctor
+```
+
 ## Auto-Start at Login (macOS)
 
 ```bash
@@ -368,13 +473,15 @@ Not available on Windows — use `whisper-dic.bat run` for foreground mode.
 
 ## Troubleshooting
 
+Run `whisper-dic doctor` for a quick diagnostic check of your setup.
+
 **Hotkey not working?**
 - macOS: Grant Accessibility permission in System Settings > Privacy & Security
 - Windows: Make sure no other app is using Left Alt as a global hotkey
 - Check the hotkey isn't used by another app
 
 **Transcription failing?**
-- Run `whisper-dic status` to check endpoint health
+- Run `whisper-dic doctor` to check endpoint health and config
 - Check logs: `tail -f ~/Library/Logs/whisper-dictation.log` (macOS) or check console output (Windows)
 - For Groq: verify API key is set and valid
 
@@ -421,6 +528,8 @@ whisper-dictation/
 │   ├── recorder.py          # microphone capture
 │   ├── transcriber.py       # Whisper API clients
 │   ├── hotkey.py            # global hotkey listener
+│   ├── doctor.py            # diagnostic checks (whisper-dic doctor)
+│   ├── local_setup.py       # automated whisper.cpp setup (whisper-dic setup-local)
 │   ├── commands.py          # voice command table
 │   ├── cleaner.py           # text cleanup
 │   ├── paster.py            # clipboard + paste
