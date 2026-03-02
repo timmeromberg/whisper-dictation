@@ -268,6 +268,7 @@ class DictationApp:
                 err_str = str(exc).lower()
                 is_transient = any(s in err_str for s in ["ssl", "connection", "timeout", "reset", "broken pipe"])
                 if is_transient and attempt < max_attempts:
+                    # Exponential backoff: 0.5s, 1s, 2s, capped at 8s
                     wait = min(0.5 * (2 ** (attempt - 1)), 8.0)
                     log("pipeline", f"Transient error ({attempt}/{max_attempts}): {exc}, retry in {wait}s...")
                     time.sleep(wait)
@@ -400,7 +401,7 @@ class DictationApp:
             # Triple short beep for command mode (sequential)
             dur = self.config.audio_feedback.duration_seconds
             self.play_beep(1320.0)
-            time.sleep(dur + 0.02)
+            time.sleep(dur + 0.02)  # gap between beeps to keep them distinct
             self.play_beep(1320.0)
             time.sleep(dur + 0.02)
             self.play_beep(1320.0)
@@ -414,6 +415,8 @@ class DictationApp:
             self.play_beep(self.config.audio_feedback.stop_frequency)
 
         if result.duration_seconds < self.config.recording.min_duration:
+            # Short press = potential double-tap to cycle language.
+            # Two quick taps within 0.5s triggers language switch.
             now = time.monotonic()
             if len(self._languages) > 1 and (now - self._last_tap_time) < 0.5:
                 self._last_tap_time = 0.0
@@ -559,7 +562,8 @@ class DictationApp:
     def _run_preview_loop(self) -> None:
         """Periodically transcribe accumulated audio and emit preview state."""
         interval = self.config.recording.preview_interval
-        # First update fires sooner for faster initial feedback
+        # First preview fires sooner (1.5s max) for faster initial feedback.
+        # Event.wait() returns False when the timeout expires (not signaled).
         first_wait = min(1.5, interval)
         if not self._preview_stop.wait(first_wait):
             self._do_preview()

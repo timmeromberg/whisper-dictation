@@ -28,7 +28,10 @@ KEY_MAP = {
 
 _CTRL_KEYS = {keyboard.Key.ctrl_l, keyboard.Key.ctrl_r}
 _SHIFT_KEYS = {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r}
-_MODIFIER_WINDOW_SECONDS = 0.5  # Modifier must be active within this window of hotkey release
+# Grace period for modifier detection: if Ctrl/Shift was released just before
+# the hotkey, we still count it. Handles timing races where the listener
+# thread misses transient key state on fast key combos.
+_MODIFIER_WINDOW_SECONDS = 0.5
 
 
 class HotkeyListener:
@@ -272,14 +275,14 @@ class NSEventHotkeyListener:
     def _handle_event(self, event: object) -> None:
         """Dispatch NSEvent by type."""
         event_type: int = event.type()  # type: ignore[attr-defined]
-        if event_type == 12:  # NSEventTypeFlagsChanged
+        if event_type == 12:  # NSEventTypeFlagsChanged (modifier key press/release)
             self._handle_flags_changed(event)
         elif event_type == 10:  # NSEventTypeKeyDown
             self._handle_key_down(event)
 
     def _handle_key_down(self, event: object) -> None:
         """Cancel recording if Escape is pressed while hotkey is held."""
-        if event.keyCode() != 53:  # type: ignore[attr-defined]
+        if event.keyCode() != 53:  # 53 = Escape key  # type: ignore[attr-defined]
             return
         should_cancel = False
         with self._lock:

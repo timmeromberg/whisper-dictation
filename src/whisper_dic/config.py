@@ -463,6 +463,8 @@ class ConfigWatcher:
             mtime = self._get_mtime()
             if mtime != self._last_mtime:
                 self._last_mtime = mtime
+                # Skip reload if we wrote the config ourselves within 2s.
+                # Prevents reload loops from our own set_config_value() calls.
                 if time.monotonic() - self._last_write_time < 2.0:
                     continue
                 try:

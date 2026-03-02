@@ -165,7 +165,11 @@ class Recorder:
                 pass
 
     def _snapshot_audio_locked(self) -> np.ndarray:
-        """Return concatenated audio for current chunks. Caller must hold _lock."""
+        """Return concatenated audio for current chunks. Caller must hold _lock.
+
+        Uses incremental caching: only concatenates new chunks since the last
+        snapshot, avoiding O(n²) re-concatenation during repeated preview polls.
+        """
         if self._combined_cache is None:
             self._combined_cache = np.concatenate(self._chunks, axis=0)
             self._combined_chunk_count = len(self._chunks)
