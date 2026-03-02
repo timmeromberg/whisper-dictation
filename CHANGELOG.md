@@ -5,6 +5,16 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-03-02
+
+### Added
+- Developer architecture doc (`docs/architecture.md`) covering pipeline, threading model, platform abstraction, and extension points
+- PyPI install smoke test in E2E suite — validates previous release installs and runs from the live registry
+- Inline comments for non-obvious logic: magic numbers, timing heuristics, race condition handling, and caching strategies
+
+### Fixed
+- Branch protection required checks reduced from 9 to 7 — removed conditional E2E jobs that could never all pass on the same event type
+
 ## [0.10.4] - 2026-03-02
 
 ### Added
