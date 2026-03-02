@@ -32,6 +32,7 @@ jobs:
   lint-and-test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.12", "3.13"]
@@ -70,7 +71,12 @@ jobs:
         if: runner.os != 'Windows'
         run: mypy src/whisper_dic/ --exclude src/whisper_dic/compat/_windows.py
 
+      - name: Test (Linux-safe subset)
+        if: runner.os == 'Linux'
+        run: pytest tests/test_config.py tests/test_transcriber.py tests/test_cli_runtime.py -v
+
       - name: Test
+        if: runner.os != 'Linux'
         run: pytest tests/ -v
 
       - name: Coverage (macOS, Python 3.12)

@@ -27,7 +27,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated contributor guidance to match the repository's versioned changelog + `VERSION` bump workflow
 
 ### Changed
-- CI now validates on Linux in PRs (unit/lint/type matrix includes `ubuntu-latest`)
+- CI now validates on Linux in PRs (lint/type plus Linux-safe test subset in the matrix)
 - Linux full E2E now runs on pull requests in addition to pushes
 - Coverage step now enforces a non-regression threshold (`--cov-fail-under=34`)
 
