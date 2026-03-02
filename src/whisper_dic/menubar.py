@@ -205,7 +205,15 @@ class DictationMenuBar(rumps.App):
         menu.add(self._rewrite_toggle)
         menu.add(None)
 
-        # Preset mode items
+        # Per-app context toggles (shown first — they take priority)
+        menu.add(self._build_context_menu())
+        menu.add(None)
+
+        # Default mode (fallback for unrecognized apps)
+        default_label = rumps.MenuItem("Default Mode (other apps)")
+        default_label.set_callback(None)
+        menu.add(default_label)
+
         self._rewrite_mode_items: dict[str, rumps.MenuItem] = {}
         for mode, (description, _prompt) in REWRITE_PRESETS.items():
             item = rumps.MenuItem(f"{mode.title()} — {description}", callback=self._switch_rewrite_mode)
@@ -214,7 +222,6 @@ class DictationMenuBar(rumps.App):
             self._rewrite_mode_items[mode] = item
             menu.add(item)
 
-        # Custom mode
         custom_item = rumps.MenuItem("Custom — use your own prompt", callback=self._switch_rewrite_mode)
         custom_item._rewrite_mode = "custom"  # type: ignore[attr-defined]
         custom_item.state = 1 if rw.mode == "custom" else 0
@@ -225,15 +232,12 @@ class DictationMenuBar(rumps.App):
         menu.add(rumps.MenuItem("Edit Custom Prompt...", callback=self._edit_rewrite_prompt))
         menu.add(rumps.MenuItem("Change Model...", callback=self._edit_rewrite_model))
 
-        menu.add(None)
-        menu.add(self._build_context_menu())
-
         return menu
 
     def _build_context_menu(self) -> rumps.MenuItem:
         from .app_context import CATEGORIES
 
-        menu = rumps.MenuItem("App Contexts")
+        menu = rumps.MenuItem("Per-App Context")
         self._context_items: dict[str, rumps.MenuItem] = {}
         for cat in CATEGORIES:
             cfg = self.config.rewrite.contexts.get(cat)
