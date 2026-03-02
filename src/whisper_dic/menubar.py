@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import faulthandler
+import importlib
 import json
 import os
 import signal
@@ -217,43 +218,72 @@ class DictationMenuBar(rumps.App):
             return True  # Not macOS or framework unavailable — assume OK
 
     def _check_microphone_available(self) -> bool:
-        """Return True if at least one input device is accessible."""
+        """Return True if at least one microphone input device is present."""
         try:
             devices = sd.query_devices()
             return any(d["max_input_channels"] > 0 for d in devices)  # type: ignore[index]
         except Exception:
             return False
 
+    def _microphone_permission_state(self) -> str:
+        """Return macOS microphone permission state: granted, denied, or unknown."""
+        try:
+            avfoundation = importlib.import_module("AVFoundation")
+            capture_device = getattr(avfoundation, "AVCaptureDevice", None)
+            media_audio = getattr(avfoundation, "AVMediaTypeAudio", None)
+            if capture_device is None or media_audio is None:
+                return "unknown"
+            status = int(capture_device.authorizationStatusForMediaType_(media_audio))
+        except Exception:
+            return "unknown"
+
+        # AVAuthorizationStatus: 0=NotDetermined, 1=Restricted, 2=Denied, 3=Authorized
+        if status == 3:
+            return "granted"
+        if status in (1, 2):
+            return "denied"
+        return "unknown"
+
     def _show_permission_guidance(self) -> None:
         self._onboarding_check_permissions(None)
 
     def _onboarding_check_permissions(self, _sender: Any) -> None:
         has_accessibility = self._check_accessibility_granted()
-        has_microphone = self._check_microphone_available()
-        missing: list[str] = []
-        if not has_accessibility:
-            missing.append("Accessibility")
-        if not has_microphone:
-            missing.append("Microphone")
+        mic_permission = self._microphone_permission_state()
+        has_microphone_hardware = self._check_microphone_available()
 
-        if not missing:
-            self._notify("Permissions OK", "Accessibility and Microphone permissions are granted.")
+        missing_accessibility = not has_accessibility
+        missing_mic_permission = mic_permission == "denied"
+
+        if not missing_accessibility and not missing_mic_permission:
+            if has_microphone_hardware:
+                self._notify("Permissions OK", "Accessibility and Microphone permissions are granted.")
+            else:
+                self._notify(
+                    "Permissions OK",
+                    "Permissions are granted. No microphone input device is currently detected.",
+                )
             self._mark_onboarding_step("permissions")
             return
 
         # Build guidance message listing exactly what's missing
         lines = ["whisper-dic needs these macOS permissions to work:\n"]
-        if not has_accessibility:
+        if missing_accessibility:
             lines.append(
                 "Accessibility — required for global hotkey and paste.\n"
                 "  -> System Settings > Privacy & Security > Accessibility\n"
                 "  -> Add and enable whisper-dic (or Terminal/IDE running it)."
             )
-        if not has_microphone:
+        if missing_mic_permission:
             lines.append(
                 "Microphone — required for recording dictation.\n"
                 "  -> System Settings > Privacy & Security > Microphone\n"
                 "  -> Enable access for whisper-dic (or Terminal/IDE running it)."
+            )
+        if not has_microphone_hardware:
+            lines.append(
+                "No microphone input device is currently detected.\n"
+                "  -> Connect/select a microphone in Input settings."
             )
         lines.append("\nClick OK to open System Settings.")
         message = "\n\n".join(lines)
@@ -268,12 +298,12 @@ class DictationMenuBar(rumps.App):
         if response.clicked:
             import subprocess
             # Open the first missing permission pane
-            if not has_accessibility:
+            if missing_accessibility:
                 subprocess.Popen([
                     "open", "x-apple.systempreferences:"
                     "com.apple.preference.security?Privacy_Accessibility",
                 ])
-            elif not has_microphone:
+            elif missing_mic_permission:
                 subprocess.Popen([
                     "open", "x-apple.systempreferences:"
                     "com.apple.preference.security?Privacy_Microphone",
@@ -1667,15 +1697,10 @@ class DictationMenuBar(rumps.App):
     def _check_permissions(self) -> None:
         """Check macOS permissions and show guidance if missing."""
         if not self._check_accessibility_granted():
-            import subprocess
             self._notify(
                 "Accessibility Permission Required",
-                "Opening System Settings — add this app under Accessibility.",
+                "Enable it in System Settings > Privacy & Security > Accessibility (Help > Permissions Help).",
             )
-            subprocess.Popen([
-                "open", "x-apple.systempreferences:"
-                "com.apple.preference.security?Privacy_Accessibility",
-            ])
 
     def _start_dictation(self) -> None:
         if _env_flag(_SMOKE_NO_INPUT_ENV):

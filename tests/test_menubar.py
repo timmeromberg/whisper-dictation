@@ -136,6 +136,7 @@ class TestMenuBarThreadSafety:
 
         with (
             patch.object(app, "_check_accessibility_granted", return_value=True),
+            patch.object(app, "_microphone_permission_state", return_value="granted"),
             patch.object(app, "_check_microphone_available", return_value=True),
         ):
             app._onboarding_check_permissions(None)
@@ -151,6 +152,7 @@ class TestMenuBarThreadSafety:
         mock_response = SimpleNamespace(clicked=0)  # user clicked Skip
         with (
             patch.object(app, "_check_accessibility_granted", return_value=False),
+            patch.object(app, "_microphone_permission_state", return_value="granted"),
             patch.object(app, "_check_microphone_available", return_value=True),
             patch("whisper_dic.menubar.rumps.Window") as mock_window,
         ):
@@ -172,6 +174,7 @@ class TestMenuBarThreadSafety:
         mock_response = SimpleNamespace(clicked=1)  # user clicked Open System Settings
         with (
             patch.object(app, "_check_accessibility_granted", return_value=False),
+            patch.object(app, "_microphone_permission_state", return_value="granted"),
             patch.object(app, "_check_microphone_available", return_value=True),
             patch("whisper_dic.menubar.rumps.Window") as mock_window,
             patch("subprocess.Popen") as mock_popen,
@@ -184,6 +187,58 @@ class TestMenuBarThreadSafety:
         assert "Accessibility" in cmd[1]
         # Still not marked complete — user must check again after granting
         assert app._onboarding_state["steps"]["permissions"] is False
+
+    def test_permissions_check_shows_microphone_guidance_when_mic_permission_missing(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+
+        mock_response = SimpleNamespace(clicked=0)
+        with (
+            patch.object(app, "_check_accessibility_granted", return_value=True),
+            patch.object(app, "_microphone_permission_state", return_value="denied"),
+            patch.object(app, "_check_microphone_available", return_value=True),
+            patch("whisper_dic.menubar.rumps.Window") as mock_window,
+        ):
+            mock_window.return_value.run.return_value = mock_response
+            app._onboarding_check_permissions(None)
+
+        assert app._onboarding_state["steps"]["permissions"] is False
+        mock_window.assert_called_once()
+        message = mock_window.call_args.kwargs["message"]
+        assert "Microphone" in message
+        assert "Accessibility" not in message
+
+    def test_permissions_check_shows_both_guidance_when_both_permissions_missing(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+
+        mock_response = SimpleNamespace(clicked=0)
+        with (
+            patch.object(app, "_check_accessibility_granted", return_value=False),
+            patch.object(app, "_microphone_permission_state", return_value="denied"),
+            patch.object(app, "_check_microphone_available", return_value=True),
+            patch("whisper_dic.menubar.rumps.Window") as mock_window,
+        ):
+            mock_window.return_value.run.return_value = mock_response
+            app._onboarding_check_permissions(None)
+
+        assert app._onboarding_state["steps"]["permissions"] is False
+        mock_window.assert_called_once()
+        message = mock_window.call_args.kwargs["message"]
+        assert "Microphone" in message
+        assert "Accessibility" in message
+
+    def test_check_permissions_notifies_without_opening_settings(self) -> None:
+        app = _bare_app()
+        with patch.object(app, "_check_accessibility_granted", return_value=False):
+            app._check_permissions()
+
+        app._notify.assert_called_once_with(
+            "Accessibility Permission Required",
+            "Enable it in System Settings > Privacy & Security > Accessibility (Help > Permissions Help).",
+        )
 
     def test_sync_context_menu_labels(self) -> None:
         app = _bare_app()
