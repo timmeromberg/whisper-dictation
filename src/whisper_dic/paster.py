@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -10,6 +11,12 @@ from pynput.keyboard import Controller
 
 from .compat import PASTE_MODIFIER_KEY, TERMINAL_APP_IDS, VK_RETURN, frontmost_app_id, post_keycode
 from .log import log
+
+_SMOKE_NO_INPUT_ENV = "WHISPER_DIC_SMOKE_NO_INPUT"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class TextPaster:
@@ -23,6 +30,10 @@ class TextPaster:
     def paste(self, text: str, auto_send: bool = False, app_id: str | None = None) -> None:
         text = text.strip()
         if not text:
+            return
+
+        if _env_flag(_SMOKE_NO_INPUT_ENV):
+            log("paste", "Smoke mode enabled; skipping clipboard and key injection.")
             return
 
         with self._lock:

@@ -96,4 +96,4 @@ jobs:
 
       - name: Coverage (macOS, Python 3.12)
         if: runner.os == 'macOS' && matrix.python-version == '3.12'
-        run: pytest tests/ -q --cov=src/whisper_dic --cov-report=term-missing --cov-fail-under=34
+        run: pytest tests/ -q --cov=src/whisper_dic --cov-report=term-missing --cov-fail-under=35

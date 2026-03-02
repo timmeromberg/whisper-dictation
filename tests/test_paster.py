@@ -24,6 +24,12 @@ class TestFrontmostAppId:
 
 
 class TestTextPaster:
+    @pytest.fixture(autouse=True)
+    def _mock_keyboard_controller(self):
+        # Prevent real key injection (Cmd/Ctrl+V) during tests.
+        with patch("whisper_dic.paster.Controller", return_value=MagicMock()):
+            yield
+
     def test_paste_empty_does_nothing(self) -> None:
         from whisper_dic.paster import TextPaster
         p = TextPaster()
@@ -83,4 +89,16 @@ class TestTextPaster:
             patch("whisper_dic.paster.post_keycode") as mock_post,
         ):
             p.paste("test", auto_send=True)
+            mock_post.assert_not_called()
+
+    def test_smoke_mode_skips_all_side_effects(self) -> None:
+        from whisper_dic.paster import TextPaster
+        p = TextPaster(paste_delay_seconds=0)
+        with (
+            patch.dict("os.environ", {"WHISPER_DIC_SMOKE_NO_INPUT": "1"}, clear=False),
+            patch("whisper_dic.paster.pyperclip") as mock_clip,
+            patch("whisper_dic.paster.post_keycode") as mock_post,
+        ):
+            p.paste("test", auto_send=True)
+            mock_clip.copy.assert_not_called()
             mock_post.assert_not_called()

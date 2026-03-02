@@ -5,7 +5,7 @@ Thanks for your interest in contributing! This guide will help you get started.
 ## Prerequisites
 
 - Python 3.12+
-- macOS 10.13+ or Windows 10+
+- macOS 10.13+, Windows 10+, or Linux
 - A Whisper provider: [Groq API key](https://console.groq.com/) (free) or a local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) server
 
 ## Development Setup
@@ -22,11 +22,12 @@ source .venv/bin/activate  # macOS/Linux
 
 # Install in editable mode
 pip install -e ".[macos]"   # macOS
-# pip install -e .          # Windows
+# pip install -e .          # Windows/Linux
 
 # Create your config (if you don't have one)
 whisper-dic setup           # macOS interactive setup
-# whisper-dic set KEY VALUE # Windows/manual setup
+# whisper-dic provider       # Windows/Linux/manual setup bootstrap
+# whisper-dic set KEY VALUE  # all platforms
 ```
 
 ## Running Tests
@@ -102,7 +103,7 @@ src/whisper_dic/
   commands.py     # Voice command execution
   cleaner.py      # Text cleanup + filler removal
   audio_control.py # Auto-mute devices during recording
-  compat/         # Platform abstraction (macOS/Windows)
+  compat/         # Platform abstraction (macOS/Windows/Linux fallback)
 tests/            # pytest suite
 scripts/          # Smoke test, E2E test
 ```

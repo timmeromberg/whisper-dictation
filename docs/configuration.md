@@ -229,6 +229,11 @@ enabled = true
 
 If the frontmost app doesn't match any category, the global `mode`/`prompt` above is used. If a category is disabled, dictation in those apps falls back to the global prompt.
 
+Platform note:
+
+- macOS and Windows: frontmost-app detection is active.
+- Linux: frontmost-app detection is not available in the fallback backend yet, so rewrite always uses the global `mode`/`prompt`.
+
 ## Live Preview
 
 Live preview is controlled by `recording.streaming_preview`, `recording.preview_interval`, and optionally `recording.preview_provider`.

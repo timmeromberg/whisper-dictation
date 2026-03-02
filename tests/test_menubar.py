@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +20,51 @@ def _bare_app():
     return app
 
 
+def _config_with_context_enabled(enabled: bool):
+    from whisper_dic.config import (
+        AppConfig,
+        AudioFeedbackConfig,
+        ContextConfig,
+        HotkeyConfig,
+        PasteConfig,
+        RecordingConfig,
+        RewriteConfig,
+        TextCommandsConfig,
+        WhisperConfig,
+    )
+
+    contexts = {
+        "coding": ContextConfig(enabled=enabled, prompt=""),
+        "chat": ContextConfig(enabled=True, prompt=""),
+        "email": ContextConfig(enabled=True, prompt=""),
+        "writing": ContextConfig(enabled=True, prompt=""),
+        "browser": ContextConfig(enabled=True, prompt=""),
+    }
+
+    return AppConfig(
+        hotkey=HotkeyConfig(),
+        recording=RecordingConfig(),
+        paste=PasteConfig(),
+        text_commands=TextCommandsConfig(),
+        whisper=WhisperConfig(),
+        audio_feedback=AudioFeedbackConfig(),
+        rewrite=RewriteConfig(enabled=False, mode="light", contexts=contexts),
+    )
+
+
 class TestMenuBarThreadSafety:
+    def test_sync_context_menu_labels(self) -> None:
+        app = _bare_app()
+        app._context_items = {
+            "coding": SimpleNamespace(state=1),
+            "chat": SimpleNamespace(state=0),
+        }
+
+        app._sync_context_menu_labels({"coding": SimpleNamespace(enabled=False)})
+
+        assert app._context_items["coding"].state == 0
+        assert app._context_items["chat"].state == 1
+
     def test_notify_dispatches_via_call_after(self) -> None:
         from whisper_dic.menubar import DictationMenuBar, rumps
 
@@ -112,3 +157,42 @@ class TestMenuBarThreadSafety:
         app._check_permissions.assert_not_called()
         app._app.startup_health_checks.assert_not_called()
         call_after.assert_called_once_with(app._finish_startup)
+
+    def test_config_reload_applies_context_toggle_changes(self) -> None:
+        old = _config_with_context_enabled(True)
+        new = _config_with_context_enabled(False)
+
+        app = _bare_app()
+        app.config = old
+        app._app = SimpleNamespace(
+            config=deepcopy(old),
+            replace_transcriber=MagicMock(),
+            set_language=MagicMock(),
+            listener=SimpleNamespace(set_key=MagicMock()),
+            cleaner=SimpleNamespace(text_commands=True),
+            audio_controller=MagicMock(),
+            _rewriter=None,
+            reset_preview_transcriber=MagicMock(),
+            recorder=SimpleNamespace(sample_rate=16000, device=None),
+            set_languages=MagicMock(),
+        )
+        app._rewrite_mode_items = {
+            "light": SimpleNamespace(state=0),
+            "medium": SimpleNamespace(state=0),
+            "full": SimpleNamespace(state=0),
+            "custom": SimpleNamespace(state=0),
+        }
+        app._context_items = {
+            "coding": SimpleNamespace(state=1),
+            "chat": SimpleNamespace(state=1),
+            "email": SimpleNamespace(state=1),
+            "writing": SimpleNamespace(state=1),
+            "browser": SimpleNamespace(state=1),
+        }
+        app._update_rewrite_labels = MagicMock()
+
+        with patch("whisper_dic.menubar.callAfter", side_effect=lambda fn, *args: fn(*args)):
+            app._on_config_changed(new)
+
+        assert app._app.config.rewrite.contexts["coding"].enabled is False
+        assert app._context_items["coding"].state == 0

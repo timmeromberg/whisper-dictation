@@ -5,6 +5,23 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-03-02
+
+### Fixed
+- Release workflow now runs from the tested commit SHA and verifies both CI and E2E succeeded for that exact SHA before publishing
+- PR E2E gate now uses the fast smoke path only (full Linux/macOS/Windows E2E remain on push/manual runs)
+- Menubar config hot-reload now applies `rewrite.contexts.*` toggle changes live in UI state
+- Smoke mode now hard-disables clipboard and keyboard injection in `TextPaster`, preventing accidental paste side effects during smoke checks
+
+### Added
+- New dictation pipeline tests for per-app rewrite context prompt selection and app-id passthrough
+- New menubar tests covering context menu sync and config-reload context toggle propagation
+
+### Changed
+- Coverage gate raised from 34% to 35% in CI
+- Cross-platform docs and metadata now explicitly reflect Linux support and current per-app context behavior
+- README now includes an explicit privacy/data-handling section, including local-model guidance and history persistence notes
+
 ## [0.10.0] - 2026-03-02
 
 ### Added

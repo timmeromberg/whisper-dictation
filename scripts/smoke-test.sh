@@ -8,6 +8,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="$SCRIPT_DIR/.venv/bin/python"
 export PYTHONPATH="$SCRIPT_DIR/src"
+# Hard guard: smoke tests must never emit real clipboard/keyboard side effects.
+export WHISPER_DIC_SMOKE_NO_INPUT=1
 
 if [ ! -x "$PYTHON" ]; then
   echo "[smoke] SKIP: no .venv found (smoke test requires venv)"
@@ -38,7 +40,7 @@ cp "$SCRIPT_DIR/src/whisper_dic/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null
 
 SMOKE_LOG="/tmp/smoke-menubar-$$.log"
 echo "[smoke] Starting menubar app..."
-WHISPER_DIC_SMOKE_NO_INPUT=1 "$PYTHON" -m whisper_dic.cli menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
+"$PYTHON" -m whisper_dic.cli menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
 PID=$!
 
 sleep 3

@@ -17,7 +17,7 @@ System-wide hold-to-dictate for macOS, Windows, and Linux. Hold a key, speak, re
 - **Multi-language** - double-tap the hotkey to cycle between configured languages
 - **Text commands** - say "period", "new line", "question mark" for punctuation
 - **AI rewriting** - optional LLM-powered cleanup of transcriptions (grammar, punctuation, capitalization)
-- **Per-app context** - automatically adapts rewrite style based on the frontmost app (coding, chat, email, writing, browser)
+- **Per-app context** - automatically adapts rewrite style based on the frontmost app on macOS and Windows (Linux currently falls back to global rewrite mode)
 - **Filler removal** - automatically strips "um", "uh", "you know", etc.
 - **Live preview** - see transcription text appearing in real-time while you speak (opt-in)
 - **Provider failover** - automatically tries the other provider when the primary fails
@@ -166,6 +166,14 @@ Hold **Left Option** (macOS) or **Left Alt** (Windows/Linux), speak, release.
 | Cancel recording | **Escape (while holding hotkey)** | **Escape (while holding hotkey)** | Cancel and discard current recording |
 
 `Option/Alt + Ctrl` is per-dictation auto-send. `paste.auto_send = true` applies auto-send globally.
+
+## Privacy at a Glance
+
+- `whisper.provider = "local"` keeps transcription traffic on your own machine/server.
+- `whisper.provider = "groq"` sends audio to Groq for transcription.
+- AI rewrite sends cleaned transcript text to Groq; app-context selection (frontmost app detection) happens locally.
+- History is stored on disk (`~/.config/whisper-dic/history.json` on macOS/Linux, `%APPDATA%/whisper-dic/history.json` on Windows) and can be cleared from the menu bar.
+- For the strictest privacy, use local transcription, disable failover, and disable AI rewrite.
 
 ## Documentation
 

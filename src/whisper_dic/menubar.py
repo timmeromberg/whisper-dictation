@@ -154,6 +154,11 @@ class DictationMenuBar(rumps.App):
         self._audioctrl_item.state = 1 if self.config.audio_control.enabled else 0
         menu.add(self._audioctrl_item)
 
+        # Audio beep toggle (checkmark)
+        self._audiobeep_item = rumps.MenuItem("Audio Feedback", callback=self._toggle_audio_feedback)
+        self._audiobeep_item.state = 1 if self.config.audio_feedback.enabled else 0
+        menu.add(self._audiobeep_item)
+
         return menu
 
     def _build_output_menu(self) -> rumps.MenuItem:
@@ -194,6 +199,7 @@ class DictationMenuBar(rumps.App):
 
         menu.add(None)
         menu.add(rumps.MenuItem("Groq API Key...", callback=self._set_groq_key))
+        menu.add(rumps.MenuItem("Whisper Prompt...", callback=self._edit_whisper_prompt))
 
         return menu
 
@@ -263,6 +269,13 @@ class DictationMenuBar(rumps.App):
             self._context_items[cat] = item
             menu.add(item)
         return menu
+
+    def _sync_context_menu_labels(self, contexts: dict[str, Any]) -> None:
+        """Sync per-category context toggles from config state."""
+        for cat, item in self._context_items.items():
+            cfg = contexts.get(cat)
+            enabled = bool(getattr(cfg, "enabled", True))
+            item.state = 1 if enabled else 0
 
     def _toggle_context(self, sender: Any) -> None:
         cat = sender._context_category  # type: ignore[attr-defined]
@@ -717,6 +730,15 @@ class DictationMenuBar(rumps.App):
         self._audioctrl_item.state = 1 if new_val else 0
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
+    def _toggle_audio_feedback(self, _sender: Any) -> None:
+        current = self.config.audio_feedback.enabled
+        new_val = not current
+        self._set_config("audio_feedback.enabled", "true" if new_val else "false")
+        self.config.audio_feedback.enabled = new_val
+        self._app.config.audio_feedback.enabled = new_val
+        self._audiobeep_item.state = 1 if new_val else 0
+        print(f"[menubar] Audio Feedback: {'on' if new_val else 'off'}")
+
     def _toggle_failover(self, _sender: Any) -> None:
         current = self.config.whisper.failover
         new_val = not current
@@ -1087,11 +1109,13 @@ class DictationMenuBar(rumps.App):
         if new_config.whisper.failover != old.whisper.failover:
             self._app.config.whisper.failover = new_config.whisper.failover
 
+        contexts_changed = new_config.rewrite.contexts != old.rewrite.contexts
         rw_changed = (
             new_config.rewrite.enabled != old.rewrite.enabled
             or new_config.rewrite.mode != old.rewrite.mode
             or new_config.rewrite.model != old.rewrite.model
             or new_config.rewrite.prompt != old.rewrite.prompt
+            or contexts_changed
         )
         if rw_changed:
             self._app.config.rewrite = new_config.rewrite
@@ -1196,6 +1220,7 @@ class DictationMenuBar(rumps.App):
                 self._update_rewrite_labels()
                 for m, item in self._rewrite_mode_items.items():
                     item.state = 1 if m == new_config.rewrite.mode else 0
+                self._sync_context_menu_labels(new_config.rewrite.contexts)
 
             if new_config.recording.streaming_preview != old.recording.streaming_preview:
                 self._preview_item.state = 1 if new_config.recording.streaming_preview else 0

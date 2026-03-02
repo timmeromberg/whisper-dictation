@@ -100,6 +100,8 @@ model = "llama-3.3-70b-versatile"
 # Per-app context-aware rewrite prompts
 # whisper-dic detects the frontmost app and automatically uses a context-appropriate
 # rewrite prompt. Categories: coding, chat, email, writing, browser.
+# macOS/Windows: app detection is active. Linux fallback backend currently uses
+# global rewrite mode/prompt for all apps.
 # Each category can be enabled/disabled and given a custom prompt.
 # If the app doesn't match any category, the global mode/prompt above is used.
 

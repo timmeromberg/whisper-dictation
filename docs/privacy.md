@@ -20,6 +20,22 @@ When `[rewrite].enabled = true`:
 
 AI rewrite uses your configured Groq API key (`whisper.groq.api_key`) and selected rewrite model.
 
+## Frontmost App Metadata (Per-App Contexts)
+
+If per-app rewrite contexts are enabled, whisper-dic captures the current frontmost app identifier (bundle ID on macOS, executable name on Windows) once per dictation.
+
+This identifier is used locally to:
+
+- choose the rewrite context category (coding/chat/email/writing/browser)
+- tune paste behavior for known terminal apps
+
+Data handling details:
+
+- Frontmost app ID is not written to `history.json`.
+- Frontmost app ID is not sent to the Whisper transcription API.
+- Frontmost app ID is not sent directly to the Groq rewrite API.
+- Logs may include app ID/context lines for operational debugging.
+
 ## Secrets and Config Storage
 
 Config file path:
@@ -63,3 +79,4 @@ whisper-dic logs
 - Prefer local provider for sensitive dictation.
 - Disable failover if you do not want cross-provider fallback.
 - Disable AI rewrite when you do not want transcript text sent to an LLM.
+- If app metadata logging is a concern, avoid per-app contexts or keep logs disabled/off-host.
