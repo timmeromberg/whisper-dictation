@@ -83,7 +83,10 @@ def test_rewrite_sends_correct_payload(rewriter: Rewriter) -> None:
     assert payload["messages"][0]["role"] == "system"
     assert payload["messages"][0]["content"] == "Fix grammar."
     assert payload["messages"][1]["role"] == "user"
-    assert payload["messages"][1]["content"] == "some text"
+    user_content = payload["messages"][1]["content"]
+    assert "---TRANSCRIPTION---" in user_content
+    assert "some text" in user_content
+    assert "---END TRANSCRIPTION---" in user_content
 
 
 def test_rewrite_with_prompt_override(rewriter: Rewriter) -> None:

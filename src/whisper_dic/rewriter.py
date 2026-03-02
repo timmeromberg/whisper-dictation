@@ -158,6 +158,14 @@ class Rewriter:
 
         effective_prompt = prompt_override if prompt_override else self._prompt
 
+        # Wrap transcription in explicit delimiters so the LLM treats it as
+        # data to clean, not as a question/instruction to answer.
+        wrapped = (
+            "Clean up the following speech-to-text transcription. "
+            "Return ONLY the cleaned text, nothing else.\n\n"
+            f"---TRANSCRIPTION---\n{text}\n---END TRANSCRIPTION---"
+        )
+
         try:
             response = self._client.post(
                 GROQ_CHAT_URL,
@@ -165,7 +173,7 @@ class Rewriter:
                     "model": self._model,
                     "messages": [
                         {"role": "system", "content": effective_prompt},
-                        {"role": "user", "content": text},
+                        {"role": "user", "content": wrapped},
                     ],
                     "temperature": 0.3,
                 },
