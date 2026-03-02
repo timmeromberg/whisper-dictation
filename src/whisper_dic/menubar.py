@@ -380,14 +380,12 @@ class DictationMenuBar(rumps.App):
             self._overlay.show_recording()
             self._update_preview_badges()
             self._preview_overlay.set_recording_start(time.monotonic())
-            self._preview_overlay.show_level_bar(True)
         elif state == "transcribing":
             self._is_recording = False
             self._level_timer.stop()
             self.title = "\u23f3"
             self._status_item.title = "Status: Transcribing..."
             self._overlay.show_transcribing()
-            self._preview_overlay.show_level_bar(False)
         elif state == "preview":
             if detail:
                 self._preview_overlay.show(detail)
@@ -447,7 +445,6 @@ class DictationMenuBar(rumps.App):
             normalized = 0.0
         bar_index = min(int(normalized * len(self._LEVEL_BARS)), len(self._LEVEL_BARS) - 1)
         self.title = f"\U0001f534{self._LEVEL_BARS[bar_index]}"
-        self._preview_overlay.set_level(normalized)
 
     @staticmethod
     def _get_input_device_names() -> set[str]:

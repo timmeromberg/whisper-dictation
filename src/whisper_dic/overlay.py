@@ -172,37 +172,6 @@ class RecordingOverlay:
             self._window.setAlphaValue_(alpha)
 
 
-class _LevelBarView(NSView):
-    """Thin horizontal bar showing current microphone level."""
-
-    _level: float = 0.0
-
-    def drawRect_(self, rect):  # noqa: N802 — AppKit naming convention
-        bounds = self.bounds()
-        w = bounds.size.width
-        h = bounds.size.height
-
-        # Background track
-        NSColor.colorWithCalibratedWhite_alpha_(0.2, 0.6).set()
-        NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(bounds, h / 2, h / 2).fill()
-
-        if self._level <= 0.01:
-            return
-
-        # Filled portion
-        fill_w = max(h, w * self._level)  # at least a circle
-        fill_rect = NSMakeRect(0, 0, fill_w, h)
-
-        # Color: green → yellow → red
-        level = self._level
-        if level < 0.5:
-            r, g = level * 2 * 0.9, 0.75
-        else:
-            r, g = 0.9, 0.75 * (1.0 - (level - 0.5) * 2)
-        NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, 0.15, 0.9).set()
-        NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(fill_rect, h / 2, h / 2).fill()
-
-
 class PreviewOverlay:
     """Floating translucent panel showing live transcription preview near the cursor."""
 
@@ -215,8 +184,6 @@ class PreviewOverlay:
     CURSOR_OFFSET_Y = 20
     FONT_SIZE = 13.0
     STATUS_FONT_SIZE = 10.0
-    LEVEL_BAR_HEIGHT = 3
-    LEVEL_BAR_GAP = 4
     FADE_IN_DURATION = 0.15
     FADE_OUT_DURATION = 0.20
     _TRACK_INTERVAL = 0.08
@@ -230,11 +197,9 @@ class PreviewOverlay:
         self._tracking_thread: threading.Thread | None = None
         self._visible = False
         self._badges: list[str] = []
-        self._level_bar: _LevelBarView | None = None
         self._recording_start: float = 0.0
         self._last_text_time: float = 0.0
         self._progress_phase = 0
-        self._show_level = False
         self._reduced_motion = False
         self._high_contrast = False
         self._font_scale = 1.0
@@ -295,16 +260,6 @@ class PreviewOverlay:
         self._recording_start = t
         self._last_text_time = t
         self._progress_phase = 0
-
-    def set_level(self, peak: float) -> None:
-        """Update the mic level bar (0.0 to 1.0). Safe to call from any thread."""
-        callAfter(self._update_level, peak)
-
-    def show_level_bar(self, visible: bool) -> None:
-        """Show or hide the level bar. Safe to call from any thread."""
-        self._show_level = visible
-        if not visible:
-            callAfter(self._update_level, 0.0)
 
     def show(self, text: str) -> None:
         """Show or update preview text near cursor. Safe to call from any thread."""
@@ -393,18 +348,10 @@ class PreviewOverlay:
         time_label.setMaximumNumberOfLines_(1)
         content.addSubview_(time_label)
 
-        # Mic level bar (just below time label)
-        level_bar = _LevelBarView.alloc().initWithFrame_(
-            NSMakeRect(self.PADDING, 0, self.MAX_WIDTH - 2 * self.PADDING, self.LEVEL_BAR_HEIGHT)
-        )
-        level_bar.setHidden_(True)
-        content.addSubview_(level_bar)
-
         self._window = window
         self._label = label
         self._status_label = status_label
         self._time_label = time_label
-        self._level_bar = level_bar
 
     def _resize_to_fit(self) -> None:
         """Resize window to fit label content. MUST be called on main thread."""
@@ -446,18 +393,6 @@ class PreviewOverlay:
             label_y = self.PADDING
 
         self._label.setFrame_(NSMakeRect(self.PADDING, label_y, label_w, label_h))
-
-        # Level bar sits just above the text
-        has_level = self._show_level and self._level_bar is not None
-        if self._level_bar is not None:
-            if has_level:
-                level_y = win_h - self.PADDING - self.LEVEL_BAR_HEIGHT
-                self._level_bar.setFrame_(
-                    NSMakeRect(self.PADDING, level_y, label_w, self.LEVEL_BAR_HEIGHT)
-                )
-                self._level_bar.setHidden_(False)
-            else:
-                self._level_bar.setHidden_(True)
 
         frame = self._window.frame()
         frame.size = NSMakeSize(win_w, win_h)
@@ -593,13 +528,6 @@ class PreviewOverlay:
         """Hide window after fade-out animation. MUST be called on main thread."""
         if not self._visible and self._window is not None:
             self._window.orderOut_(None)
-
-    def _update_level(self, peak: float) -> None:
-        """Main-thread: update level bar."""
-        if self._level_bar is None:
-            return
-        self._level_bar._level = peak
-        self._level_bar.setNeedsDisplay_(True)
 
     def _start_cursor_tracking(self) -> None:
         """Start a background thread that repositions the window near the cursor."""
