@@ -83,6 +83,14 @@ mute_local = true
 # "zoom out" = "cmd+-"
 # "refresh" = "cmd+r"
 
+# [snippets]
+# Text snippets — say a trigger phrase in command mode (Shift+hotkey) to paste text
+# Manage via the Snippets menu in the menu bar, or edit this section directly
+# "my email" = "tim@example.com"
+# "my address" = "123 Main Street, Amsterdam"
+# "signature" = """Best regards,
+# Tim"""
+
 [rewrite]
 # AI-powered rewriting of transcriptions using Groq LLM
 # Requires a Groq API key (reuses whisper.groq.api_key)
