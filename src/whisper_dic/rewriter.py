@@ -46,8 +46,9 @@ CONTEXT_PROMPTS: dict[str, str] = {
         "'equals equals' → '==', 'dot' → '.', 'slash' → '/', 'underscore' → '_', "
         "'hash' or 'pound' → '#', 'at sign' → '@', 'pipe' → '|', 'tilde' → '~', "
         "'backtick' → '`', 'ampersand' → '&', 'caret' → '^', 'star' or 'asterisk' → '*'\n"
-        "- Fix only grammar and clarity — do not change meaning or rephrase\n"
-        "- Do not add pleasantries or filler\n"
+        "- Keep the user's full message — do not shorten, summarize, or remove detail\n"
+        "- Fix grammar and punctuation only — do not rephrase or restructure sentences\n"
+        "- Remove only speech artifacts (um, uh, false starts) — keep all intentional content\n"
         "- Return only the corrected text, nothing else."
     ),
     "chat": (
