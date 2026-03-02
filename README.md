@@ -68,6 +68,19 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[macos]"          # Windows: pip install -e .
 ```
 
+### Updating
+
+```bash
+# pipx
+pipx upgrade whisper-dic
+
+# pip
+pip install --upgrade whisper-dic
+
+# from source
+git pull && pip install -e ".[macos]"   # Windows: pip install -e .
+```
+
 ### 3. Configure
 
 On first run, whisper-dic creates a config file at `~/.config/whisper-dic/config.toml` (macOS/Linux) or `%APPDATA%/whisper-dic/config.toml` (Windows) from the bundled template.
@@ -344,6 +357,18 @@ Map any spoken phrase to a keyboard shortcut:
 ```
 
 Use with Option + Shift (macOS) or Alt + Shift (Windows).
+
+## Privacy & Data Handling
+
+- **Provider choice controls where audio is processed:**
+  - `groq` sends audio to Groq's cloud API.
+  - `local` sends audio to your own local `whisper.cpp` server (best option for privacy-sensitive workflows).
+- **Config secrets:** your API key is stored in `config.toml`, and whisper-dic sets file permissions to owner-only on creation.
+- **History persistence:** the last transcriptions are stored in `history.json`:
+  - macOS/Linux: `~/.config/whisper-dic/history.json`
+  - Windows: `%APPDATA%/whisper-dic/history.json`
+- **Clearing history:** use **Menu Bar > History > Clear History** (macOS), or remove `history.json` manually.
+- **Logs:** full transcript text is **not** logged by default. It is only logged if `WHISPER_DIC_LOG_TRANSCRIPTS=1` is set.
 
 ## Local Setup (whisper.cpp)
 
