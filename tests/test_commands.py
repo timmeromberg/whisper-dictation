@@ -237,6 +237,26 @@ class TestSnippetExecution:
         assert execute("unknown phrase") is False
         mock_paster.paste.assert_not_called()
 
+    def test_snippet_whisper_capitalized_with_period(self, monkeypatch) -> None:
+        """Whisper returns 'Session Review.' for snippet 'session review'."""
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"session review": "/session-review"})
+
+        assert execute("Session Review.") is True
+        mock_paster.paste.assert_called_once_with("/session-review")
+
+    def test_snippet_registered_with_punctuation(self, monkeypatch) -> None:
+        """Snippet trigger registered with punctuation still matches clean input."""
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"My Email!": "tim@example.com"})
+
+        assert execute("my email") is True
+        mock_paster.paste.assert_called_once_with("tim@example.com")
+
     def test_multiline_snippet(self, monkeypatch) -> None:
         monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
         mock_paster = MagicMock()

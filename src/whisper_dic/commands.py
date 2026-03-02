@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,22 @@ from .compat import FLAG_ALT, FLAG_CMD, FLAG_CTRL, FLAG_SHIFT, VK_RETURN
 from .compat import VK_MAP as _VK
 from .compat import post_key as _post_key
 from .log import log
+
+_PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
+_MULTI_SPACE_RE = re.compile(r"\s+")
+
+
+def _normalize(text: str) -> str:
+    """Normalize text for command/snippet matching.
+
+    Strips punctuation, collapses whitespace, lowercases.
+    'My Email!' -> 'my email'
+    'session review.' -> 'session review'
+    """
+    text = text.strip().lower()
+    text = _PUNCT_RE.sub("", text)
+    text = _MULTI_SPACE_RE.sub(" ", text).strip()
+    return text
 
 if TYPE_CHECKING:
     from .paster import TextPaster
@@ -119,7 +136,7 @@ def register_snippets(snippets: dict[str, str]) -> None:
     """Register text snippets from config. Clears previous snippets first."""
     _SNIPPETS.clear()
     for phrase, text in snippets.items():
-        normalized = phrase.strip().lower()
+        normalized = _normalize(phrase)
         if not normalized:
             log("snippet", "Skipping snippet with empty trigger phrase")
             continue
@@ -142,9 +159,7 @@ def execute(text: str) -> bool:
 
     Commands are checked first, then snippets. Returns True if matched.
     """
-    normalized = text.strip().lower()
-    # Strip trailing punctuation that Whisper might add
-    normalized = normalized.rstrip(".!?,;:")
+    normalized = _normalize(text)
 
     # Check aliases first, then direct match
     original = normalized
@@ -214,7 +229,7 @@ def register_custom(custom_commands: dict[str, str]) -> None:
     for phrase, shortcut in custom_commands.items():
         try:
             vk, flags = _parse_shortcut(shortcut)
-            normalized = phrase.strip().lower()
+            normalized = _normalize(phrase)
             _COMMANDS[normalized] = (vk, flags)
             log("command", f"Registered custom: '{normalized}' -> {shortcut}")
         except ValueError as exc:
