@@ -8,7 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from whisper_dic.config import AppConfig, _section, _to_toml_literal, load_config, set_config_value
+from whisper_dic.config import (
+    AppConfig,
+    _section,
+    _to_toml_literal,
+    load_config,
+    set_config_section,
+    set_config_value,
+)
 
 
 class TestLoadConfig:
@@ -232,3 +239,73 @@ class TestContextConfig:
         p.write_text('[rewrite.contexts.chat]\nprompt = "Be very casual."\n')
         config = load_config(p)
         assert config.rewrite.contexts["chat"].prompt == "Be very casual."
+
+
+class TestSnippetsConfig:
+    def test_empty_config_has_no_snippets(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.toml"
+        p.write_text("")
+        config = load_config(p)
+        assert config.snippets == {}
+
+    def test_loads_snippets(self, tmp_path: Path) -> None:
+        p = tmp_path / "snippets.toml"
+        p.write_text(
+            '[snippets]\n'
+            '"my email" = "tim@example.com"\n'
+            '"my address" = "123 Main St"\n'
+        )
+        config = load_config(p)
+        assert config.snippets == {
+            "my email": "tim@example.com",
+            "my address": "123 Main St",
+        }
+
+    def test_multiline_snippet(self, tmp_path: Path) -> None:
+        p = tmp_path / "multi.toml"
+        p.write_text(
+            '[snippets]\n'
+            '"signature" = """Best regards,\nTim"""\n'
+        )
+        config = load_config(p)
+        assert config.snippets["signature"] == "Best regards,\nTim"
+
+
+class TestSetConfigSection:
+    def test_creates_new_section(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.toml"
+        p.write_text('[whisper]\nprovider = "local"\n')
+        set_config_section(p, "snippets", {"my email": "tim@example.com"})
+        config = load_config(p)
+        assert config.snippets == {"my email": "tim@example.com"}
+
+    def test_replaces_existing_section(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.toml"
+        p.write_text(
+            '[snippets]\n"old" = "old value"\n'
+            '\n[whisper]\nprovider = "local"\n'
+        )
+        set_config_section(p, "snippets", {"new": "new value"})
+        config = load_config(p)
+        assert config.snippets == {"new": "new value"}
+        assert config.whisper.provider == "local"
+
+    def test_empty_data_clears_section(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.toml"
+        p.write_text('[snippets]\n"old" = "old value"\n')
+        set_config_section(p, "snippets", {})
+        config = load_config(p)
+        assert config.snippets == {}
+
+    def test_preserves_other_sections(self, tmp_path: Path) -> None:
+        p = tmp_path / "config.toml"
+        p.write_text(
+            '[hotkey]\nkey = "left_option"\n'
+            '\n[snippets]\n"old" = "old value"\n'
+            '\n[whisper]\nprovider = "groq"\n'
+        )
+        set_config_section(p, "snippets", {"email": "a@b.com"})
+        config = load_config(p)
+        assert config.hotkey.key == "left_option"
+        assert config.whisper.provider == "groq"
+        assert config.snippets == {"email": "a@b.com"}

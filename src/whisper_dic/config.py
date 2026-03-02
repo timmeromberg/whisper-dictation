@@ -127,6 +127,7 @@ class AppConfig:
     rewrite: RewriteConfig = field(default_factory=RewriteConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     custom_commands: dict[str, str] = field(default_factory=dict)
+    snippets: dict[str, str] = field(default_factory=dict)
 
 
 def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
@@ -173,6 +174,7 @@ def load_config(path: Path) -> AppConfig:
     contexts_data = _section(data, "rewrite.contexts")
     overlay_data = _section(data, "overlay")
     custom_commands_data = _section(data, "custom_commands")
+    snippets_data = _section(data, "snippets")
 
     provider = str(whisper_data.get("provider", "local")).strip().lower()
     if provider not in {"local", "groq"}:
@@ -265,6 +267,7 @@ def load_config(path: Path) -> AppConfig:
             font_scale=float(overlay_data.get("font_scale", 1.0)),
         ),
         custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
+        snippets={str(k): str(v) for k, v in snippets_data.items()},
     )
     return _validate_config(config)
 
@@ -427,8 +430,11 @@ def set_config_value(config_path: Path, dotted_key: str, raw_value: str) -> None
         updated_root = _set_key_in_block(root_block, key, value_literal)
         text = updated_root + text[root_end:]
 
-    # Atomic write: write to a temp file in the same directory, then replace.
-    # This prevents partial/corrupt config files on interruption.
+    _atomic_write(config_path, text)
+
+
+def _atomic_write(config_path: Path, text: str) -> None:
+    """Atomic write: temp file + replace to prevent partial/corrupt config files."""
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{config_path.name}.",
         suffix=".tmp",
@@ -451,6 +457,34 @@ def set_config_value(config_path: Path, dotted_key: str, raw_value: str) -> None
         os.replace(tmp_path, config_path)
     finally:
         tmp_path.unlink(missing_ok=True)
+
+
+def set_config_section(config_path: Path, section: str, data: dict[str, str]) -> None:
+    """Replace an entire TOML section with the given key-value pairs.
+
+    If the section doesn't exist, it is appended. If data is empty,
+    the section header is kept but the body is cleared.
+    """
+    text = config_path.read_text(encoding="utf-8")
+
+    # Build section body
+    body_lines = []
+    for key, value in data.items():
+        body_lines.append(f"{_to_toml_literal(key)} = {_to_toml_literal(value)}\n")
+    new_body = "".join(body_lines)
+
+    section_span = _find_section_span(text, section)
+    if section_span is None:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if text and not text.endswith("\n\n"):
+            text += "\n"
+        text += f"[{section}]\n{new_body}"
+    else:
+        block_start, block_end = section_span
+        text = text[:block_start] + "\n" + new_body + text[block_end:]
+
+    _atomic_write(config_path, text)
 
 
 class ConfigWatcher:
