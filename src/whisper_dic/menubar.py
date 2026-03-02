@@ -701,6 +701,11 @@ class DictationMenuBar(rumps.App):
             return set()
 
     def _check_device_changes(self, _timer: Any) -> None:
+        # Re-initialize PortAudio before querying so newly plugged/unplugged
+        # devices are discovered (PortAudio caches the device list at init).
+        from .recorder import reset_audio_backend
+
+        reset_audio_backend()
         current = self._get_input_device_names()
         if current != self._known_input_devices:
             self._known_input_devices = current
