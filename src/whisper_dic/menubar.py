@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import faulthandler
+import json
 import os
 import signal
 import threading
 import time
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,13 @@ PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
 HOTKEY_OPTIONS = ["left_option", "right_option", "left_command", "right_command", "left_shift", "right_shift"]
 _SMOKE_NO_INPUT_ENV = "WHISPER_DIC_SMOKE_NO_INPUT"
+_ONBOARDING_STATE_FILE = "menubar_onboarding.json"
+_ONBOARDING_STEP_LABELS = {
+    "permissions": "Check Permissions",
+    "provider": "Set Provider",
+    "test_dictation": "Test Dictation",
+    "privacy": "Review Privacy",
+}
 
 
 def _env_flag(name: str) -> bool:
@@ -55,10 +64,13 @@ class DictationMenuBar(rumps.App):
         self._overlay = RecordingOverlay()
         self._preview_overlay = PreviewOverlay()
         self._volume_last_change = 0.0
+        self._onboarding_state_path = config_path.parent / _ONBOARDING_STATE_FILE
+        self._onboarding_state = self._load_onboarding_state()
 
         self._status_item = rumps.MenuItem("Status: Idle")
         self._status_item.set_callback(None)
 
+        self._onboarding_menu = self._build_onboarding_menu()
         self._lang_menu = self._build_language_menu()
         self._hotkey_menu = self._build_hotkey_menu()
         self._rewrite_menu = self._build_rewrite_menu()
@@ -72,6 +84,7 @@ class DictationMenuBar(rumps.App):
 
         self.menu = [
             self._status_item,
+            self._onboarding_menu,
             None,
             self._lang_menu,
             self._hotkey_menu,
@@ -89,6 +102,156 @@ class DictationMenuBar(rumps.App):
             self._version_item(),
             rumps.MenuItem("Quit", callback=self._quit),
         ]
+
+    @staticmethod
+    def _default_onboarding_state() -> dict[str, Any]:
+        return {
+            "introduced": False,
+            "dismissed": False,
+            "steps": {step: False for step in _ONBOARDING_STEP_LABELS},
+        }
+
+    def _load_onboarding_state(self) -> dict[str, Any]:
+        state = self._default_onboarding_state()
+        try:
+            if self._onboarding_state_path.exists():
+                raw = json.loads(self._onboarding_state_path.read_text(encoding="utf-8"))
+                state["introduced"] = bool(raw.get("introduced", False))
+                state["dismissed"] = bool(raw.get("dismissed", False))
+                steps = raw.get("steps", {})
+                if isinstance(steps, dict):
+                    for step in _ONBOARDING_STEP_LABELS:
+                        state["steps"][step] = bool(steps.get(step, False))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return state
+
+    def _save_onboarding_state(self) -> None:
+        payload = {
+            "introduced": bool(self._onboarding_state.get("introduced", False)),
+            "dismissed": bool(self._onboarding_state.get("dismissed", False)),
+            "steps": {
+                step: bool(self._onboarding_state["steps"].get(step, False))
+                for step in _ONBOARDING_STEP_LABELS
+            },
+        }
+        try:
+            self._onboarding_state_path.parent.mkdir(parents=True, exist_ok=True)
+            self._onboarding_state_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            self._onboarding_state_path.chmod(0o600)
+        except OSError:
+            pass
+
+    def _onboarding_completed_count(self) -> int:
+        steps = self._onboarding_state.get("steps", {})
+        return sum(1 for step in _ONBOARDING_STEP_LABELS if bool(steps.get(step, False)))
+
+    def _onboarding_total_count(self) -> int:
+        return len(_ONBOARDING_STEP_LABELS)
+
+    def _onboarding_is_complete(self) -> bool:
+        return self._onboarding_completed_count() == self._onboarding_total_count()
+
+    def _onboarding_menu_title(self) -> str:
+        done = self._onboarding_completed_count()
+        total = self._onboarding_total_count()
+        if self._onboarding_is_complete():
+            return "Getting Started: Done"
+        return f"Getting Started: {done}/{total}"
+
+    def _sync_onboarding_menu(self) -> None:
+        self._onboarding_menu.title = self._onboarding_menu_title()
+        for step, item in self._onboarding_step_items.items():
+            item.state = 1 if self._onboarding_state["steps"].get(step, False) else 0
+
+    def _mark_onboarding_step(self, step: str) -> None:
+        if step not in _ONBOARDING_STEP_LABELS:
+            return
+        self._onboarding_state["steps"][step] = True
+        self._onboarding_state["dismissed"] = False
+        self._save_onboarding_state()
+        self._sync_onboarding_menu()
+        if self._onboarding_is_complete():
+            self._notify("Quick Start Complete", "You can reopen this checklist from the menu anytime.")
+
+    def _build_onboarding_menu(self) -> rumps.MenuItem:
+        menu = rumps.MenuItem(self._onboarding_menu_title())
+        self._onboarding_step_items: dict[str, rumps.MenuItem] = {}
+        step_callbacks = {
+            "permissions": self._onboarding_check_permissions,
+            "provider": self._onboarding_set_provider,
+            "test_dictation": self._onboarding_test_dictation,
+            "privacy": self._onboarding_open_privacy,
+        }
+        for step, label in _ONBOARDING_STEP_LABELS.items():
+            item = rumps.MenuItem(label, callback=step_callbacks[step])
+            item._onboarding_step = step  # type: ignore[attr-defined]
+            item.state = 1 if self._onboarding_state["steps"].get(step, False) else 0
+            self._onboarding_step_items[step] = item
+            menu.add(item)
+        menu.add(None)
+        menu.add(rumps.MenuItem("Dismiss Intro Prompt", callback=self._dismiss_onboarding_intro))
+        menu.add(rumps.MenuItem("Reset Checklist", callback=self._reset_onboarding))
+        return menu
+
+    def _dismiss_onboarding_intro(self, _sender: Any) -> None:
+        self._onboarding_state["dismissed"] = True
+        self._save_onboarding_state()
+        self._notify("Checklist Dismissed", "Use Getting Started menu anytime to continue.")
+
+    def _reset_onboarding(self, _sender: Any) -> None:
+        self._onboarding_state = self._default_onboarding_state()
+        self._save_onboarding_state()
+        self._sync_onboarding_menu()
+        self._notify("Checklist Reset", "Getting Started checklist reset.")
+
+    def _show_permission_guidance(self) -> None:
+        self._notify(
+            "Permissions",
+            "System Settings > Privacy & Security > Microphone + Accessibility.",
+        )
+
+    def _onboarding_check_permissions(self, _sender: Any) -> None:
+        self._show_permission_guidance()
+        self._mark_onboarding_step("permissions")
+
+    def _onboarding_set_provider(self, _sender: Any) -> None:
+        response = rumps.Window(
+            title="Set Provider",
+            message="Type 'local' or 'groq' to choose your active provider.",
+            default_text=self.config.whisper.provider,
+            ok="Save",
+            cancel="Cancel",
+        ).run()
+        if not response.clicked:
+            return
+        provider = response.text.strip().lower()
+        if provider not in PROVIDER_OPTIONS:
+            self._notify("Invalid Provider", "Use 'local' or 'groq'.")
+            return
+        if provider == "groq" and not self.config.whisper.groq.api_key.strip():
+            if not self._prompt_groq_key():
+                return
+        self._set_config("whisper.provider", provider)
+        self.config = load_config(self.config_path)
+        self._app.replace_transcriber(create_transcriber(self.config.whisper))
+        self._provider_menu.title = f"Provider: {provider}"
+        for item in self._provider_menu.values():
+            item.state = 1 if item.title == provider else 0
+        self._mark_onboarding_step("provider")
+        threading.Thread(target=self._check_provider_health, daemon=True).start()
+
+    def _onboarding_test_dictation(self, _sender: Any) -> None:
+        key = self.config.hotkey.key.replace("_", " ")
+        self._notify("Test Dictation", f"Hold {key}, speak, release. Escape cancels recording.")
+        self._mark_onboarding_step("test_dictation")
+
+    def _onboarding_open_privacy(self, _sender: Any) -> None:
+        webbrowser.open("https://github.com/timmeromberg/whisper-dic/blob/main/docs/privacy.md")
+        self._mark_onboarding_step("privacy")
 
     def _build_language_menu(self) -> rumps.MenuItem:
         active_lang = self._app.active_language
@@ -116,6 +279,10 @@ class DictationMenuBar(rumps.App):
     def _build_input_menu(self) -> rumps.MenuItem:
         """Input group: Microphone, Volume, Audio Control."""
         menu = rumps.MenuItem("Input")
+        hint = rumps.MenuItem("Tip: pick mic and feedback volume here")
+        hint.set_callback(None)
+        menu.add(hint)
+        menu.add(None)
 
         # Microphone submenu
         current = self.config.recording.device
@@ -164,6 +331,10 @@ class DictationMenuBar(rumps.App):
     def _build_output_menu(self) -> rumps.MenuItem:
         """Output group: Text Commands, Auto-Send, Live Preview."""
         menu = rumps.MenuItem("Output")
+        hint = rumps.MenuItem("Tip: enable Live Preview for immediate feedback")
+        hint.set_callback(None)
+        menu.add(hint)
+        menu.add(None)
 
         self._textcmds_item = rumps.MenuItem("Text Commands", callback=self._toggle_text_commands)
         self._textcmds_item.state = 1 if self.config.text_commands.enabled else 0
@@ -182,6 +353,10 @@ class DictationMenuBar(rumps.App):
     def _build_whisper_menu(self) -> rumps.MenuItem:
         """Whisper group: Provider, Failover, Groq API Key."""
         menu = rumps.MenuItem("Whisper")
+        hint = rumps.MenuItem("Tip: provider + API key setup starts here")
+        hint.set_callback(None)
+        menu.add(hint)
+        menu.add(None)
 
         # Provider submenu
         self._provider_menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
@@ -224,6 +399,9 @@ class DictationMenuBar(rumps.App):
         self._rewrite_toggle = rumps.MenuItem("Enabled", callback=self._toggle_rewrite)
         self._rewrite_toggle.state = 1 if rw.enabled else 0
         menu.add(self._rewrite_toggle)
+        hint = rumps.MenuItem("Tip: app-specific contexts override default mode")
+        hint.set_callback(None)
+        menu.add(hint)
         menu.add(None)
 
         # Per-app context toggles (shown first — they take priority)
@@ -297,10 +475,15 @@ class DictationMenuBar(rumps.App):
             f"Hold {key_display} + Ctrl — dictate + send",
             f"Hold {key_display} + Shift — voice command",
             f"Double-tap {key_display} — cycle language",
+            "Press Escape while recording — cancel",
         ]:
             item = rumps.MenuItem(label)
             item.set_callback(None)
             menu.add(item)
+
+        menu.add(None)
+        menu.add(rumps.MenuItem("Open Privacy Docs", callback=self._onboarding_open_privacy))
+        menu.add(rumps.MenuItem("Permissions Help", callback=self._onboarding_check_permissions))
 
         voice_cmds = rumps.MenuItem("Voice Commands")
         for label in [
@@ -1456,6 +1639,10 @@ class DictationMenuBar(rumps.App):
         self._register_wake_observer()
         key = self.config.hotkey.key.replace("_", " ")
         self._notify("Ready", f"Hold {key} to dictate. Double-tap to cycle language.")
+        if not self._onboarding_state.get("introduced", False) and not self._onboarding_state.get("dismissed", False):
+            self._notify("Getting Started", "Open 'Getting Started' in menu to complete quick setup.")
+            self._onboarding_state["introduced"] = True
+            self._save_onboarding_state()
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
 
 

@@ -47,9 +47,14 @@ mypy src/whisper_dic/
 
 # Smoke test (macOS only — tests real startup + pipeline)
 bash scripts/smoke-test.sh
+
+# CI retry behavior locally (reruns failed tests once)
+python scripts/ci_pytest_retry.py
 ```
 
 Run these checks before opening a PR.
+
+If CI reports flaky candidates, download the `flaky-report-*` artifact and prioritize stabilizing those tests before adding new coverage in the same area.
 
 ## Optional Pre-commit Hooks
 

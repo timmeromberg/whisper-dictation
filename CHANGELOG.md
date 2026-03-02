@@ -5,6 +5,18 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.4] - 2026-03-02
+
+### Added
+- Linux best-effort frontmost-app context support for rewrite categorization, with dedicated compatibility tests
+- Menu bar first-run onboarding checklist (`Getting Started`) with persistent progress, reset/dismiss actions, and contextual tips
+- CI flaky-test retry helper (`scripts/ci_pytest_retry.py`) plus uploaded flaky-report artifacts for triage
+
+### Changed
+- CI now reruns only failed tests once before failing to separate deterministic regressions from flakes
+- Contributor/development docs now document the flaky retry flow and artifact-driven triage process
+- Privacy/configuration docs now reflect Linux app-context behavior as best-effort with safe global fallback
+
 ## [0.10.3] - 2026-03-02
 
 ### Fixed

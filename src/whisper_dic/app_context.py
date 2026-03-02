@@ -121,6 +121,63 @@ _WINDOWS_APP_CATEGORIES: dict[str, str] = {
     "opera.exe": BROWSER,
 }
 
+_LINUX_APP_CATEGORIES: dict[str, str] = {
+    # coding — terminals
+    "gnome-terminal-server": CODING,
+    "konsole": CODING,
+    "kitty": CODING,
+    "alacritty": CODING,
+    "wezterm": CODING,
+    "wezterm-gui": CODING,
+    "tilix": CODING,
+    "xfce4-terminal": CODING,
+    "xterm": CODING,
+    # coding — editors and IDEs
+    "code": CODING,
+    "code-oss": CODING,
+    "codium": CODING,
+    "cursor": CODING,
+    "windsurf": CODING,
+    "zed": CODING,
+    "idea": CODING,
+    "pycharm": CODING,
+    "webstorm": CODING,
+    "clion": CODING,
+    "goland": CODING,
+    "rider": CODING,
+    "rubymine": CODING,
+    "phpstorm": CODING,
+    "datagrip": CODING,
+    # chat
+    "slack": CHAT,
+    "discord": CHAT,
+    "teams-for-linux": CHAT,
+    "teams": CHAT,
+    "signal-desktop": CHAT,
+    "telegram-desktop": CHAT,
+    "telegram": CHAT,
+    # email
+    "thunderbird": EMAIL,
+    "evolution": EMAIL,
+    "geary": EMAIL,
+    "mailspring": EMAIL,
+    # writing
+    "obsidian": WRITING,
+    "notion": WRITING,
+    "libreoffice-writer": WRITING,
+    "writer": WRITING,
+    # browser
+    "firefox": BROWSER,
+    "google-chrome": BROWSER,
+    "chrome": BROWSER,
+    "chromium": BROWSER,
+    "brave-browser": BROWSER,
+    "microsoft-edge": BROWSER,
+    "microsoft-edge-stable": BROWSER,
+    "vivaldi-stable": BROWSER,
+    "opera": BROWSER,
+}
+
 
 @dataclass(frozen=True)
 class RewriteContext:
@@ -138,6 +195,8 @@ def category_for_app(app_id: str) -> str | None:
         return _MACOS_APP_CATEGORIES.get(app_id)
     if sys.platform == "win32":
         return _WINDOWS_APP_CATEGORIES.get(app_id.lower())
+    if sys.platform.startswith("linux"):
+        return _LINUX_APP_CATEGORIES.get(app_id.lower())
     return None
 
 

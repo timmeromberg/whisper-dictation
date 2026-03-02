@@ -17,7 +17,7 @@ System-wide hold-to-dictate for macOS, Windows, and Linux. Hold a key, speak, re
 - **Multi-language** - double-tap the hotkey to cycle between configured languages
 - **Text commands** - say "period", "new line", "question mark" for punctuation
 - **AI rewriting** - optional LLM-powered cleanup of transcriptions (grammar, punctuation, capitalization)
-- **Per-app context** - automatically adapts rewrite style based on the frontmost app on macOS and Windows (Linux currently falls back to global rewrite mode)
+- **Per-app context** - automatically adapts rewrite style based on the frontmost app on macOS, Windows, and Linux (Linux support is best-effort by desktop environment/tooling)
 - **Filler removal** - automatically strips "um", "uh", "you know", etc.
 - **Live preview** - see transcription text appearing in real-time while you speak (opt-in)
 - **Provider failover** - automatically tries the other provider when the primary fails
@@ -27,6 +27,7 @@ System-wide hold-to-dictate for macOS, Windows, and Linux. Hold a key, speak, re
 - **Microphone selection** - choose which input device to use, switch live from menu bar
 - **Auto-mute** - mute Mac speakers, Android devices, Chromecasts during recording (macOS)
 - **Menu bar app** - shows recording status and mic level, switch settings without restart (macOS)
+- **Getting Started checklist** - first-run onboarding actions in the menu bar (permissions, provider setup, test dictation, privacy docs)
 - **Auto-start** - install as login item with automatic crash recovery (macOS)
 - **Config validation** - invalid values are clamped to sane defaults with warnings
 

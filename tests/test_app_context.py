@@ -88,7 +88,19 @@ def test_category_for_app_windows_slack(mock_sys):
 
 
 @patch("whisper_dic.app_context.sys")
-def test_category_for_app_linux_returns_none(mock_sys):
+def test_category_for_app_linux_code(mock_sys):
+    mock_sys.platform = "linux"
+    assert category_for_app("code") == CODING
+
+
+@patch("whisper_dic.app_context.sys")
+def test_category_for_app_linux_case_insensitive(mock_sys):
+    mock_sys.platform = "linux"
+    assert category_for_app("FIREFOX") == BROWSER
+
+
+@patch("whisper_dic.app_context.sys")
+def test_category_for_app_linux_unknown(mock_sys):
     mock_sys.platform = "linux"
     assert category_for_app("some-app") is None
 

@@ -282,7 +282,8 @@ class NSEventHotkeyListener:
 
     def _handle_key_down(self, event: object) -> None:
         """Cancel recording if Escape is pressed while hotkey is held."""
-        if event.keyCode() != 53:  # 53 = Escape key  # type: ignore[attr-defined]
+        keycode: int = event.keyCode()  # type: ignore[attr-defined]
+        if keycode != 53:  # 53 = Escape key
             return
         should_cancel = False
         with self._lock:

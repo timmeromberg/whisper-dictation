@@ -232,7 +232,7 @@ If the frontmost app doesn't match any category, the global `mode`/`prompt` abov
 Platform note:
 
 - macOS and Windows: frontmost-app detection is active.
-- Linux: frontmost-app detection is not available in the fallback backend yet, so rewrite always uses the global `mode`/`prompt`.
+- Linux: frontmost-app detection is active on supported desktops (best effort via available system tools such as `xdotool`/`xprop`); if detection fails, rewrite falls back to global `mode`/`prompt`.
 
 ## Live Preview
 

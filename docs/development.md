@@ -36,7 +36,21 @@ mypy src/whisper_dic/
 # smoke/e2e helpers
 bash scripts/smoke-test.sh
 bash scripts/e2e-test.sh
+
+# CI-style flaky retry (first run + rerun failed subset once)
+python scripts/ci_pytest_retry.py
 ```
+
+## CI Flaky-Test Policy
+
+CI test jobs run `scripts/ci_pytest_retry.py`:
+
+1. Run full pytest suite once.
+2. If failures occur, rerun only failed tests once (`--last-failed`).
+3. If rerun still fails, job fails (deterministic regression).
+4. If rerun passes, tests are marked as flaky candidates and the job continues.
+
+Each matrix job uploads `.ci-flaky-report.txt` as an artifact for triage.
 
 ## Pre-commit Hooks
 

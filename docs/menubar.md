@@ -98,6 +98,26 @@ Text size choices in menu are 85%, 100%, 125%, and 150%. Config supports a broad
 - How to Use helper
 - Version display
 
+### Getting Started Checklist
+
+The menu bar includes a **Getting Started** checklist with actionable onboarding items:
+
+- Check Permissions
+- Set Provider
+- Test Dictation
+- Review Privacy
+
+Behavior:
+
+- Shows progress (`x/4`) directly in the menu title.
+- Sends a one-time intro prompt after startup until dismissed.
+- Supports **Dismiss Intro Prompt** and **Reset Checklist**.
+- Progress is persisted in `menubar_onboarding.json` under your config directory.
+
+### Contextual Tips
+
+Lightweight tips are shown in key menu sections (Input, Output, Whisper, AI Rewrite) to improve discoverability without changing existing power-user flows.
+
 ## Auto-Start at Login
 
 From CLI:

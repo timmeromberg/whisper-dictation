@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,8 @@ def _bare_app():
 
     app = DictationMenuBar.__new__(DictationMenuBar)
     app._notify = MagicMock()
+    app._onboarding_state_path = Path("/tmp/whisper-dic-menubar-test-onboarding.json")
+    app._onboarding_state = {"introduced": True, "dismissed": False, "steps": {}}
     return app
 
 
@@ -53,6 +56,72 @@ def _config_with_context_enabled(enabled: bool):
 
 
 class TestMenuBarThreadSafety:
+    def test_onboarding_state_defaults_when_missing(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "missing.json"
+
+        state = app._load_onboarding_state()
+
+        assert state["introduced"] is False
+        assert state["dismissed"] is False
+        assert state["steps"]["permissions"] is False
+        assert state["steps"]["provider"] is False
+        assert state["steps"]["test_dictation"] is False
+        assert state["steps"]["privacy"] is False
+
+    def test_onboarding_state_roundtrip(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+        app._onboarding_state["introduced"] = True
+        app._onboarding_state["steps"]["provider"] = True
+
+        app._save_onboarding_state()
+
+        reloaded = app._load_onboarding_state()
+        assert reloaded["introduced"] is True
+        assert reloaded["steps"]["provider"] is True
+
+    def test_mark_onboarding_step_updates_state_and_menu(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+        app._onboarding_menu = SimpleNamespace(title="")
+        app._onboarding_step_items = {
+            "permissions": SimpleNamespace(state=0),
+            "provider": SimpleNamespace(state=0),
+            "test_dictation": SimpleNamespace(state=0),
+            "privacy": SimpleNamespace(state=0),
+        }
+
+        app._mark_onboarding_step("permissions")
+
+        assert app._onboarding_state["steps"]["permissions"] is True
+        assert app._onboarding_step_items["permissions"].state == 1
+        assert app._onboarding_menu.title == "Getting Started: 1/4"
+
+    def test_mark_onboarding_step_notifies_on_completion(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+        app._onboarding_state["steps"]["permissions"] = True
+        app._onboarding_state["steps"]["provider"] = True
+        app._onboarding_state["steps"]["test_dictation"] = True
+        app._onboarding_menu = SimpleNamespace(title="")
+        app._onboarding_step_items = {
+            "permissions": SimpleNamespace(state=1),
+            "provider": SimpleNamespace(state=1),
+            "test_dictation": SimpleNamespace(state=1),
+            "privacy": SimpleNamespace(state=0),
+        }
+
+        app._mark_onboarding_step("privacy")
+
+        app._notify.assert_called_once_with(
+            "Quick Start Complete",
+            "You can reopen this checklist from the menu anytime.",
+        )
+
     def test_sync_context_menu_labels(self) -> None:
         app = _bare_app()
         app._context_items = {

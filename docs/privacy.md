@@ -22,7 +22,7 @@ AI rewrite uses your configured Groq API key (`whisper.groq.api_key`) and select
 
 ## Frontmost App Metadata (Per-App Contexts)
 
-If per-app rewrite contexts are enabled, whisper-dic captures the current frontmost app identifier (bundle ID on macOS, executable name on Windows) once per dictation.
+If per-app rewrite contexts are enabled, whisper-dic captures the current frontmost app identifier (bundle ID on macOS, executable name on Windows/Linux) once per dictation.
 
 This identifier is used locally to:
 
