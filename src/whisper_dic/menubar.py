@@ -411,7 +411,7 @@ class DictationMenuBar(rumps.App):
 
     def _periodic_health_check(self, _timer: Any) -> None:
         def _run():
-            ok = self._app.transcriber.health_check()
+            ok = self._app.transcriber_health_check()
             if not ok and self._provider_healthy:
                 def _update_down():
                     self._provider_healthy = False
@@ -548,8 +548,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("whisper.provider", provider)
         self.config = load_config(self.config_path)
         # Recreate transcriber with new provider
-        self._app.transcriber.close()
-        self._app.transcriber = create_transcriber(self.config.whisper)
+        self._app.replace_transcriber(create_transcriber(self.config.whisper))
         self._provider_menu.title = f"Provider: {provider}"
         for item in self._provider_menu.values():
             item.state = 1 if item.title == provider else 0
@@ -578,8 +577,7 @@ class DictationMenuBar(rumps.App):
         if self._prompt_groq_key():
             # If currently using groq, recreate transcriber with new key
             if self.config.whisper.provider == "groq":
-                self._app.transcriber.close()
-                self._app.transcriber = create_transcriber(self.config.whisper)
+                self._app.replace_transcriber(create_transcriber(self.config.whisper))
                 threading.Thread(target=self._check_provider_health, daemon=True).start()
             self._notify("API Key Updated", "Groq API key saved.")
 
@@ -587,7 +585,7 @@ class DictationMenuBar(rumps.App):
         """Run a health check and notify the user of the result."""
         provider = self.config.whisper.provider
         try:
-            ok = self._app.transcriber.health_check()
+            ok = self._app.transcriber_health_check()
         except Exception:
             ok = False
         if ok:
@@ -790,7 +788,7 @@ class DictationMenuBar(rumps.App):
             self.config.rewrite.enabled = False
             self._app.config.rewrite.enabled = False
             self._set_config("rewrite.enabled", "false")
-            self._update_rewrite_labels()
+            callAfter(self._update_rewrite_labels)
             return
 
         if self._app._rewriter is not None:
@@ -986,7 +984,7 @@ class DictationMenuBar(rumps.App):
         def _run():
             provider = self.config.whisper.provider
             lang = self._app.active_language
-            ok = self._app.transcriber.health_check()
+            ok = self._app.transcriber_health_check()
             status = "reachable" if ok else "UNREACHABLE"
             self._notify(
                 f"Provider: {provider} ({status})",
@@ -1011,8 +1009,7 @@ class DictationMenuBar(rumps.App):
 
         # Non-UI state updates (safe from any thread)
         if new_config.whisper.provider != old.whisper.provider:
-            self._app.transcriber.close()
-            self._app.transcriber = create_transcriber(new_config.whisper)
+            self._app.replace_transcriber(create_transcriber(new_config.whisper))
 
         if new_config.whisper.language != old.whisper.language:
             self._app.set_language(new_config.whisper.language)
@@ -1088,8 +1085,7 @@ class DictationMenuBar(rumps.App):
             or new_config.whisper.prompt != old.whisper.prompt
         )
         if whisper_params_changed:
-            self._app.transcriber.close()
-            self._app.transcriber = create_transcriber(new_config.whisper)
+            self._app.replace_transcriber(create_transcriber(new_config.whisper))
 
         # Language list
         if new_config.whisper.languages != old.whisper.languages:
@@ -1106,7 +1102,6 @@ class DictationMenuBar(rumps.App):
         if overlay_changed:
             self._app.config.overlay = new_config.overlay
             self.config.overlay = new_config.overlay
-            self._apply_overlay_accessibility()
 
         # Custom commands
         if new_config.custom_commands != old.custom_commands:
@@ -1193,6 +1188,7 @@ class DictationMenuBar(rumps.App):
                 self._overlay_scale_menu.title = f"Text Size: {int(scale * 100)}%"
                 for value, item in self._overlay_scale_items.items():
                     item.state = 1 if abs(value - scale) < 1e-6 else 0
+                self._apply_overlay_accessibility()
 
             self._notify("Config Reloaded", "Settings updated from config.toml")
 
@@ -1265,8 +1261,7 @@ class DictationMenuBar(rumps.App):
         self._apply_overlay_accessibility()
 
         # Update transcriber
-        self._app.transcriber.close()
-        self._app.transcriber = create_transcriber(self.config.whisper)
+        self._app.replace_transcriber(create_transcriber(self.config.whisper))
 
         # Update listener key
         self._app.listener.set_key(self.config.hotkey.key)

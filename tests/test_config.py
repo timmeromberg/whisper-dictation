@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest.mock import patch
 
-from whisper_dic.config import AppConfig, _section, _to_toml_literal, load_config
+import pytest
+
+from whisper_dic.config import AppConfig, _section, _to_toml_literal, load_config, set_config_value
 
 
 class TestLoadConfig:
@@ -165,3 +169,28 @@ class TestValidation:
         p.write_text("[overlay]\nfont_scale = 0.1\n")
         config = load_config(p)
         assert config.overlay.font_scale == 0.75
+
+
+class TestSetConfigValue:
+    def test_set_config_value_preserves_existing_file_on_replace_error(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.toml"
+        config_path.write_text('[whisper]\nprovider = "local"\n', encoding="utf-8")
+
+        with patch("whisper_dic.config.os.replace", side_effect=RuntimeError("replace failed")):
+            with pytest.raises(RuntimeError):
+                set_config_value(config_path, "whisper.provider", "groq")
+
+        # Original file remains intact when atomic replace fails.
+        assert 'provider = "local"' in config_path.read_text(encoding="utf-8")
+        assert not list(tmp_path.glob(".config.toml.*.tmp"))
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX chmod semantics")
+    def test_set_config_value_preserves_mode_bits(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "config.toml"
+        config_path.write_text('[whisper]\nprovider = "local"\n', encoding="utf-8")
+        config_path.chmod(0o640)
+
+        set_config_value(config_path, "whisper.provider", "groq")
+
+        mode = config_path.stat().st_mode & 0o777
+        assert mode == 0o640

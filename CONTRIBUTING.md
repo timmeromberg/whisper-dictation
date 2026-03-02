@@ -20,11 +20,13 @@ python3 -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 # .venv\Scripts\activate   # Windows
 
-# Install in editable mode with dev + macOS extras
-pip install -e ".[macos]"
+# Install in editable mode
+pip install -e ".[macos]"   # macOS
+# pip install -e .          # Windows
 
 # Create your config (if you don't have one)
-whisper-dic setup
+whisper-dic setup           # macOS interactive setup
+# whisper-dic set KEY VALUE # Windows/manual setup
 ```
 
 ## Running Tests

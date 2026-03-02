@@ -5,6 +5,20 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.10] - 2026-03-02
+
+### Fixed
+- Serialized transcriber access across dictation pipeline and config hot-reload to avoid swap/close races with in-flight transcriptions
+- Routed remaining menubar config-reload overlay/rewrite label UI updates through main-thread dispatch paths
+- Hardened history copy action to gracefully handle `pbcopy` failures and timeouts
+- Made config writes atomic to prevent partial/corrupt `config.toml` on interruption
+- Clarified cross-platform contributor setup instructions (macOS extras vs Windows/manual setup)
+- Pinned CI/E2E/release GitHub Actions to immutable SHAs for supply-chain hardening
+
+### Added
+- Fast PR-gated E2E smoke workflow path (`scripts/e2e-pr-smoke.sh`) with local mock endpoint validation
+- Regression tests for atomic config writes, transcriber swap synchronization, and menubar thread-safety helpers
+
 ## [0.9.9] - 2026-03-02
 
 ### Fixed

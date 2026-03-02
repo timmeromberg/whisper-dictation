@@ -45,6 +45,7 @@ class DictationApp:
             device=config.recording.device,
         )
         self.transcriber = create_transcriber(config.whisper)
+        self._transcriber_lock = threading.RLock()
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
         self.paster = TextPaster()
         self.audio_controller = AudioController(config.audio_control)
@@ -122,7 +123,7 @@ class DictationApp:
         with self._lang_lock:
             if lang in self._languages:
                 self._lang_index = self._languages.index(lang)
-        self.transcriber.language = lang
+        self._set_transcriber_language(lang)
 
     def set_languages(self, languages: list[str], active_language: str | None = None) -> None:
         """Replace the configured language list in a thread-safe way."""
@@ -135,7 +136,7 @@ class DictationApp:
             elif self._lang_index >= len(self._languages):
                 self._lang_index = 0
             current = self._languages[self._lang_index]
-        self.transcriber.language = current
+        self._set_transcriber_language(current)
 
     @property
     def listener(self) -> HotkeyListener | NSEventHotkeyListener:
@@ -153,7 +154,7 @@ class DictationApp:
         with self._lang_lock:
             self._lang_index = (self._lang_index + 1) % len(self._languages)
             new_lang = self._languages[self._lang_index]
-        self.transcriber.language = new_lang
+        self._set_transcriber_language(new_lang)
 
         display = LANG_NAMES.get(new_lang, new_lang)
         log("language", f"Switched to {display} ({new_lang})")
@@ -259,7 +260,7 @@ class DictationApp:
         last_exc: Exception | None = None
         for attempt in range(1, max_attempts + 1):
             try:
-                return self.transcriber.transcribe(audio_bytes)
+                return self._transcribe_with_active_transcriber(audio_bytes)
             except Exception as exc:
                 last_exc = exc
                 err_str = str(exc).lower()
@@ -301,11 +302,33 @@ class DictationApp:
             log("startup", "Groq API key is empty. Set it via: whisper-dic set whisper.groq.api_key YOUR_KEY")
             return False
         log("startup", f"Checking Whisper provider ({provider})...")
-        if not self.transcriber.health_check():
+        if not self.transcriber_health_check():
             log("startup", "Whisper provider is unreachable. Exiting.")
             return False
         log("startup", "Whisper provider is reachable.")
         return True
+
+    def _set_transcriber_language(self, language: str) -> None:
+        with self._transcriber_lock:
+            self.transcriber.language = language
+
+    def _transcribe_with_active_transcriber(self, audio_bytes: bytes) -> str:
+        with self._transcriber_lock:
+            return self.transcriber.transcribe(audio_bytes)
+
+    def transcriber_health_check(self) -> bool:
+        with self._transcriber_lock:
+            return self.transcriber.health_check()
+
+    def replace_transcriber(self, transcriber: WhisperTranscriber) -> None:
+        with self._transcriber_lock:
+            current = self.transcriber
+            self.transcriber = transcriber
+        current.close()
+
+    def close_transcriber(self) -> None:
+        with self._transcriber_lock:
+            self.transcriber.close()
 
     def _on_hold_start(self) -> None:
         self._start_done.clear()
@@ -571,7 +594,7 @@ class DictationApp:
             if thread.is_alive():
                 log("shutdown", f"Warning: {thread.name} did not finish in time")
 
-        self.transcriber.close()
+        self.close_transcriber()
         self.cleaner.close()
         if self._rewriter is not None:
             self._rewriter.close()
@@ -586,4 +609,4 @@ class DictationApp:
             log("atexit", "Cleaning up active recording...")
             self.recorder.stop()
         if not self.stopped:
-            self.transcriber.close()
+            self.close_transcriber()

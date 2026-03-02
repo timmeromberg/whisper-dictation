@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import threading
 import time
 import tomllib
@@ -367,7 +369,30 @@ def set_config_value(config_path: Path, dotted_key: str, raw_value: str) -> None
         updated_root = _set_key_in_block(root_block, key, value_literal)
         text = updated_root + text[root_end:]
 
-    config_path.write_text(text, encoding="utf-8")
+    # Atomic write: write to a temp file in the same directory, then replace.
+    # This prevents partial/corrupt config files on interruption.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{config_path.name}.",
+        suffix=".tmp",
+        dir=str(config_path.parent),
+        text=True,
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+
+        try:
+            mode = config_path.stat().st_mode & 0o777
+            os.chmod(tmp_path, mode)
+        except OSError:
+            pass
+
+        os.replace(tmp_path, config_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 class ConfigWatcher:

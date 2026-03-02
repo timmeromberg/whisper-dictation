@@ -259,3 +259,73 @@ class TestPreviewShutdown:
 
             assert not t.is_alive()
             preview.close.assert_called_once()
+
+
+class _BlockingTranscriber:
+    def __init__(self, started: threading.Event, release: threading.Event) -> None:
+        self.language = "en"
+        self._started = started
+        self._release = release
+        self.closed = False
+
+    def health_check(self) -> bool:
+        return True
+
+    def transcribe(self, _audio_bytes: bytes) -> str:
+        self._started.set()
+        self._release.wait(timeout=2.0)
+        return "ok"
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class TestTranscriberSwapLock:
+    def test_replace_transcriber_waits_for_in_flight_transcription(self) -> None:
+        from whisper_dic.dictation import DictationApp
+
+        with (
+            patch("whisper_dic.recorder.sd"),
+            patch("whisper_dic.dictation.HotkeyListener"),
+            patch("whisper_dic.dictation.check_accessibility", return_value=[]),
+        ):
+            app = DictationApp(_base_config())
+
+            started = threading.Event()
+            release = threading.Event()
+            blocking = _BlockingTranscriber(started, release)
+            app.replace_transcriber(blocking)
+
+            result_holder: dict[str, str] = {}
+
+            def _transcribe() -> None:
+                result_holder["text"] = app._transcribe_with_retry(b"audio", max_attempts=1)
+
+            tx_thread = threading.Thread(target=_transcribe, daemon=True)
+            tx_thread.start()
+            assert started.wait(timeout=1.0)
+
+            next_transcriber = MagicMock()
+            next_transcriber.language = "en"
+            next_transcriber.health_check.return_value = True
+            next_transcriber.transcribe.return_value = "new"
+
+            swap_done = threading.Event()
+
+            def _swap() -> None:
+                app.replace_transcriber(next_transcriber)
+                swap_done.set()
+
+            swap_thread = threading.Thread(target=_swap, daemon=True)
+            swap_thread.start()
+
+            # Swap must wait while transcribe() is still running.
+            assert not swap_done.wait(timeout=0.2)
+
+            release.set()
+            tx_thread.join(timeout=1.0)
+            swap_thread.join(timeout=1.0)
+
+            assert result_holder["text"] == "ok"
+            assert swap_done.is_set()
+            assert blocking.closed is True
