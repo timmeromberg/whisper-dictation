@@ -809,6 +809,11 @@ class DictationMenuBar(rumps.App):
             return set()
 
     def _check_device_changes(self, _timer: Any) -> None:
+        # Skip device polling while recording — reset_audio_backend() kills
+        # the active PortAudio stream.
+        if self._is_recording:
+            return
+
         # Re-initialize PortAudio before querying so newly plugged/unplugged
         # devices are discovered (PortAudio caches the device list at init).
         from .recorder import reset_audio_backend
