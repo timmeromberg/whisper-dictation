@@ -5,6 +5,18 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-03-02
+
+### Added
+- Per-app context-aware AI rewriting — automatically adapts rewrite prompt based on frontmost app (coding, chat, email, writing, browser)
+- Spoken code pattern handling in coding context (`dot py` → `.py`, `dash dash` → `--`)
+- App Contexts submenu in menu bar for per-category enable/disable toggles
+- `[rewrite.contexts.*]` config sections for per-category customization
+- Automated GitHub release and PyPI publish on every successful CI push to main
+
+### Changed
+- Pipeline captures frontmost app once and passes to both rewriter and paster (eliminates redundant osascript call)
+
 ## [0.9.14] - 2026-03-02
 
 ### Fixed
