@@ -76,8 +76,26 @@ class TranscriptionHistory:
         try:
             self._persist_path.parent.mkdir(parents=True, exist_ok=True)
             data = [asdict(e) for e in self._entries]
-            self._persist_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            self._persist_path.chmod(0o600)
+            content = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            # Write to temp file with restrictive permissions, then atomic-replace.
+            # Prevents a window where the file is world-readable before chmod.
+            import tempfile
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(self._persist_path.parent),
+                prefix=f".{self._persist_path.name}.",
+                suffix=".tmp",
+            )
+            tmp_path = Path(tmp_name)
+            try:
+                os.chmod(fd, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(content)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(tmp_path, self._persist_path)
+            except BaseException:
+                tmp_path.unlink(missing_ok=True)
+                raise
             self._last_save_time = now
             self._dirty = False
         except OSError as exc:
