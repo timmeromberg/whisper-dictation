@@ -5,6 +5,13 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-03-02
+
+### Fixed
+- Made per-app context pipeline tests platform-agnostic so CI matrix runs (Linux/Windows/macOS) validate rewrite behavior consistently
+- Removed macOS-only app-ID assumptions from new context tests that caused false CI failures outside macOS
+- Hardened smoke-test recorder/dictation checks to gracefully skip recorder-dependent assertions when another live instance already owns the audio device
+
 ## [0.10.1] - 2026-03-02
 
 ### Fixed

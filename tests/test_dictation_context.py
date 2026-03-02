@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from whisper_dic.app_context import RewriteContext
 from whisper_dic.config import (
     AppConfig,
     AudioFeedbackConfig,
@@ -52,7 +53,11 @@ def test_pipeline_uses_context_prompt_and_forwards_app_id() -> None:
         patch("whisper_dic.recorder.sd"),
         patch("whisper_dic.dictation.HotkeyListener", return_value=listener),
         patch("whisper_dic.dictation.create_transcriber", return_value=transcriber),
-        patch("whisper_dic.dictation.frontmost_app_id", return_value="com.apple.Terminal"),
+        patch("whisper_dic.dictation.frontmost_app_id", return_value="frontmost-app"),
+        patch(
+            "whisper_dic.dictation.resolve_context",
+            return_value=RewriteContext(category="coding", app_id="frontmost-app"),
+        ),
     ):
         app = DictationApp(config)
         app.cleaner.clean = MagicMock(return_value="cleaned transcript")
@@ -69,7 +74,7 @@ def test_pipeline_uses_context_prompt_and_forwards_app_id() -> None:
         app.paster.paste.assert_called_once_with(
             "rewritten transcript",
             auto_send=False,
-            app_id="com.apple.Terminal",
+            app_id="frontmost-app",
         )
         app.stop()
 
@@ -86,7 +91,11 @@ def test_pipeline_falls_back_to_global_prompt_when_context_disabled() -> None:
         patch("whisper_dic.recorder.sd"),
         patch("whisper_dic.dictation.HotkeyListener", return_value=listener),
         patch("whisper_dic.dictation.create_transcriber", return_value=transcriber),
-        patch("whisper_dic.dictation.frontmost_app_id", return_value="com.apple.Terminal"),
+        patch("whisper_dic.dictation.frontmost_app_id", return_value="frontmost-app"),
+        patch(
+            "whisper_dic.dictation.resolve_context",
+            return_value=RewriteContext(category=None, app_id="frontmost-app"),
+        ),
     ):
         app = DictationApp(config)
         app.cleaner.clean = MagicMock(return_value="cleaned transcript")

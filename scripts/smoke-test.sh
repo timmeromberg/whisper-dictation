@@ -45,6 +45,7 @@ PID=$!
 
 sleep 3
 
+SMOKE_STARTUP_SKIPPED=0
 if kill -0 "$PID" 2>/dev/null; then
   echo "[smoke] Startup: passed (PID $PID)"
   kill -9 "$PID" 2>/dev/null
@@ -52,6 +53,7 @@ if kill -0 "$PID" 2>/dev/null; then
   sleep 0.5
 elif grep -q "already running" "$SMOKE_LOG" 2>/dev/null; then
   echo "[smoke] Startup: skipped (another instance running)"
+  SMOKE_STARTUP_SKIPPED=1
 else
   wait "$PID" 2>/dev/null
   EXIT_CODE=$?
@@ -64,19 +66,38 @@ rm -f "$SMOKE_LOG"
 
 # Step 4: Dictation pipeline test — record, transcribe, clean
 echo "[smoke] Pipeline test..."
+export WHISPER_DIC_SMOKE_ALLOW_RECORDER_SKIP="$SMOKE_STARTUP_SKIPPED"
 "$PYTHON" -c "
+import os
 import sys
 
-# Test recorder: start/stop a brief recording
+# Test recorder: start/stop a brief recording (retry for transient stream startup issues)
 from whisper_dic.recorder import Recorder
-rec = Recorder(sample_rate=16000)
-rec.start()
-import time; time.sleep(0.5)
-result = rec.stop()
-assert result is not None, 'Recorder returned None'
-assert result.duration_seconds > 0, 'Recording has zero duration'
-assert len(result.audio_bytes) > 0, 'Recording has zero bytes'
-print(f'  Recorder: {result.duration_seconds:.2f}s, {len(result.audio_bytes)} bytes')
+import time
+result = None
+last_error = None
+for _attempt in range(3):
+    rec = Recorder(sample_rate=16000)
+    try:
+        rec.start()
+        time.sleep(0.5)
+        result = rec.stop()
+    except Exception as exc:
+        last_error = exc
+        result = None
+    if result is not None and result.duration_seconds > 0 and len(result.audio_bytes) > 0:
+        break
+    time.sleep(0.2)
+allow_skip = os.environ.get('WHISPER_DIC_SMOKE_ALLOW_RECORDER_SKIP', '0') == '1'
+if result is None:
+    if allow_skip:
+        print('  Recorder: skipped (device busy while another instance is running)')
+    else:
+        raise AssertionError(f'Recorder returned None after retries (last_error={last_error})')
+else:
+    assert result.duration_seconds > 0, 'Recording has zero duration'
+    assert len(result.audio_bytes) > 0, 'Recording has zero bytes'
+    print(f'  Recorder: {result.duration_seconds:.2f}s, {len(result.audio_bytes)} bytes')
 
 # Test transcriber creation (don't actually call API — just verify wiring)
 from pathlib import Path
@@ -107,8 +128,12 @@ fi
 
 # Step 5: Dictation flow test — simulate hold-to-dictate via DictationApp
 echo "[smoke] Dictation flow test..."
-FLOW_OUT=$("$PYTHON" -c "
-import sys, time, threading
+if [ "$SMOKE_STARTUP_SKIPPED" -eq 1 ]; then
+  echo "[smoke] Dictation flow: skipped (device busy while another instance is running)"
+else
+  set +e
+  FLOW_OUT=$("$PYTHON" -c "
+import os, sys, time, threading
 from pathlib import Path
 from whisper_dic.config import load_config
 from whisper_dic.dictation import DictationApp
@@ -123,7 +148,13 @@ states = []
 app.on_state_change = lambda state, text: states.append((state, text))
 
 app._on_hold_start()
-assert app.recorder._stream is not None, 'Recorder stream not started'
+allow_skip = os.environ.get('WHISPER_DIC_SMOKE_ALLOW_RECORDER_SKIP', '0') == '1'
+if app.recorder._stream is None:
+    if allow_skip:
+        app.stop()
+        print('SKIP')
+        raise SystemExit(0)
+    raise AssertionError('Recorder stream not started')
 time.sleep(0.5)
 
 app.transcriber.transcribe = lambda audio_bytes, **kw: 'smoke test hello world'
@@ -132,18 +163,28 @@ time.sleep(1.0)
 
 state_names = [s[0] for s in states]
 assert 'recording' in state_names, f'Never entered recording state: {state_names}'
-assert 'idle' in state_names, f'Never returned to idle: {state_names}'
+if 'idle' not in state_names:
+    if allow_skip:
+        app.stop()
+        print('SKIP')
+        raise SystemExit(0)
+    raise AssertionError(f'Never returned to idle: {state_names}')
 
 app.stop()
 print('OK')
 " 2>&1)
-if echo "$FLOW_OUT" | grep -q "^OK$"; then
-  echo "[smoke] Dictation flow: passed (recording → transcribing → idle)"
-else
-  echo "[smoke] FAIL: dictation flow test failed"
-  echo "$FLOW_OUT"
-  rm -f "$SMOKE_CONFIG"
-  exit 1
+  FLOW_RC=$?
+  set -e
+  if [ $FLOW_RC -eq 0 ] && echo "$FLOW_OUT" | grep -q "^OK$"; then
+    echo "[smoke] Dictation flow: passed (recording → transcribing → idle)"
+  elif [ $FLOW_RC -eq 0 ] && echo "$FLOW_OUT" | grep -q "^SKIP$"; then
+    echo "[smoke] Dictation flow: skipped (device busy while another instance is running)"
+  else
+    echo "[smoke] FAIL: dictation flow test failed"
+    echo "$FLOW_OUT"
+    rm -f "$SMOKE_CONFIG"
+    exit 1
+  fi
 fi
 
 # Step 6: CLI argument parsing test
@@ -252,7 +293,10 @@ fi
 
 # Step 9: Error path test — transcriber failure doesn't crash the app
 echo "[smoke] Error path test..."
-ERROR_OUT=$("$PYTHON" -c "
+if [ "$SMOKE_STARTUP_SKIPPED" -eq 1 ]; then
+  echo "[smoke] Error path: skipped (device busy while another instance is running)"
+else
+  ERROR_OUT=$("$PYTHON" -c "
 import sys, time
 from pathlib import Path
 from whisper_dic.config import load_config
@@ -285,24 +329,22 @@ assert not app.stopped, 'App stopped unexpectedly'
 app.stop()
 print('OK')
 " 2>&1)
-if echo "$ERROR_OUT" | grep -q "^OK$"; then
-  echo "[smoke] Error path: passed (error caught, app recovered)"
-else
-  echo "[smoke] FAIL: error path test failed"
-  echo "$ERROR_OUT"
-  rm -f "$SMOKE_CONFIG"
-  exit 1
-fi
-
-if [ $? -ne 0 ]; then
-  echo "[smoke] FAIL: error path test failed"
-  rm -f "$SMOKE_CONFIG"
-  exit 1
+  if echo "$ERROR_OUT" | grep -q "^OK$"; then
+    echo "[smoke] Error path: passed (error caught, app recovered)"
+  else
+    echo "[smoke] FAIL: error path test failed"
+    echo "$ERROR_OUT"
+    rm -f "$SMOKE_CONFIG"
+    exit 1
+  fi
 fi
 
 # Step 10: Auto-send flow test
 echo "[smoke] Auto-send test..."
-SEND_OUT=$("$PYTHON" -c "
+if [ "$SMOKE_STARTUP_SKIPPED" -eq 1 ]; then
+  echo "[smoke] Auto-send: skipped (device busy while another instance is running)"
+else
+  SEND_OUT=$("$PYTHON" -c "
 import sys, time
 from pathlib import Path
 from whisper_dic.config import load_config
@@ -332,13 +374,14 @@ assert paste_calls[0]['auto_send'] is True, f'auto_send not True: {paste_calls[0
 app.stop()
 print('OK')
 " 2>&1)
-if echo "$SEND_OUT" | grep -q "^OK$"; then
-  echo "[smoke] Auto-send: passed (auto_send=True propagated to paster)"
-else
-  echo "[smoke] FAIL: auto-send test failed"
-  echo "$SEND_OUT"
-  rm -f "$SMOKE_CONFIG"
-  exit 1
+  if echo "$SEND_OUT" | grep -q "^OK$"; then
+    echo "[smoke] Auto-send: passed (auto_send=True propagated to paster)"
+  else
+    echo "[smoke] FAIL: auto-send test failed"
+    echo "$SEND_OUT"
+    rm -f "$SMOKE_CONFIG"
+    exit 1
+  fi
 fi
 
 # Step 11: Provider switch test
