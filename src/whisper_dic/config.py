@@ -284,6 +284,18 @@ def _validate_config(config: AppConfig) -> AppConfig:
         log("config", f"volume={config.audio_feedback.volume} out of range, clamped to {clamped}")
         config.audio_feedback.volume = clamped
 
+    for freq_field in ("start_frequency", "stop_frequency"):
+        freq = getattr(config.audio_feedback, freq_field)
+        if not 20.0 <= freq <= 20000.0:
+            clamped = max(20.0, min(20000.0, freq))
+            log("config", f"{freq_field}={freq} out of range, clamped to {clamped}")
+            setattr(config.audio_feedback, freq_field, clamped)
+
+    if not 0.01 <= config.audio_feedback.duration_seconds <= 2.0:
+        clamped = max(0.01, min(2.0, config.audio_feedback.duration_seconds))
+        log("config", f"duration_seconds={config.audio_feedback.duration_seconds} out of range, clamped to {clamped}")
+        config.audio_feedback.duration_seconds = clamped
+
     if not 0.75 <= config.overlay.font_scale <= 2.0:
         clamped = max(0.75, min(2.0, config.overlay.font_scale))
         log("config", f"overlay.font_scale={config.overlay.font_scale} out of range, clamped to {clamped}")
