@@ -63,10 +63,56 @@ echo "  Config dir: $CONFIG_DIR"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 0: Fresh config creation
+# Step 0a: PyPI install smoke test (previous release)
+# ---------------------------------------------------------------------------
+# This tests the *previous* published version from PyPI, not the current commit.
+# It's a circumvented chicken-and-egg problem: we can't test the current version
+# because it hasn't been published yet. But there's no other way to validate
+# the PyPI packaging pipeline in CI, and catching a broken previous release
+# early is still valuable.
+
+echo "--- Step 0a: PyPI install smoke test ---"
+
+PYPI_VENV="/tmp/whisper-dic-pypi-test"
+rm -rf "$PYPI_VENV"
+python3 -m venv "$PYPI_VENV" 2>/dev/null || python -m venv "$PYPI_VENV" 2>/dev/null || true
+
+if [ -d "$PYPI_VENV" ]; then
+    if [ -d "$PYPI_VENV/Scripts" ]; then
+        PYPI_PIP="$PYPI_VENV/Scripts/pip"
+        PYPI_WHISPER="$PYPI_VENV/Scripts/whisper-dic"
+    else
+        PYPI_PIP="$PYPI_VENV/bin/pip"
+        PYPI_WHISPER="$PYPI_VENV/bin/whisper-dic"
+    fi
+
+    INSTALL_EXIT=0
+    "$PYPI_PIP" install whisper-dic 2>&1 | tail -3 || INSTALL_EXIT=$?
+
+    if [ "$INSTALL_EXIT" -eq 0 ]; then
+        pass "PyPI: pip install whisper-dic succeeded"
+
+        PYPI_VERSION=$("$PYPI_WHISPER" version 2>&1 || true)
+        if echo "$PYPI_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            pass "PyPI: installed version $PYPI_VERSION runs OK"
+        else
+            fail "PyPI: whisper-dic version failed ($PYPI_VERSION)"
+        fi
+    else
+        # First release or PyPI down — non-fatal
+        echo "  [SKIP] PyPI install failed (no published version yet or PyPI unavailable)"
+    fi
+
+    rm -rf "$PYPI_VENV"
+else
+    echo "  [SKIP] Could not create temp venv for PyPI test"
+fi
+
+# ---------------------------------------------------------------------------
+# Step 0b: Fresh config creation
 # ---------------------------------------------------------------------------
 
-echo "--- Step 0: Fresh config creation ---"
+echo "--- Step 0b: Fresh config creation ---"
 
 # Remove any pre-existing config to test auto-creation
 rm -f "$CONFIG"

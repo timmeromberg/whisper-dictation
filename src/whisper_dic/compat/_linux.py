@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
 from pynput.keyboard import Key
 
 from ..log import log
@@ -64,9 +69,97 @@ TERMINAL_APP_IDS: set[str] = {
 PASTE_MODIFIER_KEY = Key.ctrl
 
 
+def _run_capture(args: list[str], timeout: float = 0.4) -> str:
+    """Run a command and return stripped stdout, or empty string on failure."""
+    try:
+        proc = subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip()
+
+
+def _pid_from_xdotool() -> int | None:
+    """Resolve focused window PID using xdotool when available."""
+    if shutil.which("xdotool") is None:
+        return None
+    out = _run_capture(["xdotool", "getwindowfocus", "getwindowpid"])
+    if not out:
+        return None
+    try:
+        pid = int(out)
+    except ValueError:
+        return None
+    return pid if pid > 0 else None
+
+
+def _pid_from_xprop() -> int | None:
+    """Resolve active window PID using xprop (EWMH)."""
+    if shutil.which("xprop") is None:
+        return None
+
+    root = _run_capture(["xprop", "-root", "_NET_ACTIVE_WINDOW"])
+    if not root:
+        return None
+
+    match = re.search(r"(0x[0-9a-fA-F]+)", root)
+    if match is None:
+        return None
+    window_id = match.group(1)
+    if window_id == "0x0":
+        return None
+
+    win = _run_capture(["xprop", "-id", window_id, "_NET_WM_PID"])
+    if not win:
+        return None
+    pid_match = re.search(r"=\s*(\d+)", win)
+    if pid_match is None:
+        return None
+    pid = int(pid_match.group(1))
+    return pid if pid > 0 else None
+
+
+def _frontmost_pid() -> int | None:
+    """Best-effort frontmost PID resolution for Linux desktops."""
+    return _pid_from_xdotool() or _pid_from_xprop()
+
+
+def _process_name_for_pid(pid: int) -> str:
+    """Resolve process name for PID, preferring /proc metadata."""
+    comm_path = Path(f"/proc/{pid}/comm")
+    try:
+        comm = comm_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        comm = ""
+    if comm:
+        return comm
+
+    exe_path = Path(f"/proc/{pid}/exe")
+    try:
+        target = exe_path.resolve(strict=True)
+    except OSError:
+        target = None
+    if target is not None and target.name:
+        return target.name
+
+    out = _run_capture(["ps", "-p", str(pid), "-o", "comm="])
+    return out.strip()
+
+
 def frontmost_app_id() -> str:
-    """Best-effort frontmost app detection on Linux fallback backend."""
-    return ""
+    """Best-effort frontmost app detection on Linux backend."""
+    pid = _frontmost_pid()
+    if pid is None:
+        return ""
+    name = _process_name_for_pid(pid)
+    return name.lower() if name else ""
 
 
 def notify(message: str, title: str = "whisper-dic") -> None:
