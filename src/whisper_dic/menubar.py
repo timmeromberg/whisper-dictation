@@ -911,9 +911,7 @@ class DictationMenuBar(rumps.App):
         self.config.recording.preview_provider = provider
         self._app.config.recording.preview_provider = provider
         # Force preview transcriber recreation on next dictation
-        if self._app._preview_transcriber is not None:
-            self._app._preview_transcriber.close()
-            self._app._preview_transcriber = None
+        self._app.reset_preview_transcriber()
         self._preview_provider_menu.title = f"Preview Provider: {provider}"
         for item in self._preview_provider_menu.values():
             item.state = 1 if item.title == provider else 0
@@ -1054,9 +1052,7 @@ class DictationMenuBar(rumps.App):
         if new_config.recording.preview_provider != old.recording.preview_provider:
             self._app.config.recording.preview_provider = new_config.recording.preview_provider
             self.config.recording.preview_provider = new_config.recording.preview_provider
-            if self._app._preview_transcriber is not None:
-                self._app._preview_transcriber.close()
-                self._app._preview_transcriber = None
+            self._app.reset_preview_transcriber()
 
         if new_config.recording.streaming_preview != old.recording.streaming_preview:
             self._app.config.recording.streaming_preview = new_config.recording.streaming_preview

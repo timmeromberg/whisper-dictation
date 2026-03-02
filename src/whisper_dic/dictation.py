@@ -90,6 +90,7 @@ class DictationApp:
         self._preview_stop = threading.Event()
         self._preview_thread: threading.Thread | None = None
         self._preview_transcriber: WhisperTranscriber | None = None
+        self._preview_transcriber_lock = threading.RLock()
 
         # Optional callback for UI updates: fn(state: str, detail: str)
         # States: "idle", "recording", "transcribing", "preview", "language_changed"
@@ -330,6 +331,13 @@ class DictationApp:
         with self._transcriber_lock:
             self.transcriber.close()
 
+    def reset_preview_transcriber(self) -> None:
+        with self._preview_transcriber_lock:
+            current = self._preview_transcriber
+            self._preview_transcriber = None
+        if current is not None:
+            current.close()
+
     def _on_hold_start(self) -> None:
         self._start_done.clear()
         try:
@@ -506,16 +514,17 @@ class DictationApp:
             return
         log("preview", "Starting live preview thread...")
         self._preview_stop.clear()
-        if self._preview_transcriber is None:
-            try:
-                pp = self.config.recording.preview_provider
-                if pp:
-                    self._preview_transcriber = create_transcriber_for(self.config.whisper, pp)
-                else:
-                    self._preview_transcriber = create_transcriber(self.config.whisper)
-            except Exception as exc:
-                log("preview", f"Failed to create preview transcriber: {exc}")
-                return
+        try:
+            with self._preview_transcriber_lock:
+                if self._preview_transcriber is None:
+                    pp = self.config.recording.preview_provider
+                    if pp:
+                        self._preview_transcriber = create_transcriber_for(self.config.whisper, pp)
+                    else:
+                        self._preview_transcriber = create_transcriber(self.config.whisper)
+        except Exception as exc:
+            log("preview", f"Failed to create preview transcriber: {exc}")
+            return
         self._preview_thread = threading.Thread(
             target=self._run_preview_loop, daemon=True, name="preview",
         )
@@ -531,24 +540,24 @@ class DictationApp:
     def _run_preview_loop(self) -> None:
         """Periodically transcribe accumulated audio and emit preview state."""
         interval = self.config.recording.preview_interval
-        transcriber = self._preview_transcriber
-        if transcriber is None:
-            return
         # First update fires sooner for faster initial feedback
         first_wait = min(1.5, interval)
         if not self._preview_stop.wait(first_wait):
-            self._do_preview(transcriber)
+            self._do_preview()
         while not self._preview_stop.wait(interval):
-            self._do_preview(transcriber)
+            self._do_preview()
         self._emit_state("preview", "")
 
-    def _do_preview(self, transcriber: WhisperTranscriber) -> None:
+    def _do_preview(self) -> None:
         """Transcribe accumulated audio and emit preview state."""
         audio = self.recorder.get_accumulated_audio()
         if audio is None:
             return
         try:
-            text = transcriber.transcribe(audio)
+            with self._preview_transcriber_lock:
+                if self._preview_transcriber is None:
+                    return
+                text = self._preview_transcriber.transcribe(audio)
             if text.strip():
                 self._emit_state("preview", text.strip())
         except Exception as exc:
@@ -598,8 +607,7 @@ class DictationApp:
         self.cleaner.close()
         if self._rewriter is not None:
             self._rewriter.close()
-        if self._preview_transcriber is not None:
-            self._preview_transcriber.close()
+        self.reset_preview_transcriber()
         log("shutdown", "Complete.")
 
     def _atexit_cleanup(self) -> None:

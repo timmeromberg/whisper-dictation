@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from whisper_dic.cli import (
     _load_config_from_path,
     _pid_file_path,
     _runtime_supported,
+    _state_dir,
     command_set,
     command_setup,
 )
@@ -85,3 +87,42 @@ class TestCliRuntime:
         _load_config_from_path(cfg)
         mode = cfg.stat().st_mode & 0o777
         assert mode == 0o600
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX /tmp fallback only")
+    def test_state_dir_fallback_in_tmp_is_private(self, tmp_path: Path) -> None:
+        broken_state_home = tmp_path / "not-a-directory"
+        broken_state_home.write_text("x", encoding="utf-8")
+
+        uid = os.getuid()
+        fallback = Path(tempfile.gettempdir()) / f"whisper-dic-{uid}"
+        with (
+            patch("whisper_dic.cli.sys.platform", "linux"),
+            patch("whisper_dic.cli.os.getuid", return_value=uid),
+            patch.dict("whisper_dic.cli.os.environ", {"XDG_STATE_HOME": str(broken_state_home)}, clear=False),
+        ):
+            got = _state_dir()
+        assert got == fallback
+        st = got.stat()
+        mode = st.st_mode & 0o777
+        assert st.st_uid == uid
+        assert mode == 0o700
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX /tmp fallback only")
+    def test_state_dir_fallback_rejects_non_directory(self, tmp_path: Path) -> None:
+        broken_state_home = tmp_path / "not-a-directory"
+        broken_state_home.write_text("x", encoding="utf-8")
+
+        uid = 987655
+        fallback = Path(tempfile.gettempdir()) / f"whisper-dic-{uid}"
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback.write_text("not a dir", encoding="utf-8")
+        try:
+            with (
+                patch("whisper_dic.cli.sys.platform", "linux"),
+                patch("whisper_dic.cli.os.getuid", return_value=uid),
+                patch.dict("whisper_dic.cli.os.environ", {"XDG_STATE_HOME": str(broken_state_home)}, clear=False),
+            ):
+                with pytest.raises(OSError):
+                    _state_dir()
+        finally:
+            fallback.unlink(missing_ok=True)

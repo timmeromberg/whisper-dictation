@@ -329,3 +329,50 @@ class TestTranscriberSwapLock:
             assert result_holder["text"] == "ok"
             assert swap_done.is_set()
             assert blocking.closed is True
+
+    def test_reset_preview_transcriber_waits_for_in_flight_preview_transcription(self) -> None:
+        from whisper_dic.dictation import DictationApp
+
+        with (
+            patch("whisper_dic.recorder.sd"),
+            patch("whisper_dic.dictation.HotkeyListener"),
+            patch("whisper_dic.dictation.check_accessibility", return_value=[]),
+        ):
+            app = DictationApp(_base_config())
+            app.recorder.get_accumulated_audio = MagicMock(return_value=b"audio")
+
+            started = threading.Event()
+            release = threading.Event()
+            blocking = _BlockingTranscriber(started, release)
+            app._preview_transcriber = blocking
+
+            preview_done = threading.Event()
+
+            def _preview() -> None:
+                app._do_preview()
+                preview_done.set()
+
+            preview_thread = threading.Thread(target=_preview, daemon=True)
+            preview_thread.start()
+            assert started.wait(timeout=1.0)
+
+            reset_done = threading.Event()
+
+            def _reset() -> None:
+                app.reset_preview_transcriber()
+                reset_done.set()
+
+            reset_thread = threading.Thread(target=_reset, daemon=True)
+            reset_thread.start()
+
+            # Reset must wait while preview transcribe() is still running.
+            assert not reset_done.wait(timeout=0.2)
+
+            release.set()
+            preview_thread.join(timeout=1.0)
+            reset_thread.join(timeout=1.0)
+
+            assert preview_done.is_set()
+            assert reset_done.is_set()
+            assert app._preview_transcriber is None
+            assert blocking.closed is True

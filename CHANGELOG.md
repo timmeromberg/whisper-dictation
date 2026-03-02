@@ -5,6 +5,22 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.11] - 2026-03-02
+
+### Fixed
+- Synchronized preview-transcriber lifecycle so config/menu changes cannot close or swap it while preview transcription is in flight
+- Hardened POSIX runtime state fallback directory checks (private mode + ownership validation) and removed hardcoded temp path usage
+- Updated contributor guidance to match the repository's versioned changelog + `VERSION` bump workflow
+
+### Changed
+- CI now validates on Linux in PRs (unit/lint/type matrix includes `ubuntu-latest`)
+- Linux full E2E now runs on pull requests in addition to pushes
+- Coverage step now enforces a non-regression threshold (`--cov-fail-under=34`)
+
+### Added
+- Dedicated CI security job with Bandit (medium/high) and dependency audit (`pip-audit`)
+- Regression tests for secure state-dir fallback behavior and preview-transcriber swap synchronization
+
 ## [0.9.10] - 2026-03-02
 
 ### Fixed

@@ -6,8 +6,10 @@ import argparse
 import atexit
 import os
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -75,8 +77,15 @@ def _state_dir() -> Path:
         # Fallback for unusual environments where state dir is not writable.
         if sys.platform != "win32":
             uid = os.getuid()
-            fallback = Path("/tmp") / f"whisper-dic-{uid}"
+            fallback = Path(tempfile.gettempdir()) / f"whisper-dic-{uid}"
             fallback.mkdir(parents=True, exist_ok=True)
+            st = fallback.stat()
+            if not stat.S_ISDIR(st.st_mode):
+                raise OSError(f"Unsafe state fallback path (not a directory): {fallback}")
+            if st.st_uid != uid:
+                raise OSError(f"Unsafe state fallback path owner mismatch: {fallback}")
+            if st.st_mode & 0o077:
+                fallback.chmod(0o700)
             return fallback
         raise
 

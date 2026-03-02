@@ -84,7 +84,7 @@ Prefix with a scope when useful: `fix(audio):`, `feat(menubar):`, `test(e2e):`.
 
 - **One logical change per PR** — don't bundle unrelated fixes
 - **Tests** — add or update tests for behavioral changes
-- **CHANGELOG** — add an entry under `[Unreleased]` for user-facing changes
+- **CHANGELOG + VERSION** — bump `src/whisper_dic/VERSION` and add a versioned changelog entry at the top for user-facing changes
 - **Description** — explain *why*, not just *what*
 
 ## Project Structure
