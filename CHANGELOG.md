@@ -5,6 +5,11 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7] - 2026-03-02
+
+### Fixed
+- Newly plugged microphones now appear in the menu bar within 5 seconds (PortAudio backend reset before each device poll)
+
 ## [0.10.6] - 2026-03-02
 
 ### Fixed
