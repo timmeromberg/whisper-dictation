@@ -12,6 +12,11 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
+# Module-level lock serializing ALL PortAudio operations (stream create/start/
+# stop/close AND backend reset).  Both Recorder methods and the free-standing
+# reset_audio_backend() must hold this before touching PortAudio.
+_pa_lock = threading.Lock()
+
 
 @dataclass
 class RecordingResult:
@@ -97,12 +102,15 @@ def reset_audio_backend() -> None:
     Uses private sounddevice APIs (sd._terminate/_initialize) because there
     is no public reset method. If sounddevice removes these in a future
     version, this will need to be replaced with a full module reimport.
+
+    Acquires _pa_lock to prevent concurrent PortAudio access from Recorder.
     """
-    try:
-        sd._terminate()
-        sd._initialize()
-    except Exception as exc:
-        print(f"[recorder] audio backend reset failed: {exc}")
+    with _pa_lock:
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception as exc:
+            print(f"[recorder] audio backend reset failed: {exc}")
 
 
 class Recorder:
@@ -121,10 +129,6 @@ class Recorder:
         self.device = device
 
         self._lock = threading.Lock()
-        # Serializes PortAudio stream operations (create/start/stop/close).
-        # Separate from _lock to avoid deadlocking with the audio callback
-        # (which acquires _lock but never _pa_lock).
-        self._pa_lock = threading.Lock()
         self._stream: Optional[sd.InputStream] = None
         self._chunks: list[np.ndarray] = []
         self._recording = False
@@ -163,7 +167,7 @@ class Recorder:
             self._peak = max(self._peak, float(np.abs(indata).max()))
 
     def start(self) -> bool:
-        with self._pa_lock:
+        with _pa_lock:
             with self._lock:
                 if self._recording:
                     return False
@@ -211,7 +215,7 @@ class Recorder:
         device power-management hiccup or PortAudio xrun).  Returns True
         if the stream was successfully restarted.
         """
-        with self._pa_lock:
+        with _pa_lock:
             with self._lock:
                 if not self._recording:
                     return False
@@ -227,8 +231,12 @@ class Recorder:
                 except Exception:
                     pass
 
-            # Reset PortAudio to rediscover devices
-            reset_audio_backend()
+            # Reset PortAudio to rediscover devices (inline — we already hold _pa_lock)
+            try:
+                sd._terminate()
+                sd._initialize()
+            except Exception:
+                pass
 
             with self._lock:
                 if not self._recording:
@@ -272,7 +280,7 @@ class Recorder:
             self._recording = False
 
         if stream is not None:
-            with self._pa_lock:
+            with _pa_lock:
                 stream.stop()
                 stream.close()
 
@@ -306,7 +314,7 @@ class Recorder:
         stream = self._stream
         if stream is not None:
             try:
-                with self._pa_lock:
+                with _pa_lock:
                     stream.stop()
                     stream.close()
             except Exception:
