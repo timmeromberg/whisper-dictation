@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from whisper_dic.recorder import Recorder, RecordingResult
+from whisper_dic.recorder import Recorder, RecordingResult, reset_audio_backend
 
 
 class TestInitialState:
@@ -121,3 +121,30 @@ class TestStartStop:
             r.start()
             result = r.stop()
             assert result is None
+
+
+class TestResetAudioBackend:
+    def test_calls_terminate_and_initialize(self) -> None:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            reset_audio_backend()
+            mock_sd._terminate.assert_called_once()
+            mock_sd._initialize.assert_called_once()
+
+    def test_terminate_called_before_initialize(self) -> None:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            call_order: list[str] = []
+            mock_sd._terminate.side_effect = lambda: call_order.append("terminate")
+            mock_sd._initialize.side_effect = lambda: call_order.append("initialize")
+            reset_audio_backend()
+            assert call_order == ["terminate", "initialize"]
+
+    def test_handles_terminate_exception(self) -> None:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd._terminate.side_effect = RuntimeError("PortAudio error")
+            # Should not raise — logs and swallows the error
+            reset_audio_backend()
+
+    def test_handles_initialize_exception(self) -> None:
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd._initialize.side_effect = RuntimeError("PortAudio error")
+            reset_audio_backend()
