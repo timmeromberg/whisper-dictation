@@ -27,6 +27,7 @@ LANG_NAMES = {
 @dataclass
 class HotkeyConfig:
     key: str = "left_option"
+    double_tap_window: float = 0.5
 
 
 @dataclass
@@ -68,6 +69,8 @@ class WhisperConfig:
 @dataclass
 class PasteConfig:
     auto_send: bool = False
+    pre_paste_delay: float = 0.05
+    clipboard_restore_delay: float = 0.3
 
 
 @dataclass
@@ -80,6 +83,10 @@ class AudioFeedbackConfig:
     enabled: bool = True
     start_frequency: float = 880.0
     stop_frequency: float = 660.0
+    cancel_frequency: float = 440.0
+    language_frequency: float = 1200.0
+    command_frequency: float = 1320.0
+    auto_send_frequency: float = 1100.0
     duration_seconds: float = 0.08
     volume: float = 0.2
 
@@ -183,6 +190,7 @@ def load_config(path: Path) -> AppConfig:
     config = AppConfig(
         hotkey=HotkeyConfig(
             key=str(hotkey_data.get("key", "left_option")),
+            double_tap_window=float(hotkey_data.get("double_tap_window", 0.5)),
         ),
         recording=RecordingConfig(
             min_duration=float(recording_data.get("min_duration", 0.3)),
@@ -195,6 +203,8 @@ def load_config(path: Path) -> AppConfig:
         ),
         paste=PasteConfig(
             auto_send=bool(paste_data.get("auto_send", False)),
+            pre_paste_delay=float(paste_data.get("pre_paste_delay", 0.05)),
+            clipboard_restore_delay=float(paste_data.get("clipboard_restore_delay", 0.3)),
         ),
         text_commands=TextCommandsConfig(
             enabled=bool(text_commands_data.get("enabled", True)),
@@ -230,6 +240,10 @@ def load_config(path: Path) -> AppConfig:
             enabled=bool(feedback_data.get("enabled", True)),
             start_frequency=float(feedback_data.get("start_frequency", 880.0)),
             stop_frequency=float(feedback_data.get("stop_frequency", 660.0)),
+            cancel_frequency=float(feedback_data.get("cancel_frequency", 440.0)),
+            language_frequency=float(feedback_data.get("language_frequency", 1200.0)),
+            command_frequency=float(feedback_data.get("command_frequency", 1320.0)),
+            auto_send_frequency=float(feedback_data.get("auto_send_frequency", 1100.0)),
             duration_seconds=float(feedback_data.get("duration_seconds", 0.08)),
             volume=float(feedback_data.get("volume", 0.2)),
         ),
@@ -284,7 +298,10 @@ def _validate_config(config: AppConfig) -> AppConfig:
         log("config", f"volume={config.audio_feedback.volume} out of range, clamped to {clamped}")
         config.audio_feedback.volume = clamped
 
-    for freq_field in ("start_frequency", "stop_frequency"):
+    for freq_field in (
+        "start_frequency", "stop_frequency", "cancel_frequency",
+        "language_frequency", "command_frequency", "auto_send_frequency",
+    ):
         freq = getattr(config.audio_feedback, freq_field)
         if not 20.0 <= freq <= 20000.0:
             clamped = max(20.0, min(20000.0, freq))

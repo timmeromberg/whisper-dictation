@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from whisper_dic.recorder import Recorder
+from whisper_dic.recorder import Recorder, RecordingResult
 
 
 class TestGetAccumulatedAudio:
@@ -107,9 +108,16 @@ class TestPreviewLoop:
             config.whisper.local.model = "large-v3"
             config.whisper.groq.api_key = ""
             config.hotkey.key = "left_option"
+            config.hotkey.double_tap_window = 0.5
+            config.paste.pre_paste_delay = 0.05
+            config.paste.clipboard_restore_delay = 0.3
             config.audio_feedback.enabled = False
             config.audio_feedback.start_frequency = 880.0
             config.audio_feedback.stop_frequency = 660.0
+            config.audio_feedback.cancel_frequency = 440.0
+            config.audio_feedback.language_frequency = 1200.0
+            config.audio_feedback.command_frequency = 1320.0
+            config.audio_feedback.auto_send_frequency = 1100.0
             config.audio_feedback.volume = 0.0
             config.audio_feedback.duration_seconds = 0.08
             config.audio_control.enabled = False
@@ -166,9 +174,16 @@ class TestPreviewLoop:
             config.whisper.local.model = "large-v3"
             config.whisper.groq.api_key = ""
             config.hotkey.key = "left_option"
+            config.hotkey.double_tap_window = 0.5
+            config.paste.pre_paste_delay = 0.05
+            config.paste.clipboard_restore_delay = 0.3
             config.audio_feedback.enabled = False
             config.audio_feedback.start_frequency = 880.0
             config.audio_feedback.stop_frequency = 660.0
+            config.audio_feedback.cancel_frequency = 440.0
+            config.audio_feedback.language_frequency = 1200.0
+            config.audio_feedback.command_frequency = 1320.0
+            config.audio_feedback.auto_send_frequency = 1100.0
             config.audio_feedback.volume = 0.0
             config.audio_feedback.duration_seconds = 0.08
             config.audio_control.enabled = False
@@ -221,9 +236,16 @@ def _base_config() -> MagicMock:
     config.whisper.local.model = "large-v3"
     config.whisper.groq.api_key = ""
     config.hotkey.key = "left_option"
+    config.hotkey.double_tap_window = 0.5
+    config.paste.pre_paste_delay = 0.05
+    config.paste.clipboard_restore_delay = 0.3
     config.audio_feedback.enabled = False
     config.audio_feedback.start_frequency = 880.0
     config.audio_feedback.stop_frequency = 660.0
+    config.audio_feedback.cancel_frequency = 440.0
+    config.audio_feedback.language_frequency = 1200.0
+    config.audio_feedback.command_frequency = 1320.0
+    config.audio_feedback.auto_send_frequency = 1100.0
     config.audio_feedback.volume = 0.0
     config.audio_feedback.duration_seconds = 0.08
     config.audio_control.enabled = False
@@ -376,3 +398,35 @@ class TestTranscriberSwapLock:
             assert reset_done.is_set()
             assert app._preview_transcriber is None
             assert blocking.closed is True
+
+
+class TestTapDetection:
+    def test_short_tap_uses_physical_hold_duration(self) -> None:
+        """Short tap detection should use key hold time, not debounce-extended audio duration."""
+        from whisper_dic.dictation import DictationApp
+
+        with (
+            patch("whisper_dic.recorder.sd"),
+            patch("whisper_dic.dictation.HotkeyListener"),
+            patch("whisper_dic.dictation.check_accessibility", return_value=[]),
+        ):
+            app = DictationApp(_base_config())
+            app._stop_preview = MagicMock()
+            app.audio_controller.unmute = MagicMock()
+            app.play_beep = MagicMock()
+            app._emit_state = MagicMock()
+            app._cycle_language = MagicMock()
+            app._last_tap_time = time.monotonic()
+            app._languages = ["en", "de"]
+            app.recorder.stop = MagicMock(
+                return_value=RecordingResult(
+                    audio_bytes=b"audio",
+                    duration_seconds=1.2,  # Includes debounce tail.
+                    sample_count=19200,
+                ),
+            )
+
+            app._on_hold_end(auto_send=False, command_mode=False, hold_duration_seconds=0.05)
+
+            app._cycle_language.assert_called_once_with()
+            app._emit_state.assert_called_with("idle")

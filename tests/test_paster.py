@@ -46,7 +46,7 @@ class TestTextPaster:
 
     def test_paste_copies_to_clipboard_and_restores(self) -> None:
         from whisper_dic.paster import TextPaster
-        p = TextPaster(paste_delay_seconds=0)
+        p = TextPaster(pre_paste_delay=0, clipboard_restore_delay=0)
         with patch("whisper_dic.paster.pyperclip") as mock_clip, patch("whisper_dic.paster.time"):
             mock_clip.paste.side_effect = ["old clipboard", "hello world"]
             p.paste("hello world")
@@ -57,7 +57,7 @@ class TestTextPaster:
 
     def test_paste_skips_restore_when_clipboard_changed(self) -> None:
         from whisper_dic.paster import TextPaster
-        p = TextPaster(paste_delay_seconds=0)
+        p = TextPaster(pre_paste_delay=0, clipboard_restore_delay=0)
         with patch("whisper_dic.paster.pyperclip") as mock_clip, patch("whisper_dic.paster.time"):
             mock_clip.paste.side_effect = ["old clipboard", "new clipboard value"]
             p.paste("hello world")
@@ -69,7 +69,7 @@ class TestTextPaster:
         from whisper_dic.paster import TextPaster
         # Pick the first terminal app ID for whatever platform we're on
         terminal_id = next(iter(TERMINAL_APP_IDS))
-        p = TextPaster(paste_delay_seconds=0)
+        p = TextPaster(pre_paste_delay=0, clipboard_restore_delay=0)
         with (
             patch("whisper_dic.paster.pyperclip"),
             patch("whisper_dic.paster.time"),
@@ -81,7 +81,7 @@ class TestTextPaster:
 
     def test_auto_send_skips_non_terminal(self) -> None:
         from whisper_dic.paster import TextPaster
-        p = TextPaster(paste_delay_seconds=0)
+        p = TextPaster(pre_paste_delay=0, clipboard_restore_delay=0)
         with (
             patch("whisper_dic.paster.pyperclip"),
             patch("whisper_dic.paster.time"),
@@ -93,7 +93,7 @@ class TestTextPaster:
 
     def test_smoke_mode_skips_all_side_effects(self) -> None:
         from whisper_dic.paster import TextPaster
-        p = TextPaster(paste_delay_seconds=0)
+        p = TextPaster(pre_paste_delay=0, clipboard_restore_delay=0)
         with (
             patch.dict("os.environ", {"WHISPER_DIC_SMOKE_NO_INPUT": "1"}, clear=False),
             patch("whisper_dic.paster.pyperclip") as mock_clip,

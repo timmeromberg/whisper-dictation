@@ -48,7 +48,10 @@ class DictationApp:
         self.transcriber = create_transcriber(config.whisper)
         self._transcriber_lock = threading.RLock()
         self.cleaner = TextCleaner(text_commands=config.text_commands.enabled)
-        self.paster = TextPaster()
+        self.paster = TextPaster(
+            pre_paste_delay=config.paste.pre_paste_delay,
+            clipboard_restore_delay=config.paste.clipboard_restore_delay,
+        )
         self.audio_controller = AudioController(config.audio_control)
 
         self._rewriter: Rewriter | None = None
@@ -161,7 +164,7 @@ class DictationApp:
         display = LANG_NAMES.get(new_lang, new_lang)
         log("language", f"Switched to {display} ({new_lang})")
         self._notify(f"Language: {display}")
-        self.play_beep(1200.0)
+        self.play_beep(self.config.audio_feedback.language_frequency)
         self._emit_state("language_changed", f"{display} ({new_lang})")
 
     def _actionable_error(self, exc: Exception) -> str:
@@ -192,7 +195,7 @@ class DictationApp:
         if "500" in err or "502" in err or "503" in err or "server error" in err:
             return f"{provider} server error. The provider may be temporarily down."
 
-        return f"Transcription failed: {str(exc)[:100]}"
+        return f"Transcription failed: {str(exc)[:200]}"
 
     def _play_error_beep(self) -> None:
         """Low descending double-buzz to signal an error (non-blocking)."""
@@ -378,10 +381,15 @@ class DictationApp:
         self._stop_preview()
         self.recorder.stop()  # discard the result
         self.audio_controller.unmute()
-        self.play_beep(440.0)  # low tone = cancelled
+        self.play_beep(self.config.audio_feedback.cancel_frequency)
         self._emit_state("idle")
 
-    def _on_hold_end(self, auto_send: bool = False, command_mode: bool = False) -> None:
+    def _on_hold_end(
+        self,
+        auto_send: bool = False,
+        command_mode: bool = False,
+        hold_duration_seconds: float | None = None,
+    ) -> None:
         # Wait for _on_hold_start to finish — prevents race on quick press/release
         self._start_done.wait(timeout=2.0)
 
@@ -400,25 +408,28 @@ class DictationApp:
         if command_mode:
             # Triple short beep for command mode (sequential)
             dur = self.config.audio_feedback.duration_seconds
-            self.play_beep(1320.0)
-            time.sleep(dur + 0.02)  # gap between beeps to keep them distinct
-            self.play_beep(1320.0)
+            freq = self.config.audio_feedback.command_frequency
+            self.play_beep(freq)
             time.sleep(dur + 0.02)
-            self.play_beep(1320.0)
+            self.play_beep(freq)
+            time.sleep(dur + 0.02)
+            self.play_beep(freq)
         elif auto_send:
             # Double beep for auto-send (sequential)
             dur = self.config.audio_feedback.duration_seconds
-            self.play_beep(1100.0)
+            freq = self.config.audio_feedback.auto_send_frequency
+            self.play_beep(freq)
             time.sleep(dur + 0.02)
-            self.play_beep(1100.0)
+            self.play_beep(freq)
         else:
             self.play_beep(self.config.audio_feedback.stop_frequency)
 
-        if result.duration_seconds < self.config.recording.min_duration:
+        tap_duration = hold_duration_seconds if hold_duration_seconds is not None else result.duration_seconds
+        if tap_duration < self.config.recording.min_duration:
             # Short press = potential double-tap to cycle language.
             # Two quick taps within 0.5s triggers language switch.
             now = time.monotonic()
-            if len(self._languages) > 1 and (now - self._last_tap_time) < 0.5:
+            if len(self._languages) > 1 and (now - self._last_tap_time) < self.config.hotkey.double_tap_window:
                 self._last_tap_time = 0.0
                 self._cycle_language()
             else:
