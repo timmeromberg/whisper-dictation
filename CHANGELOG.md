@@ -5,6 +5,16 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-03-02
+
+### Fixed
+- Microphone recovery after sleep/wake — PortAudio backend is re-initialized on macOS wake and on recording failure with automatic retry
+- Coding context rewrite no longer shortens or summarizes dictated messages
+- Questions in coding context are preserved as questions instead of being flattened into statements
+
+### Added
+- Sleep/wake microphone recovery tests (13 new test cases covering reset, retry logic, and wake observer)
+
 ## [0.10.2] - 2026-03-02
 
 ### Fixed
