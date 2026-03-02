@@ -27,7 +27,7 @@ from .history import TranscriptionHistory
 from .hotkey import KEY_MAP, HotkeyListener, NSEventHotkeyListener
 from .log import log
 from .paster import TextPaster
-from .recorder import Recorder, RecordingResult
+from .recorder import Recorder, RecordingResult, reset_audio_backend
 from .rewriter import Rewriter, prompt_for_context, prompt_for_mode
 from .transcriber import WhisperTranscriber, create_transcriber, create_transcriber_for
 
@@ -348,11 +348,16 @@ class DictationApp:
             try:
                 started = self.recorder.start()
             except Exception as exc:
-                log("recording", f"Failed to start stream: {exc}")
-                self._play_error_beep()
-                self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
-                self._emit_state("idle")
-                return
+                log("recording", f"Stream failed, resetting audio backend: {exc}")
+                reset_audio_backend()
+                try:
+                    started = self.recorder.start()
+                except Exception as exc2:
+                    log("recording", f"Retry failed: {exc2}")
+                    self._play_error_beep()
+                    self._notify("Microphone unavailable. Check System Settings > Privacy > Microphone.")
+                    self._emit_state("idle")
+                    return
 
             if started:
                 self.audio_controller.mute()

@@ -541,6 +541,31 @@ class DictationMenuBar(rumps.App):
         label = current or "System Default"
         self._mic_menu.title = f"Microphone: {label}"
 
+    def _register_wake_observer(self) -> None:
+        """Listen for macOS wake-from-sleep to reinitialize audio."""
+        try:
+            from AppKit import NSWorkspace
+
+            center = NSWorkspace.sharedWorkspace().notificationCenter()
+            center.addObserverForName_object_queue_usingBlock_(
+                "NSWorkspaceDidWakeNotification",
+                None,
+                None,
+                lambda _note: self._on_wake(),
+            )
+            print("[menubar] Registered wake-from-sleep observer")
+        except Exception as exc:
+            print(f"[menubar] Could not register wake observer: {exc}")
+
+    def _on_wake(self) -> None:
+        """Reset audio backend after waking from sleep."""
+        from .recorder import reset_audio_backend
+
+        print("[menubar] Wake detected — resetting audio backend")
+        reset_audio_backend()
+        self._known_input_devices = self._get_input_device_names()
+        callAfter(self._rebuild_mic_menu)
+
     # --- Setting actions ---
 
     def _apply_overlay_accessibility(self) -> None:
@@ -1428,6 +1453,7 @@ class DictationMenuBar(rumps.App):
         self._health_timer.start()
         self._device_timer.start()
         self._config_watcher.start()
+        self._register_wake_observer()
         key = self.config.hotkey.key.replace("_", " ")
         self._notify("Ready", f"Hold {key} to dictate. Double-tap to cycle language.")
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")

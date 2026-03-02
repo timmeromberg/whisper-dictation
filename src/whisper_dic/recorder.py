@@ -22,6 +22,15 @@ class RecordingResult:
     sample_count: int
 
 
+def reset_audio_backend() -> None:
+    """Re-initialize PortAudio to rediscover devices after sleep/wake."""
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception as exc:
+        print(f"[recorder] audio backend reset failed: {exc}")
+
+
 class Recorder:
     """Capture mono microphone audio and export it as WAV bytes."""
 
