@@ -91,6 +91,13 @@ class RewriteConfig:
 
 
 @dataclass
+class OverlayConfig:
+    reduced_motion: bool = False
+    high_contrast: bool = False
+    font_scale: float = 1.0
+
+
+@dataclass
 class AppConfig:
     hotkey: HotkeyConfig
     recording: RecordingConfig
@@ -100,6 +107,7 @@ class AppConfig:
     audio_feedback: AudioFeedbackConfig
     audio_control: AudioControlConfig = field(default_factory=AudioControlConfig)
     rewrite: RewriteConfig = field(default_factory=RewriteConfig)
+    overlay: OverlayConfig = field(default_factory=OverlayConfig)
     custom_commands: dict[str, str] = field(default_factory=dict)
 
 
@@ -126,6 +134,7 @@ def load_config(path: Path) -> AppConfig:
     feedback_data = _section(data, "audio_feedback")
     audio_control_data = _section(data, "audio_control")
     rewrite_data = _section(data, "rewrite")
+    overlay_data = _section(data, "overlay")
     custom_commands_data = _section(data, "custom_commands")
 
     provider = str(whisper_data.get("provider", "local")).strip().lower()
@@ -205,6 +214,11 @@ def load_config(path: Path) -> AppConfig:
             model=str(rewrite_data.get("model", "llama-3.3-70b-versatile")),
             prompt=str(rewrite_data.get("prompt", "")),
         ),
+        overlay=OverlayConfig(
+            reduced_motion=bool(overlay_data.get("reduced_motion", False)),
+            high_contrast=bool(overlay_data.get("high_contrast", False)),
+            font_scale=float(overlay_data.get("font_scale", 1.0)),
+        ),
         custom_commands={str(k): str(v) for k, v in custom_commands_data.items()},
     )
     return _validate_config(config)
@@ -238,6 +252,11 @@ def _validate_config(config: AppConfig) -> AppConfig:
         clamped = max(0.0, min(1.0, config.audio_feedback.volume))
         log("config", f"volume={config.audio_feedback.volume} out of range, clamped to {clamped}")
         config.audio_feedback.volume = clamped
+
+    if not 0.75 <= config.overlay.font_scale <= 2.0:
+        clamped = max(0.75, min(2.0, config.overlay.font_scale))
+        log("config", f"overlay.font_scale={config.overlay.font_scale} out of range, clamped to {clamped}")
+        config.overlay.font_scale = clamped
 
     if not config.whisper.language:
         log("config", "language is empty, defaulting to 'en'")

@@ -55,6 +55,11 @@ class TextPaster:
             # 0.3s is needed for Electron apps (VS Code, Slack) which are slower.
             time.sleep(0.3)
             try:
-                pyperclip.copy(saved_clipboard)
+                current_clipboard = pyperclip.paste()
+                # Do not clobber user clipboard changes made after dictation.
+                if current_clipboard == text:
+                    pyperclip.copy(saved_clipboard)
+                else:
+                    log("paste", "Skipping clipboard restore because clipboard changed externally")
             except Exception:
                 pass

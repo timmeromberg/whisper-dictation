@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from .log import log
@@ -31,6 +33,10 @@ REWRITE_PRESETS: dict[str, tuple[str, str]] = {
 }
 
 REWRITE_MODES = list(REWRITE_PRESETS.keys()) + ["custom"]
+
+
+def _redact_sensitive(text: str) -> str:
+    return re.sub(r"(gsk_|sk-|Bearer\s+)\S{6,}", r"\1***", text)
 
 
 def prompt_for_mode(mode: str, custom_prompt: str) -> str:
@@ -70,7 +76,7 @@ class Rewriter:
                 },
             )
             if response.status_code != 200:
-                log("rewriter", f"API error {response.status_code}: {response.text[:200]}")
+                log("rewriter", f"API error {response.status_code}: {_redact_sensitive(response.text[:200])}")
                 return text
 
             result = str(response.json()["choices"][0]["message"]["content"]).strip()

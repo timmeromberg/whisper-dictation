@@ -42,12 +42,21 @@ class TestTextPaster:
         from whisper_dic.paster import TextPaster
         p = TextPaster(paste_delay_seconds=0)
         with patch("whisper_dic.paster.pyperclip") as mock_clip, patch("whisper_dic.paster.time"):
-            mock_clip.paste.return_value = "old clipboard"
+            mock_clip.paste.side_effect = ["old clipboard", "hello world"]
             p.paste("hello world")
             # First call sets dictated text, second restores previous clipboard
             assert mock_clip.copy.call_count == 2
             mock_clip.copy.assert_any_call("hello world")
             mock_clip.copy.assert_any_call("old clipboard")
+
+    def test_paste_skips_restore_when_clipboard_changed(self) -> None:
+        from whisper_dic.paster import TextPaster
+        p = TextPaster(paste_delay_seconds=0)
+        with patch("whisper_dic.paster.pyperclip") as mock_clip, patch("whisper_dic.paster.time"):
+            mock_clip.paste.side_effect = ["old clipboard", "new clipboard value"]
+            p.paste("hello world")
+            assert mock_clip.copy.call_count == 1
+            mock_clip.copy.assert_called_once_with("hello world")
 
     def test_auto_send_in_terminal(self) -> None:
         from whisper_dic.compat import TERMINAL_APP_IDS

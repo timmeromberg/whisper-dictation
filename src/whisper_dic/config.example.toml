@@ -103,3 +103,9 @@ start_frequency = 880    # Hz — beep when recording starts
 stop_frequency = 660     # Hz — beep when recording stops
 duration_seconds = 0.08  # beep length in seconds
 volume = 0.2             # 0.0 (silent) to 1.0 (full) — change via menu bar or: whisper-dic set audio_feedback.volume 0.5
+
+[overlay]
+# Accessibility options for the floating recording/preview overlays
+reduced_motion = false  # disables pulsing/fade animations
+high_contrast = false   # stronger text/background contrast
+font_scale = 1.0        # preview text size (0.75 - 2.0)

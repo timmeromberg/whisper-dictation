@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from whisper_dic.audio_control import (
     AudioController,
     CustomDevice,
     LocalMacDevice,
+    UpnpDevice,
     _adb_devices,
 )
 
@@ -147,3 +149,38 @@ class TestAdbDevices:
             mock_run.return_value = MagicMock(stdout=fake_output)
             devices = _adb_devices()
             assert len(devices) == 2
+
+
+class TestUpnpDevice:
+    def test_set_mute_without_async_close(self, monkeypatch) -> None:
+        class FakeRequester:
+            pass
+
+        class FakeAction:
+            async def async_call(self, **kwargs):  # noqa: ANN003 - test stub
+                return None
+
+        class FakeService:
+            def action(self, _name: str) -> FakeAction:
+                return FakeAction()
+
+        class FakeDevice:
+            def service(self, _urn: str) -> FakeService:
+                return FakeService()
+
+        class FakeFactory:
+            def __init__(self, _requester):
+                pass
+
+            async def async_create_device(self, _location: str) -> FakeDevice:
+                return FakeDevice()
+
+        aiohttp_mod = types.ModuleType("async_upnp_client.aiohttp")
+        aiohttp_mod.AiohttpRequester = FakeRequester
+        factory_mod = types.ModuleType("async_upnp_client.client_factory")
+        factory_mod.UpnpFactory = FakeFactory
+        monkeypatch.setitem(sys.modules, "async_upnp_client.aiohttp", aiohttp_mod)
+        monkeypatch.setitem(sys.modules, "async_upnp_client.client_factory", factory_mod)
+
+        dev = UpnpDevice(name="TV", location="http://127.0.0.1/device.xml")
+        dev._set_mute(True)  # should not raise without requester.async_close

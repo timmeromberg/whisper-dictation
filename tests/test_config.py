@@ -153,3 +153,15 @@ class TestValidation:
         p.write_text("[whisper]\ntimeout_seconds = -10\n")
         config = load_config(p)
         assert config.whisper.timeout_seconds == 120.0
+
+    def test_overlay_font_scale_over_limit_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "overlay.toml"
+        p.write_text("[overlay]\nfont_scale = 5.0\n")
+        config = load_config(p)
+        assert config.overlay.font_scale == 2.0
+
+    def test_overlay_font_scale_below_limit_clamped(self, tmp_path: Path) -> None:
+        p = tmp_path / "overlay.toml"
+        p.write_text("[overlay]\nfont_scale = 0.1\n")
+        config = load_config(p)
+        assert config.overlay.font_scale == 0.75

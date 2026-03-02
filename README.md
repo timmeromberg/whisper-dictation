@@ -34,6 +34,7 @@ System-wide hold-to-dictate for macOS and Windows. Hold a key, speak, release â€
 
 - **macOS** 10.13+ or **Windows** 10+
 - Python 3.12+
+- **macOS runtime note:** Python 3.12/3.13 is recommended for stability. Python 3.14 is blocked for `run`/`menubar`/`setup` by default because it may crash on some systems.
 - A Whisper provider: [Groq API key](https://console.groq.com/) (free tier available) **or** a local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) server
 
 ### 2. Install
@@ -484,6 +485,7 @@ Run `whisper-dic doctor` for a quick diagnostic check of your setup.
 - macOS: Grant Accessibility permission in System Settings > Privacy & Security
 - Windows: Make sure no other app is using Left Alt as a global hotkey
 - Check the hotkey isn't used by another app
+- macOS + Python 3.14: switch to Python 3.12/3.13. You can bypass the guard with `WHISPER_DIC_ALLOW_PY314=1` (not recommended)
 
 **Transcription failing?**
 - Run `whisper-dic doctor` to check endpoint health and config

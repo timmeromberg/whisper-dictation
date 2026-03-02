@@ -8,7 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from whisper_dic.cli import _load_config_from_path, _pid_file_path, command_set, command_setup
+from whisper_dic.cli import (
+    _ALLOW_PY314_ENV,
+    _load_config_from_path,
+    _pid_file_path,
+    _runtime_supported,
+    command_set,
+    command_setup,
+)
 
 
 class TestCommandSet:
@@ -46,6 +53,29 @@ class TestCliRuntime:
         assert rc == 1
         out = capsys.readouterr().out
         assert "macOS only" in out
+
+    def test_runtime_supported_blocks_py314_macos_menubar(self) -> None:
+        with (
+            patch("whisper_dic.cli.sys.platform", "darwin"),
+            patch("whisper_dic.cli.sys.version_info", (3, 14, 0)),
+            patch.dict("whisper_dic.cli.os.environ", {}, clear=False),
+        ):
+            assert _runtime_supported("menubar") is False
+
+    def test_runtime_supported_allows_py314_with_override(self) -> None:
+        with (
+            patch("whisper_dic.cli.sys.platform", "darwin"),
+            patch("whisper_dic.cli.sys.version_info", (3, 14, 0)),
+            patch.dict("whisper_dic.cli.os.environ", {_ALLOW_PY314_ENV: "1"}, clear=False),
+        ):
+            assert _runtime_supported("menubar") is True
+
+    def test_runtime_supported_allows_non_interactive_commands(self) -> None:
+        with (
+            patch("whisper_dic.cli.sys.platform", "darwin"),
+            patch("whisper_dic.cli.sys.version_info", (3, 14, 0)),
+        ):
+            assert _runtime_supported("status") is True
 
     @pytest.mark.skipif(os.name == "nt", reason="POSIX chmod semantics")
     def test_load_config_tightens_non_owner_permissions(self, tmp_path: Path) -> None:

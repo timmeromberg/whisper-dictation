@@ -53,6 +53,21 @@ class RecordingOverlay:
         self._pulsing = False
         self._pulse_stop = threading.Event()
         self._pulse_thread: threading.Thread | None = None
+        self._reduced_motion = False
+        self._high_contrast = False
+
+    def configure_accessibility(self, reduced_motion: bool, high_contrast: bool) -> None:
+        """Apply accessibility preferences. Safe to call from any thread."""
+        self._reduced_motion = reduced_motion
+        self._high_contrast = high_contrast
+        if reduced_motion:
+            self._stop_pulse()
+        callAfter(self._apply_accessibility_style)
+
+    def _apply_accessibility_style(self) -> None:
+        if self._window is None:
+            return
+        self._window.setAlphaValue_(1.0 if self._high_contrast else 0.85)
 
     def _ensure_window(self) -> None:
         """Create the window. MUST be called on main thread."""
@@ -109,9 +124,9 @@ class RecordingOverlay:
         self._dot._color = color
         self._dot.setNeedsDisplay_(True)
         if self._window is not None:
-            self._window.setAlphaValue_(0.85)
+            self._window.setAlphaValue_(1.0 if self._high_contrast else 0.85)
             self._window.orderFront_(None)
-        if pulse:
+        if pulse and not self._reduced_motion:
             self._start_pulse()
         else:
             self._stop_pulse()
@@ -123,6 +138,8 @@ class RecordingOverlay:
 
     def _start_pulse(self) -> None:
         """Start the pulsing animation thread."""
+        if self._reduced_motion:
+            return
         if self._pulsing:
             return
         self._pulsing = True
@@ -218,6 +235,56 @@ class PreviewOverlay:
         self._last_text_time: float = 0.0
         self._progress_phase = 0
         self._show_level = False
+        self._reduced_motion = False
+        self._high_contrast = False
+        self._font_scale = 1.0
+
+    def configure_accessibility(self, reduced_motion: bool, high_contrast: bool, font_scale: float) -> None:
+        """Apply accessibility preferences. Safe to call from any thread."""
+        self._reduced_motion = reduced_motion
+        self._high_contrast = high_contrast
+        self._font_scale = max(0.75, min(2.0, font_scale))
+        callAfter(self._apply_accessibility_style)
+
+    def _main_font_size(self) -> float:
+        return self.FONT_SIZE * self._font_scale
+
+    def _status_font_size(self) -> float:
+        return self.STATUS_FONT_SIZE * self._font_scale
+
+    def _background_color(self) -> NSColor:
+        if self._high_contrast:
+            return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.0, 0.0, 0.0, 0.95)
+        return NSColor.colorWithCalibratedRed_green_blue_alpha_(0.08, 0.08, 0.10, 0.85)
+
+    def _apply_accessibility_style(self) -> None:
+        """Main-thread: apply accessibility colors/fonts and re-layout."""
+        if self._window is None:
+            return
+
+        self._window.setBackgroundColor_(self._background_color())
+
+        if self._label is not None:
+            self._label.setFont_(NSFont.systemFontOfSize_(self._main_font_size()))
+            self._label.setTextColor_(
+                NSColor.whiteColor()
+                if self._high_contrast
+                else NSColor.colorWithCalibratedWhite_alpha_(0.98, 1.0)
+            )
+        if self._status_label is not None:
+            self._status_label.setFont_(NSFont.systemFontOfSize_(self._status_font_size()))
+        if self._time_label is not None:
+            self._time_label.setFont_(
+                NSFont.monospacedDigitSystemFontOfSize_weight_(self._status_font_size(), 0.0)
+            )
+            self._time_label.setTextColor_(
+                NSColor.colorWithCalibratedWhite_alpha_(0.9, 1.0)
+                if self._high_contrast
+                else NSColor.colorWithCalibratedWhite_alpha_(0.5, 1.0)
+            )
+
+        self._render_badges()
+        self._resize_to_fit()
 
     def set_badges(self, badges: list[str]) -> None:
         """Set status badges (e.g. ["EN", "AI Rewrite", "Auto-Send"]). Thread-safe."""
@@ -265,9 +332,7 @@ class PreviewOverlay:
         window.setLevel_(NSFloatingWindowLevel)
         window.setIgnoresMouseEvents_(True)
         window.setOpaque_(False)
-        window.setBackgroundColor_(
-            NSColor.colorWithCalibratedRed_green_blue_alpha_(0.08, 0.08, 0.10, 0.85)
-        )
+        window.setBackgroundColor_(self._background_color())
         window.setAlphaValue_(0.0)  # start invisible for fade-in
         window.setHasShadow_(True)
 
@@ -284,7 +349,7 @@ class PreviewOverlay:
         status_label.setSelectable_(False)
         status_label.setBezeled_(False)
         status_label.setDrawsBackground_(False)
-        status_label.setFont_(NSFont.systemFontOfSize_(self.STATUS_FONT_SIZE))
+        status_label.setFont_(NSFont.systemFontOfSize_(self._status_font_size()))
         status_label.setStringValue_("")
         status_label.setMaximumNumberOfLines_(1)
         content.addSubview_(status_label)
@@ -298,8 +363,12 @@ class PreviewOverlay:
         label.setSelectable_(False)
         label.setBezeled_(False)
         label.setDrawsBackground_(False)
-        label.setTextColor_(NSColor.whiteColor())
-        label.setFont_(NSFont.systemFontOfSize_(self.FONT_SIZE))
+        label.setTextColor_(
+            NSColor.whiteColor()
+            if self._high_contrast
+            else NSColor.colorWithCalibratedWhite_alpha_(0.98, 1.0)
+        )
+        label.setFont_(NSFont.systemFontOfSize_(self._main_font_size()))
         label.setStringValue_("")
         label.setMaximumNumberOfLines_(0)
         label.setPreferredMaxLayoutWidth_(self.MAX_WIDTH - 2 * self.PADDING)
@@ -314,9 +383,11 @@ class PreviewOverlay:
         time_label.setBezeled_(False)
         time_label.setDrawsBackground_(False)
         time_label.setTextColor_(
-            NSColor.colorWithCalibratedWhite_alpha_(0.5, 1.0)
+            NSColor.colorWithCalibratedWhite_alpha_(0.9, 1.0)
+            if self._high_contrast
+            else NSColor.colorWithCalibratedWhite_alpha_(0.5, 1.0)
         )
-        time_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(self.STATUS_FONT_SIZE, 0.0))
+        time_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(self._status_font_size(), 0.0))
         time_label.setAlignment_(NSRightTextAlignment)
         time_label.setStringValue_("")
         time_label.setMaximumNumberOfLines_(1)
@@ -451,10 +522,13 @@ class PreviewOverlay:
         if self._status_label is None or not self._badges:
             return
 
-        font = NSFont.boldSystemFontOfSize_(self.STATUS_FONT_SIZE)
+        font = NSFont.boldSystemFontOfSize_(self._status_font_size())
         parts: list[Any] = []
         for i, badge in enumerate(self._badges):
-            r, g, b = self._BADGE_COLORS.get(badge, self._BADGE_DEFAULT_COLOR)
+            if self._high_contrast:
+                r, g, b = (0.95, 0.95, 0.95)
+            else:
+                r, g, b = self._BADGE_COLORS.get(badge, self._BADGE_DEFAULT_COLOR)
             color = NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, 1.0)
             attrs = {NSFontAttributeName: font, NSForegroundColorAttributeName: color}
             part = NSAttributedString.alloc().initWithString_attributes_(badge, attrs)
@@ -488,7 +562,9 @@ class PreviewOverlay:
                 self._window.setAlphaValue_(0.0)
                 self._window.orderFront_(None)
                 NSAnimationContext.beginGrouping()
-                NSAnimationContext.currentContext().setDuration_(self.FADE_IN_DURATION)
+                NSAnimationContext.currentContext().setDuration_(
+                    0.0 if self._reduced_motion else self.FADE_IN_DURATION
+                )
                 self._window.animator().setAlphaValue_(0.95)
                 NSAnimationContext.endGrouping()
             else:
@@ -505,7 +581,9 @@ class PreviewOverlay:
         self._stop_cursor_tracking()
         if self._window is not None:
             NSAnimationContext.beginGrouping()
-            NSAnimationContext.currentContext().setDuration_(self.FADE_OUT_DURATION)
+            NSAnimationContext.currentContext().setDuration_(
+                0.0 if self._reduced_motion else self.FADE_OUT_DURATION
+            )
             self._window.animator().setAlphaValue_(0.0)
             NSAnimationContext.endGrouping()
             # Schedule orderOut after animation completes

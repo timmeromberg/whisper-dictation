@@ -269,7 +269,12 @@ class UpnpDevice:
                     DesiredMute=muted,
                 )
             finally:
-                await requester.async_close()
+                # async_upnp_client versions differ: some expose async_close(), others do not.
+                maybe_close = getattr(requester, "async_close", None)
+                if callable(maybe_close):
+                    result = maybe_close()
+                    if hasattr(result, "__await__"):
+                        await result
 
         loop = asyncio.new_event_loop()
         try:

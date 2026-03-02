@@ -14,6 +14,25 @@ from typing import Any
 from .config import AppConfig, _to_toml_literal, load_config, set_config_value
 
 _SECRET_KEY_TOKENS = ("api_key", "token", "secret", "password")
+_ALLOW_PY314_ENV = "WHISPER_DIC_ALLOW_PY314"
+
+
+def _runtime_supported(command: str) -> bool:
+    """Return False when runtime is known-unstable for interactive commands."""
+    if sys.platform != "darwin":
+        return True
+    if sys.version_info < (3, 14):
+        return True
+    if command not in {"run", "menubar", "setup"}:
+        return True
+    allow = os.environ.get(_ALLOW_PY314_ENV, "").strip().lower()
+    if allow in {"1", "true", "yes", "on"}:
+        return True
+
+    print("[error] whisper-dic on macOS with Python 3.14 is currently unstable and may crash.")
+    print("[error] Use Python 3.12 or 3.13 for run/menubar/setup commands.")
+    print(f"[error] To bypass at your own risk, set {_ALLOW_PY314_ENV}=1.")
+    return False
 
 
 def _read_process_identity(pid: int) -> str:
@@ -629,6 +648,9 @@ def main() -> int:
 
     config_path = Path(args.config).expanduser().resolve()
     command = args.command or "run"
+
+    if not _runtime_supported(command):
+        return 1
 
     if command == "run":
         return command_run(config_path)
