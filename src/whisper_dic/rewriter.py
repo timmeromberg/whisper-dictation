@@ -94,7 +94,9 @@ CONTEXT_PROMPTS: dict[str, str] = {
 
 
 def _redact_sensitive(text: str) -> str:
-    return re.sub(r"(gsk_|sk-|Bearer\s+)\S{6,}", r"\1***", text)
+    text = re.sub(r"(gsk_|sk-|Bearer\s+)\S{6,}", r"\1***", text)
+    text = re.sub(r"(?i)(x-api-key\s*[:=]\s*)\S+", r"\1***", text)
+    return text
 
 
 def prompt_for_mode(mode: str, custom_prompt: str) -> str:
