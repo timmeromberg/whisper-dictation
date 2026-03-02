@@ -167,6 +167,12 @@ class Rewriter:
             if not result:
                 return text
             return result
+        except httpx.TimeoutException as exc:
+            log("rewriter", f"Rewrite timed out, using original: {exc}")
+            return text
+        except httpx.HTTPStatusError as exc:
+            log("rewriter", f"Rewrite HTTP error {exc.response.status_code}, using original")
+            return text
         except Exception as exc:
             log("rewriter", f"Rewrite failed, using original: {exc}")
             return text

@@ -27,6 +27,8 @@ def _describe_http_error(response: httpx.Response) -> str:
         return "API key is invalid or expired. Update with: whisper-dic set whisper.groq.api_key YOUR_KEY"
     if code == 403:
         return "API key does not have permission for this model. Check your Groq dashboard."
+    if code == 400:
+        return "Bad request. Check provider URL and model name match the API."
     if code == 413:
         return "Recording too large. Try a shorter recording."
     if code == 429:
