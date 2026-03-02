@@ -5,6 +5,15 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-03-02
+
+### Added
+- Voice-triggered text snippets: say a trigger phrase in command mode (Shift+hotkey) to paste pre-defined text
+- Menubar Snippets submenu with Add/Edit/Delete dialogs for managing snippets without editing config
+- `[snippets]` config section for defining trigger phrase → text mappings (supports multi-line via TOML `"""`)
+- `set_config_section()` helper for atomic full-section config rewrites
+- Config hot-reload support for snippets
+
 ## [0.12.0] - 2026-03-02
 
 ### Fixed
