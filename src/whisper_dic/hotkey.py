@@ -32,6 +32,9 @@ _SHIFT_KEYS = {keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r}
 # the hotkey, we still count it. Handles timing races where the listener
 # thread misses transient key state on fast key combos.
 _MODIFIER_WINDOW_SECONDS = 0.5
+# Grace period before a key release triggers hold_end.  Absorbs accidental
+# brief lifts that happen when the user pauses mid-dictation.
+_RELEASE_DEBOUNCE_SECONDS = 0.3
 
 
 class HotkeyListener:
@@ -59,6 +62,7 @@ class HotkeyListener:
         self._ctrl_last_seen: float = 0.0
         self._shift_held = False
         self._shift_last_seen: float = 0.0
+        self._release_seq = 0
         self._listener: Optional[keyboard.Listener] = None
 
     def set_key(self, key_name: str) -> None:
@@ -121,6 +125,7 @@ class HotkeyListener:
         with self._lock:
             if not self._pressed:
                 self._pressed = True
+                self._release_seq += 1
                 should_fire = True
 
         if should_fire:
@@ -146,32 +151,44 @@ class HotkeyListener:
         if not self._matches(key):
             return
 
-        should_fire = False
-        auto_send = False
-        command_mode = False
         with self._lock:
-            if self._pressed:
-                self._pressed = False
-                now = time.monotonic()
-                ctrl_delta = now - self._ctrl_last_seen
-                shift_delta = now - self._shift_last_seen
-                auto_send = self._modifier_recent(
-                    self._ctrl_held, self._ctrl_last_seen,
-                    MASK_CONTROL, now,
-                )
-                command_mode = self._modifier_recent(
-                    self._shift_held, self._shift_last_seen,
-                    MASK_SHIFT, now,
-                )
-                cd, sd = ctrl_delta, shift_delta
-                log("hotkey", f"Release: send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s")
-                should_fire = True
+            if not self._pressed:
+                return
+            self._release_seq += 1
+            seq = self._release_seq
+            now = time.monotonic()
+            auto_send = self._modifier_recent(
+                self._ctrl_held, self._ctrl_last_seen,
+                MASK_CONTROL, now,
+            )
+            command_mode = self._modifier_recent(
+                self._shift_held, self._shift_last_seen,
+                MASK_SHIFT, now,
+            )
+            cd = now - self._ctrl_last_seen
+            sd = now - self._shift_last_seen
+            log(
+                "hotkey",
+                f"Release: debouncing ({_RELEASE_DEBOUNCE_SECONDS}s)"
+                f" send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s",
+            )
 
-        if should_fire:
-            threading.Thread(
-                target=self._on_hold_end, args=(auto_send, command_mode),
-                daemon=True, name="hotkey-end",
-            ).start()
+        threading.Thread(
+            target=self._debounced_release,
+            args=(seq, auto_send, command_mode),
+            daemon=True, name="hotkey-debounce",
+        ).start()
+
+    def _debounced_release(self, seq: int, auto_send: bool, command_mode: bool) -> None:
+        """Wait for debounce period, then fire hold_end if key wasn't re-pressed."""
+        time.sleep(_RELEASE_DEBOUNCE_SECONDS)
+        with self._lock:
+            if self._release_seq != seq:
+                log("hotkey", "Release debounce cancelled (key re-pressed)")
+                return
+            self._pressed = False
+        log("hotkey", "Release debounce confirmed — firing hold_end")
+        self._on_hold_end(auto_send, command_mode)
 
     def start(self) -> None:
         with self._lock:
@@ -252,6 +269,7 @@ class NSEventHotkeyListener:
         self._ctrl_last_seen: float = 0.0
         self._shift_held = False
         self._shift_last_seen: float = 0.0
+        self._release_seq = 0  # Incremented on each release to cancel stale debounce timers
 
         self._global_monitor: object | None = None
         self._local_monitor: object | None = None
@@ -325,34 +343,52 @@ class NSEventHotkeyListener:
             with self._lock:
                 if not self._pressed:
                     self._pressed = True
+                    # Cancel any pending debounced release
+                    self._release_seq += 1
                     should_fire = True
             if should_fire:
                 threading.Thread(
                     target=self._on_hold_start, daemon=True, name="hotkey-start",
                 ).start()
         else:
-            should_fire = False
-            auto_send = False
-            command_mode = False
             with self._lock:
-                if self._pressed:
-                    self._pressed = False
-                    now = time.monotonic()
-                    auto_send = self._modifier_recent(
-                        self._ctrl_held, self._ctrl_last_seen, MASK_CONTROL, now,
-                    )
-                    command_mode = self._modifier_recent(
-                        self._shift_held, self._shift_last_seen, MASK_SHIFT, now,
-                    )
-                    cd = now - self._ctrl_last_seen
-                    sd = now - self._shift_last_seen
-                    log("hotkey", f"Release: send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s")
-                    should_fire = True
-            if should_fire:
-                threading.Thread(
-                    target=self._on_hold_end, args=(auto_send, command_mode),
-                    daemon=True, name="hotkey-end",
-                ).start()
+                if not self._pressed:
+                    return
+                self._release_seq += 1
+                seq = self._release_seq
+                now = time.monotonic()
+                auto_send = self._modifier_recent(
+                    self._ctrl_held, self._ctrl_last_seen, MASK_CONTROL, now,
+                )
+                command_mode = self._modifier_recent(
+                    self._shift_held, self._shift_last_seen, MASK_SHIFT, now,
+                )
+                cd = now - self._ctrl_last_seen
+                sd = now - self._shift_last_seen
+                log(
+                "hotkey",
+                f"Release: debouncing ({_RELEASE_DEBOUNCE_SECONDS}s)"
+                f" send={auto_send} ctrl={cd:.2f}s cmd={command_mode} shift={sd:.2f}s",
+            )
+
+            # Debounce: wait briefly, then check if key was re-pressed
+            threading.Thread(
+                target=self._debounced_release,
+                args=(seq, auto_send, command_mode),
+                daemon=True, name="hotkey-debounce",
+            ).start()
+
+    def _debounced_release(self, seq: int, auto_send: bool, command_mode: bool) -> None:
+        """Wait for debounce period, then fire hold_end if key wasn't re-pressed."""
+        time.sleep(_RELEASE_DEBOUNCE_SECONDS)
+        with self._lock:
+            # If seq changed, the key was re-pressed (or released again) — stale
+            if self._release_seq != seq:
+                log("hotkey", "Release debounce cancelled (key re-pressed)")
+                return
+            self._pressed = False
+        log("hotkey", "Release debounce confirmed — firing hold_end")
+        self._on_hold_end(auto_send, command_mode)
 
     def _handle_local_event(self, event: object) -> object:
         """Local monitor wrapper — must return event to pass it along."""
