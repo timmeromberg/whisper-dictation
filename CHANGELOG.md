@@ -5,11 +5,14 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.10.9] - 2026-03-02
+## [0.11.0] - 2026-03-02
+
+### Fixed
+- Dictation no longer cuts off after pauses — long silences are compressed before Whisper transcription to prevent attention drift
 
 ### Added
-- Menu bar first-run onboarding checklist (`Getting Started`) with persistent progress, reset/dismiss actions, and contextual tips
-- Permissions check now verifies Accessibility and Microphone status, shows specific guidance, and opens System Settings directly to the right pane
+- Onboarding permissions check now uses AVFoundation to detect actual macOS microphone permission state (granted/denied), separate from hardware availability
+- Permissions check opens System Settings directly to the relevant Privacy pane with specific guidance per missing permission
 - Branch protection now enforces admin compliance (`enforce_admins: true`)
 
 ### Changed
