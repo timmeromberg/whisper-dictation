@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from whisper_dic.menu import (
+import pytest
+
+simple_term_menu = pytest.importorskip("simple_term_menu", reason="simple_term_menu not available on this platform")
+
+from whisper_dic.menu import (  # noqa: E402
     _BOX_WIDTH,
     LANGUAGE_OPTIONS,
     _boxed_title,
