@@ -17,7 +17,9 @@ DEFAULT_GROQ_MODEL = "whisper-large-v3"
 def _redact_keys(text: str) -> str:
     """Replace anything that looks like an API key with a placeholder."""
     import re
-    return re.sub(r'(gsk_|sk-|Bearer\s+)\S{6,}', r'\1***', text)
+    text = re.sub(r'(gsk_|sk-|Bearer\s+)\S{6,}', r'\1***', text)
+    text = re.sub(r'(?i)(x-api-key\s*[:=]\s*)\S+', r'\1***', text)
+    return text
 
 
 def _describe_http_error(response: httpx.Response) -> str:
@@ -159,45 +161,8 @@ class GroqWhisperTranscriber(_HTTPWhisperTranscriber):
         )
 
 
-def create_transcriber(config: Any) -> WhisperTranscriber:
-    """Build a provider-specific transcriber from whisper config."""
-
-    provider = str(getattr(config, "provider", "local")).strip().lower()
-    language = str(getattr(config, "language", "en"))
-    timeout_seconds = float(getattr(config, "timeout_seconds", 120.0))
-    prompt = str(getattr(config, "prompt", ""))
-
-    if provider == "local":
-        local_cfg = getattr(config, "local", None)
-        url = str(getattr(local_cfg, "url", DEFAULT_LOCAL_URL)) if local_cfg else DEFAULT_LOCAL_URL
-        model = str(getattr(local_cfg, "model", DEFAULT_LOCAL_MODEL)) if local_cfg else DEFAULT_LOCAL_MODEL
-        return LocalWhisperTranscriber(
-            url=url,
-            language=language,
-            model=model,
-            timeout_seconds=timeout_seconds,
-            prompt=prompt,
-        )
-
-    if provider == "groq":
-        groq_cfg = getattr(config, "groq", None)
-        api_key = str(getattr(groq_cfg, "api_key", "")) if groq_cfg else ""
-        url = str(getattr(groq_cfg, "url", DEFAULT_GROQ_URL)) if groq_cfg else DEFAULT_GROQ_URL
-        model = str(getattr(groq_cfg, "model", DEFAULT_GROQ_MODEL)) if groq_cfg else DEFAULT_GROQ_MODEL
-        return GroqWhisperTranscriber(
-            api_key=api_key,
-            url=url,
-            language=language,
-            model=model,
-            timeout_seconds=timeout_seconds,
-            prompt=prompt,
-        )
-
-    raise ValueError(f"Unsupported whisper provider '{provider}'. Expected 'local' or 'groq'.")
-
-
-def create_transcriber_for(config: Any, provider: str) -> WhisperTranscriber:
-    """Build a transcriber for a specific provider, ignoring config.provider."""
+def _build_transcriber(config: Any, provider: str) -> WhisperTranscriber:
+    """Build a transcriber for a given provider using shared config extraction."""
     language = str(getattr(config, "language", "en"))
     timeout_seconds = float(getattr(config, "timeout_seconds", 120.0))
     prompt = str(getattr(config, "prompt", ""))
@@ -221,4 +186,15 @@ def create_transcriber_for(config: Any, provider: str) -> WhisperTranscriber:
             timeout_seconds=timeout_seconds, prompt=prompt,
         )
 
-    raise ValueError(f"Unsupported provider '{provider}'.")
+    raise ValueError(f"Unsupported provider '{provider}'. Expected 'local' or 'groq'.")
+
+
+def create_transcriber(config: Any) -> WhisperTranscriber:
+    """Build a provider-specific transcriber from whisper config."""
+    provider = str(getattr(config, "provider", "local")).strip().lower()
+    return _build_transcriber(config, provider)
+
+
+def create_transcriber_for(config: Any, provider: str) -> WhisperTranscriber:
+    """Build a transcriber for a specific provider, ignoring config.provider."""
+    return _build_transcriber(config, provider)
