@@ -774,9 +774,21 @@ class DictationMenuBar(rumps.App):
                 callAfter(_update_up)
         threading.Thread(target=_run, daemon=True).start()
 
+    # If the audio stream stops delivering callbacks for this many seconds
+    # while still recording, restart the stream (device power-management hiccup).
+    _STREAM_WATCHDOG_SECONDS = 2.0
+
     def _update_level(self, _timer: Any) -> None:
         if not self._is_recording:
             return
+
+        # Watchdog: restart stream if callbacks stopped arriving
+        stale = self._app.recorder.seconds_since_last_callback
+        if stale > self._STREAM_WATCHDOG_SECONDS:
+            print(f"[menubar] stream watchdog: no callback for {stale:.1f}s, restarting stream")
+            self._app.recorder.restart_stream()
+            return
+
         peak = self._app.recorder.read_peak()
         # Use log scale: normal speech (~500-5000) should fill most of the meter
         import math

@@ -124,6 +124,8 @@ class Recorder:
         self._peak: float = 0.0
         self._combined_cache: np.ndarray | None = None
         self._combined_chunk_count = 0
+        self._last_callback_time = 0.0
+        self._stream_errors = 0
 
     @property
     def is_recording(self) -> bool:
@@ -140,12 +142,14 @@ class Recorder:
     def _callback(self, indata: np.ndarray, frames: int, time_info: Any, status: Any) -> None:
         if status:
             print(f"[recorder] stream status: {status}")
+            self._stream_errors += 1
 
         with self._lock:
             if not self._recording:
                 return
             self._chunks.append(indata.copy())
             self._sample_count += frames
+            self._last_callback_time = time.monotonic()
             # Track peak amplitude for level metering
             self._peak = max(self._peak, float(np.abs(indata).max()))
 
@@ -157,6 +161,8 @@ class Recorder:
             self._chunks = []
             self._sample_count = 0
             self._started_at = time.monotonic()
+            self._last_callback_time = time.monotonic()
+            self._stream_errors = 0
             self._recording = True
             self._combined_cache = None
             self._combined_chunk_count = 0
@@ -176,6 +182,58 @@ class Recorder:
                 raise
 
         return True
+
+    @property
+    def seconds_since_last_callback(self) -> float:
+        """Seconds since the last audio callback. 0.0 if not recording."""
+        with self._lock:
+            if not self._recording or self._last_callback_time == 0.0:
+                return 0.0
+            return time.monotonic() - self._last_callback_time
+
+    def restart_stream(self) -> bool:
+        """Close and reopen the audio stream while preserving recorded chunks.
+
+        Use this when the stream stops delivering callbacks (e.g. after a
+        device power-management hiccup or PortAudio xrun).  Returns True
+        if the stream was successfully restarted.
+        """
+        with self._lock:
+            if not self._recording:
+                return False
+
+            # Close the dead stream
+            old_stream = self._stream
+            self._stream = None
+
+        if old_stream is not None:
+            try:
+                old_stream.stop()
+                old_stream.close()
+            except Exception:
+                pass
+
+        # Reset PortAudio to rediscover devices
+        reset_audio_backend()
+
+        with self._lock:
+            if not self._recording:
+                return False
+            try:
+                self._stream = sd.InputStream(
+                    device=self.device,
+                    samplerate=self.sample_rate,
+                    channels=self.channels,
+                    dtype=self.dtype,
+                    callback=self._callback,
+                )
+                self._stream.start()
+                self._stream_errors = 0
+                print("[recorder] stream restarted successfully")
+                return True
+            except Exception as exc:
+                print(f"[recorder] stream restart failed: {exc}")
+                return False
 
     def get_accumulated_audio(self) -> bytes | None:
         """Snapshot accumulated audio as FLAC bytes without stopping recording."""

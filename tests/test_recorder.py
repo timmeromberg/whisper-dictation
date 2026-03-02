@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -148,6 +149,89 @@ class TestResetAudioBackend:
         with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd._initialize.side_effect = RuntimeError("PortAudio error")
             reset_audio_backend()
+
+
+class TestStreamWatchdog:
+    """Tests for stream liveness detection and restart."""
+
+    def test_seconds_since_last_callback_zero_when_not_recording(self) -> None:
+        with patch("whisper_dic.recorder.sd"):
+            r = Recorder()
+            assert r.seconds_since_last_callback == 0.0
+
+    def test_seconds_since_last_callback_tracks_time(self) -> None:
+        mock_stream = MagicMock()
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd.InputStream.return_value = mock_stream
+            r = Recorder()
+            r.start()
+            # Simulate callback
+            data = np.zeros((160, 1), dtype=np.int16)
+            r._callback(data, 160, None, None)
+            # Should be very small (just happened)
+            assert r.seconds_since_last_callback < 0.5
+
+    def test_seconds_since_last_callback_grows_without_callbacks(self) -> None:
+        mock_stream = MagicMock()
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd.InputStream.return_value = mock_stream
+            r = Recorder()
+            r.start()
+            # Fake last callback time to 3 seconds ago
+            with r._lock:
+                r._last_callback_time = time.monotonic() - 3.0
+            assert r.seconds_since_last_callback >= 2.5
+
+    def test_restart_stream_reopens_stream(self) -> None:
+        mock_stream1 = MagicMock()
+        mock_stream2 = MagicMock()
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd.InputStream.side_effect = [mock_stream1, mock_stream2]
+            r = Recorder()
+            r.start()
+            # Simulate some recorded audio
+            data = np.zeros((160, 1), dtype=np.int16)
+            r._callback(data, 160, None, None)
+
+            with patch("whisper_dic.recorder.reset_audio_backend"):
+                result = r.restart_stream()
+
+            assert result is True
+            mock_stream1.stop.assert_called_once()
+            mock_stream1.close.assert_called_once()
+            mock_stream2.start.assert_called_once()
+
+    def test_restart_stream_preserves_chunks(self) -> None:
+        mock_stream1 = MagicMock()
+        mock_stream2 = MagicMock()
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd.InputStream.side_effect = [mock_stream1, mock_stream2]
+            r = Recorder()
+            r.start()
+            data = np.ones((160, 1), dtype=np.int16) * 1000
+            r._callback(data, 160, None, None)
+            chunks_before = len(r._chunks)
+
+            with patch("whisper_dic.recorder.reset_audio_backend"):
+                r.restart_stream()
+
+            # Chunks from before restart should still be there
+            assert len(r._chunks) >= chunks_before
+
+    def test_restart_stream_returns_false_when_not_recording(self) -> None:
+        with patch("whisper_dic.recorder.sd"):
+            r = Recorder()
+            assert r.restart_stream() is False
+
+    def test_stream_errors_tracked(self) -> None:
+        mock_stream = MagicMock()
+        with patch("whisper_dic.recorder.sd") as mock_sd:
+            mock_sd.InputStream.return_value = mock_stream
+            r = Recorder()
+            r.start()
+            # Callback with status error
+            r._callback(np.zeros((160, 1), dtype=np.int16), 160, None, "input overflow")
+            assert r._stream_errors == 1
 
 
 class TestStripLongSilence:
