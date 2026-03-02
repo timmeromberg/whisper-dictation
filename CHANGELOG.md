@@ -5,6 +5,20 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.12] - 2026-03-02
+
+### Fixed
+- Dispatched all rumps/AppKit state mutations (title, menu items, timers) to main thread via `callAfter` to fix segfault on recording start
+- Enabled `faulthandler` for better crash diagnostics on segfaults
+
+### Changed
+- Removed mic level bar from preview overlay
+- Split README into landing page (~150 lines) + 7 reference docs in `docs/`
+
+### Added
+- Overlay accessibility settings (reduced motion, high contrast, font scale)
+- Updating and uninstalling instructions in README
+
 ## [0.9.11] - 2026-03-02
 
 ### Fixed
