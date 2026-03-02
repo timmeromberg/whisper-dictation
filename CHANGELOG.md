@@ -5,6 +5,11 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-03-02
+
+### Fixed
+- Segfault when quickly re-pressing hotkey: serialize PortAudio stream operations with a dedicated lock to prevent concurrent create/start/stop/close calls in the C layer
+
 ## [0.13.0] - 2026-03-02
 
 ### Added
