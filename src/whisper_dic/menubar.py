@@ -684,15 +684,33 @@ class DictationMenuBar(rumps.App):
         self._rebuild_snippets_menu()
 
     def _rebuild_snippets_menu(self) -> None:
-        """Rebuild the snippets submenu in-place."""
-        new_menu = self._build_snippets_menu()
-        # Replace items in existing menu object
-        for key in list(self._snippets_menu.keys()):
-            del self._snippets_menu[key]
-        for key, item in new_menu.items():
-            self._snippets_menu.add(item)
+        """Rebuild the snippets submenu in-place.
+
+        NSMenuItems can only belong to one NSMenu at a time, so we must
+        create fresh items directly rather than transferring from a temp menu.
+        """
         from . import commands
-        count = len(commands.list_snippets())
+
+        self._snippets_menu.clear()
+
+        self._snippets_menu.add(rumps.MenuItem("Add Snippet...", callback=self._on_add_snippet))
+
+        snippets = commands.list_snippets()
+        if snippets:
+            self._snippets_menu.add(None)
+            for phrase, text in sorted(snippets.items()):
+                preview = text[:40] + "..." if len(text) > 40 else text
+                preview = preview.replace("\n", " ")
+                sub = rumps.MenuItem(f'"{phrase}" \u2192 {preview}')
+                edit_item = rumps.MenuItem("Edit...", callback=self._on_edit_snippet)
+                edit_item._snippet_phrase = phrase  # type: ignore[attr-defined]
+                delete_item = rumps.MenuItem("Delete", callback=self._on_delete_snippet)
+                delete_item._snippet_phrase = phrase  # type: ignore[attr-defined]
+                sub.add(edit_item)
+                sub.add(delete_item)
+                self._snippets_menu.add(sub)
+
+        count = len(snippets)
         self._snippets_menu.title = f"Snippets ({count})" if count else "Snippets"
 
     def _build_help_menu(self) -> rumps.MenuItem:
