@@ -121,6 +121,10 @@ class Recorder:
         self.device = device
 
         self._lock = threading.Lock()
+        # Serializes PortAudio stream operations (create/start/stop/close).
+        # Separate from _lock to avoid deadlocking with the audio callback
+        # (which acquires _lock but never _pa_lock).
+        self._pa_lock = threading.Lock()
         self._stream: Optional[sd.InputStream] = None
         self._chunks: list[np.ndarray] = []
         self._recording = False
@@ -159,31 +163,35 @@ class Recorder:
             self._peak = max(self._peak, float(np.abs(indata).max()))
 
     def start(self) -> bool:
-        with self._lock:
-            if self._recording:
-                return False
+        with self._pa_lock:
+            with self._lock:
+                if self._recording:
+                    return False
 
-            self._chunks = []
-            self._sample_count = 0
-            self._started_at = time.monotonic()
-            self._last_callback_time = time.monotonic()
-            self._stream_errors = 0
-            self._recording = True
-            self._combined_cache = None
-            self._combined_chunk_count = 0
+                self._chunks = []
+                self._sample_count = 0
+                self._started_at = time.monotonic()
+                self._last_callback_time = time.monotonic()
+                self._stream_errors = 0
+                self._recording = True
+                self._combined_cache = None
+                self._combined_chunk_count = 0
 
             try:
-                self._stream = sd.InputStream(
+                stream = sd.InputStream(
                     device=self.device,
                     samplerate=self.sample_rate,
                     channels=self.channels,
                     dtype=self.dtype,
                     callback=self._callback,
                 )
-                self._stream.start()
+                stream.start()
+                with self._lock:
+                    self._stream = stream
             except Exception:
-                self._recording = False
-                self._stream = None
+                with self._lock:
+                    self._recording = False
+                    self._stream = None
                 raise
 
         return True
@@ -203,37 +211,40 @@ class Recorder:
         device power-management hiccup or PortAudio xrun).  Returns True
         if the stream was successfully restarted.
         """
-        with self._lock:
-            if not self._recording:
-                return False
+        with self._pa_lock:
+            with self._lock:
+                if not self._recording:
+                    return False
 
-            # Close the dead stream
-            old_stream = self._stream
-            self._stream = None
+                # Close the dead stream
+                old_stream = self._stream
+                self._stream = None
 
-        if old_stream is not None:
+            if old_stream is not None:
+                try:
+                    old_stream.stop()
+                    old_stream.close()
+                except Exception:
+                    pass
+
+            # Reset PortAudio to rediscover devices
+            reset_audio_backend()
+
+            with self._lock:
+                if not self._recording:
+                    return False
             try:
-                old_stream.stop()
-                old_stream.close()
-            except Exception:
-                pass
-
-        # Reset PortAudio to rediscover devices
-        reset_audio_backend()
-
-        with self._lock:
-            if not self._recording:
-                return False
-            try:
-                self._stream = sd.InputStream(
+                stream = sd.InputStream(
                     device=self.device,
                     samplerate=self.sample_rate,
                     channels=self.channels,
                     dtype=self.dtype,
                     callback=self._callback,
                 )
-                self._stream.start()
-                self._stream_errors = 0
+                stream.start()
+                with self._lock:
+                    self._stream = stream
+                    self._stream_errors = 0
                 print("[recorder] stream restarted successfully")
                 return True
             except Exception as exc:
@@ -261,8 +272,9 @@ class Recorder:
             self._recording = False
 
         if stream is not None:
-            stream.stop()
-            stream.close()
+            with self._pa_lock:
+                stream.stop()
+                stream.close()
 
         with self._lock:
             chunks = self._chunks
@@ -294,8 +306,9 @@ class Recorder:
         stream = self._stream
         if stream is not None:
             try:
-                stream.stop()
-                stream.close()
+                with self._pa_lock:
+                    stream.stop()
+                    stream.close()
             except Exception:
                 pass
 
