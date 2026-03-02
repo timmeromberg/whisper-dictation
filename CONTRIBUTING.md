@@ -93,6 +93,10 @@ Prefix with a scope when useful: `fix(audio):`, `feat(menubar):`, `test(e2e):`.
 - **CHANGELOG + VERSION** — bump `src/whisper_dic/VERSION` and add a versioned changelog entry at the top for user-facing changes
 - **Description** — explain *why*, not just *what*
 
+## Architecture
+
+For a deep dive into the data pipeline, threading model, platform abstraction, and module dependencies, see [docs/architecture.md](docs/architecture.md).
+
 ## Project Structure
 
 ```

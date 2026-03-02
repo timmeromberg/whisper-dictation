@@ -1,6 +1,7 @@
 # Development
 
 For contribution workflow details, see [CONTRIBUTING.md](../CONTRIBUTING.md).
+For codebase architecture, data flow, and threading model, see [architecture.md](architecture.md).
 
 ## Development Setup
 
@@ -74,6 +75,7 @@ whisper-dictation/
 │       ├── e2e.yml
 │       └── release.yml
 ├── docs/
+│   ├── architecture.md
 │   ├── commands.md
 │   ├── configuration.md
 │   ├── development.md
