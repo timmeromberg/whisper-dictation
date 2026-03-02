@@ -1,20 +1,38 @@
-"""Tests for voice commands."""
+"""Tests for voice commands and text snippets."""
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
-from whisper_dic.commands import _COMMANDS, _parse_shortcut, execute, list_commands, register_custom
+import whisper_dic.commands as commands_mod
+from whisper_dic.commands import (
+    _COMMANDS,
+    _SNIPPETS,
+    _parse_shortcut,
+    execute,
+    init_paster,
+    list_commands,
+    list_snippets,
+    register_custom,
+    register_snippets,
+)
 from whisper_dic.compat import VK_MAP
 
 
 @pytest.fixture(autouse=True)
 def _restore_commands():
-    """Save and restore the command table to prevent test pollution."""
-    original = dict(_COMMANDS)
+    """Save and restore the command and snippet tables to prevent test pollution."""
+    original_commands = dict(_COMMANDS)
+    original_snippets = dict(_SNIPPETS)
+    original_paster = commands_mod._paster
     yield
     _COMMANDS.clear()
-    _COMMANDS.update(original)
+    _COMMANDS.update(original_commands)
+    _SNIPPETS.clear()
+    _SNIPPETS.update(original_snippets)
+    commands_mod._paster = original_paster
 
 
 class TestParseShortcut:
@@ -115,3 +133,115 @@ class TestCommandTable:
         }
         for cmd in expected:
             assert cmd in _COMMANDS, f"Expected command '{cmd}' missing from table"
+
+
+class TestRegisterSnippets:
+    def test_registers_snippets(self) -> None:
+        register_snippets({"my email": "tim@example.com"})
+        assert _SNIPPETS["my email"] == "tim@example.com"
+
+    def test_normalizes_phrase(self) -> None:
+        register_snippets({"  My Email  ": "tim@example.com"})
+        assert "my email" in _SNIPPETS
+
+    def test_clears_previous(self) -> None:
+        register_snippets({"first": "aaa"})
+        register_snippets({"second": "bbb"})
+        assert "first" not in _SNIPPETS
+        assert "second" in _SNIPPETS
+
+    def test_skips_empty_phrase(self) -> None:
+        register_snippets({"": "some text", "  ": "more text"})
+        assert len(_SNIPPETS) == 0
+
+    def test_skips_empty_text(self) -> None:
+        register_snippets({"trigger": ""})
+        assert len(_SNIPPETS) == 0
+
+    def test_warns_on_command_collision(self) -> None:
+        # "copy" is a built-in command — snippet should still register but logs warning
+        register_snippets({"copy": "some text"})
+        assert "copy" in _SNIPPETS
+
+    def test_multiple_snippets(self) -> None:
+        register_snippets({
+            "my email": "tim@example.com",
+            "my address": "123 Main St",
+            "signature": "Best,\nTim",
+        })
+        assert len(_SNIPPETS) == 3
+
+
+class TestListSnippets:
+    def test_returns_copy(self) -> None:
+        register_snippets({"greeting": "hello world"})
+        result = list_snippets()
+        assert result == {"greeting": "hello world"}
+        # Mutating returned dict should not affect internal state
+        result["new"] = "value"
+        assert "new" not in _SNIPPETS
+
+    def test_empty_when_none_registered(self) -> None:
+        assert list_snippets() == {}
+
+
+class TestSnippetExecution:
+    def test_snippet_pastes_text(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"my email": "tim@example.com"})
+
+        assert execute("my email") is True
+        mock_paster.paste.assert_called_once_with("tim@example.com")
+
+    def test_command_takes_priority_over_snippet(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"copy": "some text"})
+
+        assert execute("copy") is True
+        mock_paster.paste.assert_not_called()
+
+    def test_snippet_no_paster_returns_false(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        commands_mod._paster = None
+        register_snippets({"my email": "tim@example.com"})
+
+        assert execute("my email") is False
+
+    def test_snippet_strips_punctuation(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"my email": "tim@example.com"})
+
+        assert execute("My email.") is True
+        mock_paster.paste.assert_called_once_with("tim@example.com")
+
+    def test_snippet_case_insensitive(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"my email": "tim@example.com"})
+
+        assert execute("MY EMAIL") is True
+
+    def test_no_match_returns_false(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"my email": "tim@example.com"})
+
+        assert execute("unknown phrase") is False
+        mock_paster.paste.assert_not_called()
+
+    def test_multiline_snippet(self, monkeypatch) -> None:
+        monkeypatch.setattr("whisper_dic.commands._post_key", lambda vk, flags=0: None)
+        mock_paster = MagicMock()
+        init_paster(mock_paster)
+        register_snippets({"signature": "Best regards,\nTim"})
+
+        assert execute("signature") is True
+        mock_paster.paste.assert_called_once_with("Best regards,\nTim")

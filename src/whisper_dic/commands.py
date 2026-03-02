@@ -1,15 +1,27 @@
-"""Voice commands — spoken phrases that trigger keyboard shortcuts."""
+"""Voice commands — spoken phrases that trigger keyboard shortcuts or paste snippets."""
 
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from .compat import FLAG_ALT, FLAG_CMD, FLAG_CTRL, FLAG_SHIFT, VK_RETURN
 from .compat import VK_MAP as _VK
 from .compat import post_key as _post_key
 from .log import log
 
-__all__ = ["VK_RETURN", "execute", "list_commands", "register_custom"]
+if TYPE_CHECKING:
+    from .paster import TextPaster
+
+__all__ = [
+    "VK_RETURN",
+    "execute",
+    "init_paster",
+    "list_commands",
+    "list_snippets",
+    "register_custom",
+    "register_snippets",
+]
 
 # Command table: normalized spoken phrase -> (virtual_key, modifier_flags)
 _COMMANDS: dict[str, tuple[int, int]] = {
@@ -90,11 +102,45 @@ _ALIASES: dict[str, str] = {
     "redo it": "redo",
 }
 
+# Snippet table: normalized spoken phrase -> text to paste
+_SNIPPETS: dict[str, str] = {}
+
+# Shared paster instance for snippet execution
+_paster: TextPaster | None = None
+
+
+def init_paster(paster: TextPaster) -> None:
+    """Set the shared TextPaster instance used for snippet execution."""
+    global _paster
+    _paster = paster
+
+
+def register_snippets(snippets: dict[str, str]) -> None:
+    """Register text snippets from config. Clears previous snippets first."""
+    _SNIPPETS.clear()
+    for phrase, text in snippets.items():
+        normalized = phrase.strip().lower()
+        if not normalized:
+            log("snippet", "Skipping snippet with empty trigger phrase")
+            continue
+        if not text:
+            log("snippet", f"Skipping snippet '{normalized}' with empty text")
+            continue
+        if normalized in _COMMANDS:
+            log("snippet", f"Warning: snippet '{normalized}' shadowed by command with same name")
+        _SNIPPETS[normalized] = text
+        log("snippet", f"Registered: '{normalized}' ({len(text)} chars)")
+
+
+def list_snippets() -> dict[str, str]:
+    """Return a copy of all registered snippets."""
+    return dict(_SNIPPETS)
+
 
 def execute(text: str) -> bool:
-    """Try to match text to a voice command and execute it.
+    """Try to match text to a voice command or snippet and execute it.
 
-    Returns True if a command was executed, False if no match.
+    Commands are checked first, then snippets. Returns True if matched.
     """
     normalized = text.strip().lower()
     # Strip trailing punctuation that Whisper might add
@@ -106,17 +152,29 @@ def execute(text: str) -> bool:
     if original != normalized:
         log("command", f"Alias: '{original}' -> '{normalized}'")
 
+    # 1. Check keyboard shortcut commands
     entry = _COMMANDS.get(normalized)
-    if entry is None:
-        log("command", f"No match for '{normalized}'")
-        return False
+    if entry is not None:
+        vk, flags = entry
+        log("command", f"Executing: '{normalized}' (vk={vk}, flags=0x{flags:x})")
+        time.sleep(0.05)
+        _post_key(vk, flags)
+        log("command", f"Done: '{normalized}'")
+        return True
 
-    vk, flags = entry
-    log("command", f"Executing: '{normalized}' (vk={vk}, flags=0x{flags:x})")
-    time.sleep(0.05)
-    _post_key(vk, flags)
-    log("command", f"Done: '{normalized}'")
-    return True
+    # 2. Check text snippets
+    snippet_text = _SNIPPETS.get(normalized)
+    if snippet_text is not None:
+        if _paster is None:
+            log("snippet", f"Matched '{normalized}' but no paster initialized")
+            return False
+        log("snippet", f"Pasting snippet: '{normalized}' ({len(snippet_text)} chars)")
+        _paster.paste(snippet_text)
+        log("snippet", f"Done: '{normalized}'")
+        return True
+
+    log("command", f"No match for '{normalized}'")
+    return False
 
 
 def list_commands() -> list[str]:
