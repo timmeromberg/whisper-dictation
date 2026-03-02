@@ -383,3 +383,37 @@ class TestMenuBarThreadSafety:
 
         assert app._app.config.rewrite.contexts["coding"].enabled is False
         assert app._context_items["coding"].state == 0
+
+    def test_update_level_watchdog_cooldown_avoids_restart_spam(self) -> None:
+        app = _bare_app()
+        recorder = SimpleNamespace(
+            seconds_since_last_callback=3.0,
+            restart_stream=MagicMock(return_value=False),
+            read_peak=MagicMock(return_value=0.0),
+        )
+        app._app = SimpleNamespace(recorder=recorder)
+        app._is_recording = True
+        app._last_stream_restart_attempt = 0.0
+
+        with patch("whisper_dic.menubar.time.monotonic", side_effect=[100.0, 101.0]):
+            app._update_level(None)
+            app._update_level(None)
+
+        recorder.restart_stream.assert_called_once_with()
+
+    def test_update_level_watchdog_retries_after_cooldown(self) -> None:
+        app = _bare_app()
+        recorder = SimpleNamespace(
+            seconds_since_last_callback=3.0,
+            restart_stream=MagicMock(return_value=False),
+            read_peak=MagicMock(return_value=0.0),
+        )
+        app._app = SimpleNamespace(recorder=recorder)
+        app._is_recording = True
+        app._last_stream_restart_attempt = 0.0
+
+        with patch("whisper_dic.menubar.time.monotonic", side_effect=[100.0, 104.5]):
+            app._update_level(None)
+            app._update_level(None)
+
+        assert recorder.restart_stream.call_count == 2

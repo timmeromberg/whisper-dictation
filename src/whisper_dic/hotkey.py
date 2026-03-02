@@ -43,7 +43,7 @@ class HotkeyListener:
     def __init__(
         self,
         on_hold_start: Callable[[], None],
-        on_hold_end: Callable[[bool, bool], None],
+        on_hold_end: Callable[[bool, bool, float | None], None],
         key_name: str = "right_option",
         on_cancel: Callable[[], None] | None = None,
     ) -> None:
@@ -63,6 +63,7 @@ class HotkeyListener:
         self._shift_held = False
         self._shift_last_seen: float = 0.0
         self._release_seq = 0
+        self._pressed_started_at: float = 0.0
         self._listener: Optional[keyboard.Listener] = None
 
     def set_key(self, key_name: str) -> None:
@@ -125,6 +126,7 @@ class HotkeyListener:
         with self._lock:
             if not self._pressed:
                 self._pressed = True
+                self._pressed_started_at = time.monotonic()
                 self._release_seq += 1
                 should_fire = True
 
@@ -157,6 +159,7 @@ class HotkeyListener:
             self._release_seq += 1
             seq = self._release_seq
             now = time.monotonic()
+            hold_duration_seconds = max(0.0, now - self._pressed_started_at)
             auto_send = self._modifier_recent(
                 self._ctrl_held, self._ctrl_last_seen,
                 MASK_CONTROL, now,
@@ -175,11 +178,17 @@ class HotkeyListener:
 
         threading.Thread(
             target=self._debounced_release,
-            args=(seq, auto_send, command_mode),
+            args=(seq, auto_send, command_mode, hold_duration_seconds),
             daemon=True, name="hotkey-debounce",
         ).start()
 
-    def _debounced_release(self, seq: int, auto_send: bool, command_mode: bool) -> None:
+    def _debounced_release(
+        self,
+        seq: int,
+        auto_send: bool,
+        command_mode: bool,
+        hold_duration_seconds: float,
+    ) -> None:
         """Wait for debounce period, then fire hold_end if key wasn't re-pressed."""
         time.sleep(_RELEASE_DEBOUNCE_SECONDS)
         with self._lock:
@@ -187,8 +196,9 @@ class HotkeyListener:
                 log("hotkey", "Release debounce cancelled (key re-pressed)")
                 return
             self._pressed = False
+            self._pressed_started_at = 0.0
         log("hotkey", "Release debounce confirmed — firing hold_end")
-        self._on_hold_end(auto_send, command_mode)
+        self._on_hold_end(auto_send, command_mode, hold_duration_seconds)
 
     def start(self) -> None:
         with self._lock:
@@ -249,7 +259,7 @@ class NSEventHotkeyListener:
     def __init__(
         self,
         on_hold_start: Callable[[], None],
-        on_hold_end: Callable[[bool, bool], None],
+        on_hold_end: Callable[[bool, bool, float | None], None],
         key_name: str = "right_option",
         on_cancel: Callable[[], None] | None = None,
     ) -> None:
@@ -270,6 +280,7 @@ class NSEventHotkeyListener:
         self._shift_held = False
         self._shift_last_seen: float = 0.0
         self._release_seq = 0  # Incremented on each release to cancel stale debounce timers
+        self._pressed_started_at: float = 0.0
 
         self._global_monitor: object | None = None
         self._local_monitor: object | None = None
@@ -343,6 +354,7 @@ class NSEventHotkeyListener:
             with self._lock:
                 if not self._pressed:
                     self._pressed = True
+                    self._pressed_started_at = time.monotonic()
                     # Cancel any pending debounced release
                     self._release_seq += 1
                     should_fire = True
@@ -357,6 +369,7 @@ class NSEventHotkeyListener:
                 self._release_seq += 1
                 seq = self._release_seq
                 now = time.monotonic()
+                hold_duration_seconds = max(0.0, now - self._pressed_started_at)
                 auto_send = self._modifier_recent(
                     self._ctrl_held, self._ctrl_last_seen, MASK_CONTROL, now,
                 )
@@ -374,11 +387,17 @@ class NSEventHotkeyListener:
             # Debounce: wait briefly, then check if key was re-pressed
             threading.Thread(
                 target=self._debounced_release,
-                args=(seq, auto_send, command_mode),
+                args=(seq, auto_send, command_mode, hold_duration_seconds),
                 daemon=True, name="hotkey-debounce",
             ).start()
 
-    def _debounced_release(self, seq: int, auto_send: bool, command_mode: bool) -> None:
+    def _debounced_release(
+        self,
+        seq: int,
+        auto_send: bool,
+        command_mode: bool,
+        hold_duration_seconds: float,
+    ) -> None:
         """Wait for debounce period, then fire hold_end if key wasn't re-pressed."""
         time.sleep(_RELEASE_DEBOUNCE_SECONDS)
         with self._lock:
@@ -387,8 +406,9 @@ class NSEventHotkeyListener:
                 log("hotkey", "Release debounce cancelled (key re-pressed)")
                 return
             self._pressed = False
+            self._pressed_started_at = 0.0
         log("hotkey", "Release debounce confirmed — firing hold_end")
-        self._on_hold_end(auto_send, command_mode)
+        self._on_hold_end(auto_send, command_mode, hold_duration_seconds)
 
     def _handle_local_event(self, event: object) -> object:
         """Local monitor wrapper — must return event to pass it along."""

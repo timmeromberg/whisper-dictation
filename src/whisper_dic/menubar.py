@@ -61,6 +61,7 @@ class DictationMenuBar(rumps.App):
         self._known_input_devices: set[str] = self._get_input_device_names()
         self._provider_healthy = True
         self._health_notified = False
+        self._last_stream_restart_attempt = 0.0
         self._config_watcher = ConfigWatcher(config_path, self._on_config_changed)
         self._overlay = RecordingOverlay()
         self._preview_overlay = PreviewOverlay()
@@ -777,6 +778,7 @@ class DictationMenuBar(rumps.App):
     # If the audio stream stops delivering callbacks for this many seconds
     # while still recording, restart the stream (device power-management hiccup).
     _STREAM_WATCHDOG_SECONDS = 2.0
+    _STREAM_WATCHDOG_COOLDOWN_SECONDS = 3.0
 
     def _update_level(self, _timer: Any) -> None:
         if not self._is_recording:
@@ -785,8 +787,15 @@ class DictationMenuBar(rumps.App):
         # Watchdog: restart stream if callbacks stopped arriving
         stale = self._app.recorder.seconds_since_last_callback
         if stale > self._STREAM_WATCHDOG_SECONDS:
+            now = time.monotonic()
+            last_attempt = getattr(self, "_last_stream_restart_attempt", 0.0)
+            if (now - last_attempt) < self._STREAM_WATCHDOG_COOLDOWN_SECONDS:
+                return
+            self._last_stream_restart_attempt = now
             print(f"[menubar] stream watchdog: no callback for {stale:.1f}s, restarting stream")
-            self._app.recorder.restart_stream()
+            restarted = self._app.recorder.restart_stream()
+            if not restarted:
+                print("[menubar] stream watchdog: restart attempt failed")
             return
 
         peak = self._app.recorder.read_peak()

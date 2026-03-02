@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from pynput import keyboard
 
@@ -87,3 +89,38 @@ class TestMatches:
             key_name="left_option",
         )
         assert listener._matches(None) is False
+
+
+class TestReleaseDebounce:
+    def test_debounced_release_passes_hold_duration(self) -> None:
+        calls: list[tuple[bool, bool, float | None]] = []
+        listener = HotkeyListener(
+            on_hold_start=lambda: None,
+            on_hold_end=lambda auto_send, command_mode, hold_duration: calls.append(
+                (auto_send, command_mode, hold_duration),
+            ),
+            key_name="left_option",
+        )
+        listener._release_seq = 1
+
+        with patch("whisper_dic.hotkey.time.sleep", return_value=None):
+            listener._debounced_release(1, True, False, 0.05)
+
+        assert calls == [(True, False, 0.05)]
+        assert listener._pressed is False
+
+    def test_debounced_release_ignores_stale_sequence(self) -> None:
+        calls: list[tuple[bool, bool, float | None]] = []
+        listener = HotkeyListener(
+            on_hold_start=lambda: None,
+            on_hold_end=lambda auto_send, command_mode, hold_duration: calls.append(
+                (auto_send, command_mode, hold_duration),
+            ),
+            key_name="left_option",
+        )
+        listener._release_seq = 2
+
+        with patch("whisper_dic.hotkey.time.sleep", return_value=None):
+            listener._debounced_release(1, False, True, 0.1)
+
+        assert calls == []
