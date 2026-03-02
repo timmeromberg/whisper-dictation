@@ -846,6 +846,27 @@ class DictationMenuBar(rumps.App):
 
         print(f"[menubar] Rewrite model: {new_model}")
 
+    def _edit_whisper_prompt(self, _sender: Any) -> None:
+        current = self.config.whisper.prompt
+        response = rumps.Window(
+            title="Whisper Prompt",
+            message=(
+                "Bias transcription toward specific vocabulary.\n"
+                "Enter words, phrases, or names that are often misrecognized:"
+            ),
+            default_text=current,
+            ok="Save",
+            cancel="Cancel",
+        ).run()
+        if not response.clicked:
+            return
+        new_prompt = response.text.strip()
+        self._set_config("whisper.prompt", new_prompt)
+        self.config.whisper.prompt = new_prompt
+        self._app.config.whisper.prompt = new_prompt
+        self._app.replace_transcriber(create_transcriber(self.config.whisper))
+        print(f"[menubar] Whisper prompt: {new_prompt!r}")
+
     def _recreate_rewriter(self, notify_missing_key: bool = True) -> None:
         """Create or recreate the rewriter with current config. Reverts on missing API key."""
         from .rewriter import Rewriter, prompt_for_mode
@@ -1091,6 +1112,9 @@ class DictationMenuBar(rumps.App):
         if new_config.audio_feedback.volume != old.audio_feedback.volume:
             self._app.config.audio_feedback.volume = new_config.audio_feedback.volume
 
+        if new_config.audio_feedback.enabled != old.audio_feedback.enabled:
+            self._app.config.audio_feedback.enabled = new_config.audio_feedback.enabled
+
         if new_config.paste.auto_send != old.paste.auto_send:
             self._app.config.paste.auto_send = new_config.paste.auto_send
 
@@ -1203,6 +1227,9 @@ class DictationMenuBar(rumps.App):
                 pct = int(new_config.audio_feedback.volume * 100)
                 self._volume_menu.title = f"Volume: {pct}%"
                 self._volume_slider.value = pct
+
+            if new_config.audio_feedback.enabled != old.audio_feedback.enabled:
+                self._audiobeep_item.state = 1 if new_config.audio_feedback.enabled else 0
 
             if new_config.paste.auto_send != old.paste.auto_send:
                 self._autosend_item.state = 1 if new_config.paste.auto_send else 0
