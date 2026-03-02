@@ -105,6 +105,7 @@ jobs:
         with:
           name: flaky-report-${{ matrix.os }}-${{ matrix.python-version }}
           path: .ci-flaky-report.txt
+          include-hidden-files: true
           if-no-files-found: warn
 
       - name: Coverage (macOS, Python 3.12)

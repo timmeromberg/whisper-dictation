@@ -5,6 +5,11 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.8] - 2026-03-02
+
+### Fixed
+- CI flaky-report artifacts now upload reliably by enabling hidden-file uploads for `.ci-flaky-report.txt` in `actions/upload-artifact`.
+
 ## [0.10.7] - 2026-03-02
 
 ### Fixed
