@@ -22,6 +22,75 @@ class RecordingResult:
     sample_count: int
 
 
+def strip_long_silence(
+    audio: np.ndarray,
+    sample_rate: int,
+    silence_threshold: float = 0.02,
+    max_silence_seconds: float = 1.0,
+    keep_seconds: float = 0.3,
+) -> np.ndarray:
+    """Replace silence gaps longer than *max_silence_seconds* with *keep_seconds* of silence.
+
+    Whisper models lose context when there are long silent stretches in the
+    middle of a recording — the attention mechanism drifts and the model
+    either hallucinates or skips the remainder.  By collapsing long gaps we
+    keep all voiced content intact while removing the problematic dead air.
+
+    *silence_threshold* is relative to the int16 range (0–32768).
+    """
+    if audio.ndim == 2:
+        mono = audio[:, 0]
+    else:
+        mono = audio
+
+    # Energy per frame — for int16 data the values are in [−32768, 32767].
+    # Normalize so 1.0 = full scale.
+    if np.issubdtype(audio.dtype, np.integer):
+        energy = np.abs(mono.astype(np.float32)) / 32768.0
+    else:
+        energy = np.abs(mono)
+
+    frame_size = int(sample_rate * 0.02)  # 20 ms frames
+    keep_frames = int(keep_seconds * sample_rate)
+
+    segments: list[np.ndarray] = []
+    silence_start: int | None = None
+
+    i = 0
+    while i < len(energy):
+        end = min(i + frame_size, len(energy))
+        frame_energy = float(energy[i:end].mean())
+
+        if frame_energy < silence_threshold:
+            if silence_start is None:
+                silence_start = i
+        else:
+            if silence_start is not None:
+                gap_samples = i - silence_start
+                if gap_samples > int(max_silence_seconds * sample_rate):
+                    # Long silence — keep only a short portion
+                    segments.append(audio[silence_start : silence_start + keep_frames])
+                else:
+                    # Short silence — keep as-is
+                    segments.append(audio[silence_start:i])
+                silence_start = None
+            segments.append(audio[i:end])
+
+        i = end
+
+    # Handle trailing silence
+    if silence_start is not None:
+        gap_samples = len(audio) - silence_start
+        if gap_samples > int(max_silence_seconds * sample_rate):
+            segments.append(audio[silence_start : silence_start + keep_frames])
+        else:
+            segments.append(audio[silence_start:])
+
+    if not segments:
+        return audio
+    return np.concatenate(segments, axis=0)
+
+
 def reset_audio_backend() -> None:
     """Re-initialize PortAudio to rediscover devices after sleep/wake."""
     try:
@@ -144,6 +213,9 @@ class Recorder:
 
         if not chunks or audio is None:
             return None
+
+        # Collapse long silences so Whisper doesn't lose context after pauses
+        audio = strip_long_silence(audio, self.sample_rate)
 
         buffer = io.BytesIO()
         sf.write(buffer, audio, self.sample_rate, format="FLAC")

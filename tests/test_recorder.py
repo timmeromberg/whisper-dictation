@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from whisper_dic.recorder import Recorder, RecordingResult, reset_audio_backend
+from whisper_dic.recorder import Recorder, RecordingResult, reset_audio_backend, strip_long_silence
 
 
 class TestInitialState:
@@ -148,3 +148,75 @@ class TestResetAudioBackend:
         with patch("whisper_dic.recorder.sd") as mock_sd:
             mock_sd._initialize.side_effect = RuntimeError("PortAudio error")
             reset_audio_backend()
+
+
+class TestStripLongSilence:
+    """Tests for silence compression before Whisper transcription."""
+
+    RATE = 16000
+
+    def _tone(self, seconds: float, freq: float = 440.0) -> np.ndarray:
+        """Generate a short tone as int16."""
+        t = np.linspace(0, seconds, int(self.RATE * seconds), endpoint=False)
+        return (np.sin(2.0 * np.pi * freq * t) * 16000).astype(np.int16)
+
+    def _silence(self, seconds: float) -> np.ndarray:
+        """Generate silence as int16."""
+        return np.zeros(int(self.RATE * seconds), dtype=np.int16)
+
+    def test_short_silence_preserved(self) -> None:
+        """Silence shorter than threshold is kept intact."""
+        audio = np.concatenate([self._tone(0.5), self._silence(0.5), self._tone(0.5)])
+        result = strip_long_silence(audio, self.RATE, max_silence_seconds=1.0)
+        # Short silence is preserved — output should be roughly the same length
+        assert len(result) >= len(audio) * 0.9
+
+    def test_long_silence_compressed(self) -> None:
+        """Silence longer than threshold is compressed to keep_seconds."""
+        tone = self._tone(0.5)
+        silence = self._silence(3.0)  # 3s gap
+        audio = np.concatenate([tone, silence, tone])
+        result = strip_long_silence(audio, self.RATE, max_silence_seconds=1.0, keep_seconds=0.3)
+        # 3s silence → 0.3s — output should be much shorter
+        expected_max = len(tone) * 2 + int(self.RATE * 0.5)
+        assert len(result) < expected_max
+
+    def test_voiced_content_preserved(self) -> None:
+        """All voiced segments survive silence stripping."""
+        tone1 = self._tone(0.5, freq=440.0)
+        tone2 = self._tone(0.5, freq=880.0)
+        silence = self._silence(3.0)
+        audio = np.concatenate([tone1, silence, tone2])
+        result = strip_long_silence(audio, self.RATE, max_silence_seconds=1.0)
+        # Both tones should be present — total voiced samples preserved
+        voiced_original = len(tone1) + len(tone2)
+        assert len(result) >= voiced_original
+
+    def test_no_silence_passthrough(self) -> None:
+        """Audio with no silence passes through unchanged."""
+        audio = self._tone(2.0)
+        result = strip_long_silence(audio, self.RATE)
+        assert len(result) == len(audio)
+
+    def test_all_silence_compressed(self) -> None:
+        """Pure silence is compressed to keep_seconds."""
+        audio = self._silence(5.0)
+        result = strip_long_silence(audio, self.RATE, max_silence_seconds=1.0, keep_seconds=0.3)
+        assert len(result) < len(audio)
+
+    def test_multiple_gaps_each_compressed(self) -> None:
+        """Multiple long gaps are each independently compressed."""
+        tone = self._tone(0.3)
+        silence = self._silence(2.0)
+        audio = np.concatenate([tone, silence, tone, silence, tone])
+        original_len = len(audio)
+        result = strip_long_silence(audio, self.RATE, max_silence_seconds=1.0, keep_seconds=0.3)
+        # Two 2s gaps → two 0.3s gaps — should save ~3.4s of samples
+        assert len(result) < original_len * 0.7
+
+    def test_2d_audio_array(self) -> None:
+        """Works with 2D mono arrays (N, 1) from sounddevice."""
+        audio_1d = np.concatenate([self._tone(0.5), self._silence(3.0), self._tone(0.5)])
+        audio_2d = audio_1d.reshape(-1, 1)
+        result = strip_long_silence(audio_2d, self.RATE, max_silence_seconds=1.0)
+        assert len(result) < len(audio_2d)
