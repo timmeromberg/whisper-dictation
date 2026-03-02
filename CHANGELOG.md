@@ -5,6 +5,21 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-03-02
+
+### Fixed
+- Transcriber now surfaces actionable message for HTTP 400 (bad request) errors
+- Rewriter logs specific exception types (timeout, HTTP status, generic) for better diagnostics
+- Beep frequency clamped to 20–20,000 Hz and duration to 0.01–2.0s to prevent silent/broken audio feedback
+
+### Changed
+- Extracted shared `data_dir()` into `compat` module, removing duplication from `doctor.py` and `local_setup.py`
+- Refactored `_run_pipeline()` into focused helpers: `_transcribe_audio()`, `_rewrite_if_enabled()`, `_handle_command()`
+
+### Added
+- 42 tests for `doctor.py` covering all diagnostic check functions
+- 118 tests for `overlay.py` covering recording and preview overlay behavior
+
 ## [0.11.1] - 2026-03-02
 
 ### Fixed
