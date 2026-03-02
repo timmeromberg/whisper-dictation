@@ -5,6 +5,13 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.14] - 2026-03-02
+
+### Fixed
+- Smoke test startup now runs in explicit no-input mode to prevent pre-commit smoke runs from registering live hotkeys or pasting into the active app
+- Menubar startup path now supports `WHISPER_DIC_SMOKE_NO_INPUT` to skip listener/timer/input hooks while still validating startup wiring
+- Added regression coverage to ensure smoke-mode startup bypasses health/input hooks and normal startup remains unchanged
+
 ## [0.9.13] - 2026-03-02
 
 ### Changed

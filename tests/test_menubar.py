@@ -66,3 +66,49 @@ class TestMenuBarThreadSafety:
             "Connection Failed",
             "local provider is unreachable. Check your settings.",
         )
+
+    def test_finish_startup_skips_input_hooks_in_smoke_mode(self) -> None:
+        app = _bare_app()
+        app._app = SimpleNamespace(start_listener=MagicMock())
+        app._health_timer = SimpleNamespace(start=MagicMock())
+        app._device_timer = SimpleNamespace(start=MagicMock())
+        app._config_watcher = SimpleNamespace(start=MagicMock())
+
+        with patch.dict("os.environ", {"WHISPER_DIC_SMOKE_NO_INPUT": "1"}, clear=False):
+            app._finish_startup()
+
+        app._app.start_listener.assert_not_called()
+        app._health_timer.start.assert_not_called()
+        app._device_timer.start.assert_not_called()
+        app._config_watcher.start.assert_not_called()
+
+    def test_finish_startup_starts_hooks_when_not_in_smoke_mode(self) -> None:
+        app = _bare_app()
+        app._app = SimpleNamespace(start_listener=MagicMock())
+        app._health_timer = SimpleNamespace(start=MagicMock())
+        app._device_timer = SimpleNamespace(start=MagicMock())
+        app._config_watcher = SimpleNamespace(start=MagicMock())
+        app.config = SimpleNamespace(hotkey=SimpleNamespace(key="left_option"))
+
+        with patch.dict("os.environ", {"WHISPER_DIC_SMOKE_NO_INPUT": "0"}, clear=False):
+            app._finish_startup()
+
+        app._app.start_listener.assert_called_once_with()
+        app._health_timer.start.assert_called_once_with()
+        app._device_timer.start.assert_called_once_with()
+        app._config_watcher.start.assert_called_once_with()
+
+    def test_start_dictation_smoke_mode_skips_health_checks(self) -> None:
+        app = _bare_app()
+        app._check_permissions = MagicMock()
+        app._app = SimpleNamespace(startup_health_checks=MagicMock(return_value=True))
+
+        with (
+            patch.dict("os.environ", {"WHISPER_DIC_SMOKE_NO_INPUT": "1"}, clear=False),
+            patch("whisper_dic.menubar.callAfter") as call_after,
+        ):
+            app._start_dictation()
+
+        app._check_permissions.assert_not_called()
+        app._app.startup_health_checks.assert_not_called()
+        call_after.assert_called_once_with(app._finish_startup)

@@ -38,7 +38,7 @@ cp "$SCRIPT_DIR/src/whisper_dic/config.example.toml" "$SMOKE_CONFIG" 2>/dev/null
 
 SMOKE_LOG="/tmp/smoke-menubar-$$.log"
 echo "[smoke] Starting menubar app..."
-"$PYTHON" -m whisper_dic.cli menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
+WHISPER_DIC_SMOKE_NO_INPUT=1 "$PYTHON" -m whisper_dic.cli menubar --config "$SMOKE_CONFIG" >"$SMOKE_LOG" 2>&1 &
 PID=$!
 
 sleep 3

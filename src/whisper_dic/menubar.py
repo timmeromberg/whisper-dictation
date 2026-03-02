@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import faulthandler
+import os
 import signal
 import threading
 import time
@@ -25,6 +26,11 @@ faulthandler.enable()
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
 HOTKEY_OPTIONS = ["left_option", "right_option", "left_command", "right_command", "left_shift", "right_shift"]
+_SMOKE_NO_INPUT_ENV = "WHISPER_DIC_SMOKE_NO_INPUT"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class DictationMenuBar(rumps.App):
@@ -1298,6 +1304,10 @@ class DictationMenuBar(rumps.App):
             pass
 
     def _start_dictation(self) -> None:
+        if _env_flag(_SMOKE_NO_INPUT_ENV):
+            callAfter(self._finish_startup)
+            return
+
         self._check_permissions()
 
         if not self._app.startup_health_checks():
@@ -1315,6 +1325,10 @@ class DictationMenuBar(rumps.App):
 
     def _finish_startup(self) -> None:
         """Main-thread: start listener and timers after health checks pass."""
+        if _env_flag(_SMOKE_NO_INPUT_ENV):
+            print("[ready] Smoke mode enabled (input hooks disabled).")
+            return
+
         self._app.start_listener()
         self._health_timer.start()
         self._device_timer.start()
