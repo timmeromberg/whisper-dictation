@@ -448,6 +448,50 @@ class DictationApp:
 
         worker.start()
 
+    def _transcribe_audio(self, audio_bytes: bytes) -> str:
+        """Transcribe audio bytes with retry and optional failover."""
+        try:
+            return self._transcribe_with_retry(audio_bytes)
+        except Exception:
+            if self.config.whisper.failover:
+                fallback_text = self._try_failover(audio_bytes)
+                if fallback_text is not None:
+                    return fallback_text
+            raise
+
+    def _rewrite_if_enabled(self, text: str, app_id: str) -> str:
+        """Apply AI rewriting if enabled, returning original on failure."""
+        if self._rewriter is None:
+            return text
+        try:
+            ctx = resolve_context(app_id, self.config.rewrite.contexts)
+            ctx_cfg = self.config.rewrite.contexts.get(ctx.category or "")
+            effective_prompt = prompt_for_context(
+                ctx.category,
+                ctx_cfg.prompt if ctx_cfg else "",
+                self.config.rewrite.mode,
+                self.config.rewrite.prompt,
+            )
+            if ctx.category:
+                log("pipeline", f"Rewriting with AI (context: {ctx.category}, app: {ctx.app_id})...")
+            else:
+                log("pipeline", "Rewriting with AI...")
+            return self._rewriter.rewrite(text, prompt_override=effective_prompt)
+        except Exception as exc:
+            log("pipeline", f"Rewrite failed, using cleaned text: {exc}")
+            return text
+
+    def _handle_command(self, text: str) -> None:
+        """Execute a voice command, notifying on unknown commands."""
+        log("pipeline", f"Command mode — matching: '{text}'")
+        if commands.execute(text):
+            self._emit_state("idle")
+        else:
+            log("command", f"No match for '{text}', ignoring.")
+            self._play_error_beep()
+            self._notify(f"Unknown command: {text}")
+            self._emit_state("idle")
+
     def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
         # Capture frontmost app before acquiring lock — user is looking at target app now
         captured_app_id = frontmost_app_id()
@@ -456,23 +500,13 @@ class DictationApp:
                 size_kb = len(result.audio_bytes) / 1024
                 log("pipeline", f"Transcribing {result.duration_seconds:.1f}s ({size_kb:.0f} KB)...")
                 self._emit_state("transcribing")
-                try:
-                    transcript = self._transcribe_with_retry(result.audio_bytes)
-                except Exception:
-                    if self.config.whisper.failover:
-                        fallback_text = self._try_failover(result.audio_bytes)
-                        if fallback_text is not None:
-                            transcript = fallback_text
-                        else:
-                            raise
-                    else:
-                        raise
+
+                transcript = self._transcribe_audio(result.audio_bytes)
                 if os.environ.get("WHISPER_DIC_LOG_TRANSCRIPTS", "").strip().lower() in {"1", "true", "yes", "on"}:
                     log("pipeline", f"Transcript: '{transcript}'")
                 else:
                     log("pipeline", f"Transcript received ({len(transcript)} chars).")
 
-                cleaned = transcript
                 try:
                     log("pipeline", "Cleaning transcript...")
                     cleaned = self.cleaner.clean(transcript)
@@ -480,23 +514,8 @@ class DictationApp:
                     log("pipeline", f"Cleanup failed, using raw transcript: {exc}")
                     cleaned = transcript
 
-                if self._rewriter is not None and not command_mode:
-                    try:
-                        ctx = resolve_context(captured_app_id, self.config.rewrite.contexts)
-                        ctx_cfg = self.config.rewrite.contexts.get(ctx.category or "")
-                        effective_prompt = prompt_for_context(
-                            ctx.category,
-                            ctx_cfg.prompt if ctx_cfg else "",
-                            self.config.rewrite.mode,
-                            self.config.rewrite.prompt,
-                        )
-                        if ctx.category:
-                            log("pipeline", f"Rewriting with AI (context: {ctx.category}, app: {ctx.app_id})...")
-                        else:
-                            log("pipeline", "Rewriting with AI...")
-                        cleaned = self._rewriter.rewrite(cleaned, prompt_override=effective_prompt)
-                    except Exception as exc:
-                        log("pipeline", f"Rewrite failed, using cleaned text: {exc}")
+                if not command_mode:
+                    cleaned = self._rewrite_if_enabled(cleaned, captured_app_id)
 
                 cleaned = cleaned.strip()
                 if not cleaned:
@@ -506,14 +525,7 @@ class DictationApp:
                     return
 
                 if command_mode:
-                    log("pipeline", f"Command mode — matching: '{cleaned}'")
-                    if commands.execute(cleaned):
-                        self._emit_state("idle")
-                    else:
-                        log("command", f"No match for '{cleaned}', ignoring.")
-                        self._play_error_beep()
-                        self._notify(f"Unknown command: {cleaned}")
-                        self._emit_state("idle")
+                    self._handle_command(cleaned)
                     return
 
                 self.paster.paste(cleaned, auto_send=auto_send, app_id=captured_app_id)
