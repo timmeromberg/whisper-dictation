@@ -5,6 +5,17 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.13] - 2026-03-02
+
+### Changed
+- Linux CI now provisions an integration harness (`xvfb`, audio libs) and runs the full pytest suite under virtual display
+- E2E workflow now runs on all pull requests to ensure required E2E checks are always present
+
+### Added
+- Linux compatibility backend (`whisper_dic.compat._linux`) so shared modules can be imported/tested on Linux
+- Security CI now uploads machine-readable artifacts (`bandit-report.json`, `pip-audit-report.json`, `pip-audit-sbom.json`)
+- Branch protection required-check enforcement for `main` (CI, security, and PR E2E checks required before merge)
+
 ## [0.9.12] - 2026-03-02
 
 ### Fixed

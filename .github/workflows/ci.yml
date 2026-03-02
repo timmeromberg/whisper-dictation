@@ -24,10 +24,23 @@ jobs:
           pip install bandit pip-audit
 
       - name: Bandit (medium/high only)
-        run: bandit -r src -q -ll
+        run: bandit -r src -q -ll -f json -o bandit-report.json
 
       - name: Dependency audit
-        run: pip-audit
+        run: |
+          pip-audit -f json -o pip-audit-report.json
+          pip-audit -f cyclonedx-json -o pip-audit-sbom.json
+
+      - name: Upload security artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            pip-audit-report.json
+            pip-audit-sbom.json
+          if-no-files-found: warn
 
   lint-and-test:
     runs-on: ${{ matrix.os }}
@@ -46,6 +59,8 @@ jobs:
       - name: Install (Linux)
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libportaudio2 portaudio19-dev libsndfile1 ffmpeg
           python -m pip install --upgrade pip
           pip install -e .
           pip install pytest pytest-cov mypy ruff
@@ -71,9 +86,9 @@ jobs:
         if: runner.os != 'Windows'
         run: mypy src/whisper_dic/ --exclude src/whisper_dic/compat/_windows.py
 
-      - name: Test (Linux-safe subset)
+      - name: Test (Linux under Xvfb)
         if: runner.os == 'Linux'
-        run: pytest tests/test_config.py tests/test_transcriber.py tests/test_cli_runtime.py -v
+        run: xvfb-run -a pytest tests/ -v
 
       - name: Test
         if: runner.os != 'Linux'
