@@ -5,6 +5,11 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-03-02
+
+### Fixed
+- Snippets submenu not opening: NSMenuItems can only belong to one NSMenu, so rebuild now creates fresh items directly instead of transferring from a temp menu
+
 ## [0.13.1] - 2026-03-02
 
 ### Fixed
