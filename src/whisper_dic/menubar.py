@@ -921,16 +921,20 @@ class DictationMenuBar(rumps.App):
         menu = rumps.MenuItem("Service")
         menu.add(rumps.MenuItem("Install (Start at Login)", callback=self._install_service))
         menu.add(rumps.MenuItem("Uninstall", callback=self._uninstall_service))
-        installed = "Yes" if _PLIST_PATH.exists() else "No"
+        installed = "Yes" if self._service_installed() else "No"
         self._installed_item = rumps.MenuItem(f"Installed: {installed}")
         self._installed_item.set_callback(None)
         menu.add(self._installed_item)
         return menu
 
+    @staticmethod
+    def _service_installed() -> bool:
+        return _PLIST_PATH is not None and _PLIST_PATH.exists()
+
     def _install_service(self, _sender: Any) -> None:
         def _run():
             rc = command_install()
-            installed = "Yes" if _PLIST_PATH.exists() else "No"
+            installed = "Yes" if self._service_installed() else "No"
 
             def _ui() -> None:
                 if rc == 0:
@@ -955,7 +959,7 @@ class DictationMenuBar(rumps.App):
 
         def _run():
             rc = command_uninstall()
-            installed = "Yes" if _PLIST_PATH.exists() else "No"
+            installed = "Yes" if self._service_installed() else "No"
 
             def _ui() -> None:
                 if rc == 0:
