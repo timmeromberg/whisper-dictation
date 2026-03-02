@@ -5,6 +5,26 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-03-02
+
+### Fixed
+- Rewrite prompts now explicitly prevent the LLM from answering dictated text as if it were a question — all prompts include a guard instruction
+- History file writes use atomic temp-file replacement with 0o600 permissions set before writing, eliminating a brief window where transcriptions were world-readable
+- API key redaction now catches X-API-Key header values in addition to Bearer/gsk_/sk- prefixes
+- Paster logs clipboard read/restore failures instead of silently swallowing exceptions
+- Error message truncation increased from 100 to 200 chars for better diagnostics
+
+### Added
+- Configurable paste timing: `pre_paste_delay` and `clipboard_restore_delay` in `[paste]` section
+- Configurable beep frequencies: `cancel_frequency`, `language_frequency`, `command_frequency`, `auto_send_frequency` in `[audio_feedback]`
+- Configurable double-tap window: `double_tap_window` in `[hotkey]` section
+- Hotkey release callback now passes `hold_duration_seconds` for accurate short-tap detection
+- 49 tests for `menu.py` covering all interactive setup menu flows
+
+### Changed
+- Deduplicated transcriber factory into shared `_build_transcriber()` helper
+- Documented private sounddevice API usage in `reset_audio_backend()`
+
 ## [0.11.2] - 2026-03-02
 
 ### Fixed
