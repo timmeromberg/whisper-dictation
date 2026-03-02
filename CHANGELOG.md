@@ -5,6 +5,13 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-03-02
+
+### Fixed
+- Recording no longer cuts off mid-dictation — device polling now skips PortAudio reset while recording is active
+- Hotkey release debounced (0.3s) to absorb accidental brief finger lifts during pauses
+- Stream watchdog auto-restarts dead audio streams if no callback arrives for 2 seconds
+
 ## [0.11.0] - 2026-03-02
 
 ### Fixed
