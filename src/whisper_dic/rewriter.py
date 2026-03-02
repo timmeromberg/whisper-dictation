@@ -47,6 +47,7 @@ CONTEXT_PROMPTS: dict[str, str] = {
         "'hash' or 'pound' → '#', 'at sign' → '@', 'pipe' → '|', 'tilde' → '~', "
         "'backtick' → '`', 'ampersand' → '&', 'caret' → '^', 'star' or 'asterisk' → '*'\n"
         "- Keep the user's full message — do not shorten, summarize, or remove detail\n"
+        "- Preserve questions as questions — if the user asks something, keep the question mark\n"
         "- Fix grammar and punctuation only — do not rephrase or restructure sentences\n"
         "- Remove only speech artifacts (um, uh, false starts) — keep all intentional content\n"
         "- Return only the corrected text, nothing else."
