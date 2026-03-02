@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import faulthandler
 import signal
 import threading
 import time
@@ -18,6 +19,8 @@ from .dictation import DictationApp
 from .hotkey import NSEventHotkeyListener
 from .overlay import PreviewOverlay, RecordingOverlay
 from .transcriber import create_transcriber
+
+faulthandler.enable()
 
 PROVIDER_OPTIONS = ["local", "groq"]
 LANGUAGE_OPTIONS = ["en", "auto", "nl", "de", "fr", "es", "ja", "zh", "ko", "pt", "it", "ru"]
@@ -65,8 +68,10 @@ class DictationMenuBar(rumps.App):
         )
         self._rewrite_menu = self._build_rewrite_menu()
         self._help_menu = self._build_help_menu()
+        self._accessibility_menu = self._build_accessibility_menu()
         self._history_menu = rumps.MenuItem("History")
         self._rebuild_history_menu()
+        self._apply_overlay_accessibility()
 
         self.menu = [
             self._status_item,
@@ -85,6 +90,7 @@ class DictationMenuBar(rumps.App):
             None,
             self._history_menu,
             self._build_recording_menu(),
+            self._accessibility_menu,
             rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
             None,
             rumps.MenuItem("Check Status", callback=self._check_status),
@@ -254,6 +260,35 @@ class DictationMenuBar(rumps.App):
 
         return menu
 
+    def _build_accessibility_menu(self) -> rumps.MenuItem:
+        menu = rumps.MenuItem("Accessibility")
+        reduced = self.config.overlay.reduced_motion
+        contrast = self.config.overlay.high_contrast
+        scale = self.config.overlay.font_scale
+
+        self._overlay_reduce_item = rumps.MenuItem(
+            f"Reduced Motion: {'on' if reduced else 'off'}",
+            callback=self._toggle_reduced_motion,
+        )
+        self._overlay_contrast_item = rumps.MenuItem(
+            f"High Contrast: {'on' if contrast else 'off'}",
+            callback=self._toggle_high_contrast,
+        )
+        menu.add(self._overlay_reduce_item)
+        menu.add(self._overlay_contrast_item)
+        menu.add(None)
+
+        self._overlay_scale_menu = rumps.MenuItem(f"Text Size: {int(scale * 100)}%")
+        self._overlay_scale_items: dict[float, rumps.MenuItem] = {}
+        for value in (0.85, 1.0, 1.25, 1.5):
+            item = rumps.MenuItem(f"{int(value * 100)}%", callback=self._switch_overlay_scale)
+            item._overlay_scale = value  # type: ignore[attr-defined]
+            item.state = 1 if abs(value - scale) < 1e-6 else 0
+            self._overlay_scale_items[value] = item
+            self._overlay_scale_menu.add(item)
+        menu.add(self._overlay_scale_menu)
+        return menu
+
     # --- History ---
 
     def _rebuild_history_menu(self) -> None:
@@ -291,8 +326,16 @@ class DictationMenuBar(rumps.App):
 
     def _copy_history_entry(self, sender: Any) -> None:
         import subprocess
-        subprocess.run(["pbcopy"], input=sender._history_text.encode(), check=True)
-        rumps.notification("whisper-dic", "Copied", sender._history_text[:80])
+        text = str(getattr(sender, "_history_text", "")).strip()
+        if not text:
+            self._notify("Copy Failed", "History entry is empty.")
+            return
+        try:
+            subprocess.run(["pbcopy"], input=text.encode(), check=True, timeout=2)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+            self._notify("Copy Failed", "Could not copy entry to clipboard.")
+            return
+        self._notify("Copied", text[:80])
 
     def _clear_history(self, _sender: Any) -> None:
         self._app.history.clear()
@@ -304,6 +347,10 @@ class DictationMenuBar(rumps.App):
         """Write a config value and mark the write to avoid reload loop."""
         set_config_value(self.config_path, key, value)
         self._config_watcher.mark_written()
+
+    def _notify(self, subtitle: str, message: str) -> None:
+        """Thread-safe user notification."""
+        callAfter(rumps.notification, "whisper-dic", subtitle, message)
 
     # --- State callbacks ---
 
@@ -320,6 +367,11 @@ class DictationMenuBar(rumps.App):
         self._preview_overlay.set_badges(badges)
 
     def _on_state_change(self, state: str, detail: str) -> None:
+        """Thread-safe state callback entrypoint from DictationApp."""
+        callAfter(self._on_state_change_main, state, detail)
+
+    def _on_state_change_main(self, state: str, detail: str) -> None:
+        """Main-thread state handler. Mutates rumps/AppKit state safely."""
         if state == "recording":
             self._is_recording = True
             self.title = "\U0001f534"
@@ -346,15 +398,14 @@ class DictationMenuBar(rumps.App):
             self._level_timer.stop()
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
+            self._rebuild_history_menu()
             self._overlay.hide()
             self._preview_overlay.hide()
-            self._rebuild_history_menu()
         elif state == "language_changed":
+            new_lang = self._app.active_language
             self.title = "\U0001f3a4"
             self._status_item.title = "Status: Idle"
             self._lang_menu.title = f"Language: {detail}"
-            # Update checkmarks
-            new_lang = self._app.active_language
             for item in self._lang_menu.values():
                 item.state = 1 if f"({new_lang})" in item.title else 0
 
@@ -368,8 +419,7 @@ class DictationMenuBar(rumps.App):
                     self.title = "\u26a0\ufe0f"  # warning emoji
                     if not self._health_notified:
                         provider = self.config.whisper.provider
-                        rumps.notification("whisper-dic", "Provider Unreachable",
-                                           f"{provider} is not responding. Dictation may fail.")
+                        self._notify("Provider Unreachable", f"{provider} is not responding. Dictation may fail.")
                         self._health_notified = True
                 callAfter(_update_down)
             elif ok and not self._provider_healthy:
@@ -379,8 +429,7 @@ class DictationMenuBar(rumps.App):
                     if not self._is_recording:
                         self._status_item.title = "Status: Idle"
                         self.title = "\U0001f3a4"
-                    rumps.notification("whisper-dic", "Provider Online",
-                                       "Connection restored. Dictation is ready.")
+                    self._notify("Provider Online", "Connection restored. Dictation is ready.")
                 callAfter(_update_up)
         threading.Thread(target=_run, daemon=True).start()
 
@@ -432,6 +481,49 @@ class DictationMenuBar(rumps.App):
         self._mic_menu.title = f"Microphone: {label}"
 
     # --- Setting actions ---
+
+    def _apply_overlay_accessibility(self) -> None:
+        ov = self.config.overlay
+        self._overlay.configure_accessibility(
+            reduced_motion=ov.reduced_motion,
+            high_contrast=ov.high_contrast,
+        )
+        self._preview_overlay.configure_accessibility(
+            reduced_motion=ov.reduced_motion,
+            high_contrast=ov.high_contrast,
+            font_scale=ov.font_scale,
+        )
+
+    def _toggle_reduced_motion(self, _sender: Any) -> None:
+        new_val = not self.config.overlay.reduced_motion
+        self._set_config("overlay.reduced_motion", "true" if new_val else "false")
+        self.config.overlay.reduced_motion = new_val
+        self._app.config.overlay.reduced_motion = new_val
+        self._overlay_reduce_item.title = f"Reduced Motion: {'on' if new_val else 'off'}"
+        self._apply_overlay_accessibility()
+        print(f"[menubar] Reduced Motion: {'on' if new_val else 'off'}")
+
+    def _toggle_high_contrast(self, _sender: Any) -> None:
+        new_val = not self.config.overlay.high_contrast
+        self._set_config("overlay.high_contrast", "true" if new_val else "false")
+        self.config.overlay.high_contrast = new_val
+        self._app.config.overlay.high_contrast = new_val
+        self._overlay_contrast_item.title = f"High Contrast: {'on' if new_val else 'off'}"
+        self._apply_overlay_accessibility()
+        print(f"[menubar] High Contrast: {'on' if new_val else 'off'}")
+
+    def _switch_overlay_scale(self, sender: Any) -> None:
+        scale = float(sender._overlay_scale)
+        if abs(scale - self.config.overlay.font_scale) < 1e-6:
+            return
+        self._set_config("overlay.font_scale", str(scale))
+        self.config.overlay.font_scale = scale
+        self._app.config.overlay.font_scale = scale
+        self._overlay_scale_menu.title = f"Text Size: {int(scale * 100)}%"
+        for value, item in self._overlay_scale_items.items():
+            item.state = 1 if abs(value - scale) < 1e-6 else 0
+        self._apply_overlay_accessibility()
+        print(f"[menubar] Text Size: {int(scale * 100)}%")
 
     def _switch_language(self, sender: Any) -> None:
         # Extract lang code from "English (en)"
@@ -489,18 +581,19 @@ class DictationMenuBar(rumps.App):
                 self._app.transcriber.close()
                 self._app.transcriber = create_transcriber(self.config.whisper)
                 threading.Thread(target=self._check_provider_health, daemon=True).start()
-            rumps.notification("whisper-dic", "API Key Updated", "Groq API key saved.")
+            self._notify("API Key Updated", "Groq API key saved.")
 
     def _check_provider_health(self) -> None:
         """Run a health check and notify the user of the result."""
-        ok = self._app.transcriber.health_check()
         provider = self.config.whisper.provider
+        try:
+            ok = self._app.transcriber.health_check()
+        except Exception:
+            ok = False
         if ok:
-            rumps.notification("whisper-dic", "Connection Verified",
-                               f"{provider} provider is reachable.")
+            self._notify("Connection Verified", f"{provider} provider is reachable.")
         else:
-            rumps.notification("whisper-dic", "Connection Failed",
-                               f"{provider} provider is unreachable. Check your settings.")
+            self._notify("Connection Failed", f"{provider} provider is unreachable. Check your settings.")
 
     def _switch_hotkey(self, sender: Any) -> None:
         hk = sender._hotkey_value
@@ -686,14 +779,14 @@ class DictationMenuBar(rumps.App):
 
         print(f"[menubar] Rewrite model: {new_model}")
 
-    def _recreate_rewriter(self) -> None:
+    def _recreate_rewriter(self, notify_missing_key: bool = True) -> None:
         """Create or recreate the rewriter with current config. Reverts on missing API key."""
         from .rewriter import Rewriter, prompt_for_mode
 
         api_key = self.config.whisper.groq.api_key.strip()
         if not api_key:
-            rumps.notification("whisper-dic", "AI Rewrite",
-                               "Groq API key required. Set it first.")
+            if notify_missing_key:
+                self._notify("AI Rewrite", "Groq API key required. Set it first.")
             self.config.rewrite.enabled = False
             self._app.config.rewrite.enabled = False
             self._set_config("rewrite.enabled", "false")
@@ -754,11 +847,11 @@ class DictationMenuBar(rumps.App):
         try:
             val = float(response.text.strip())
             if val <= 0:
-                rumps.notification("whisper-dic", "Invalid Value", "Must be a positive number.")
+                self._notify("Invalid Value", "Must be a positive number.")
                 return None
             return val
         except ValueError:
-            rumps.notification("whisper-dic", "Invalid Value", "Enter a number (e.g. 0.3).")
+            self._notify("Invalid Value", "Enter a number (e.g. 0.3).")
             return None
 
     def _edit_min_duration(self, _sender: Any) -> None:
@@ -844,13 +937,17 @@ class DictationMenuBar(rumps.App):
     def _install_service(self, _sender: Any) -> None:
         def _run():
             rc = command_install()
-            if rc == 0:
-                rumps.notification("whisper-dic", "Installed",
-                                   "whisper-dic will start at login and auto-restart on crash.")
-            else:
-                rumps.notification("whisper-dic", "Install Failed",
-                                   "Check the terminal for details.")
-            self._installed_item.title = f"Installed: {'Yes' if _PLIST_PATH.exists() else 'No'}"
+            installed = "Yes" if _PLIST_PATH.exists() else "No"
+
+            def _ui() -> None:
+                if rc == 0:
+                    self._notify("Installed", "whisper-dic will start at login and auto-restart on crash.")
+                else:
+                    self._notify("Install Failed", "Check the terminal for details.")
+                self._installed_item.title = f"Installed: {installed}"
+
+            callAfter(_ui)
+
         threading.Thread(target=_run, daemon=True).start()
 
     def _uninstall_service(self, _sender: Any) -> None:
@@ -865,13 +962,17 @@ class DictationMenuBar(rumps.App):
 
         def _run():
             rc = command_uninstall()
-            if rc == 0:
-                rumps.notification("whisper-dic", "Uninstalled",
-                                   "whisper-dic removed from login items.")
-            else:
-                rumps.notification("whisper-dic", "Uninstall Failed",
-                                   "Not currently installed.")
-            self._installed_item.title = f"Installed: {'Yes' if _PLIST_PATH.exists() else 'No'}"
+            installed = "Yes" if _PLIST_PATH.exists() else "No"
+
+            def _ui() -> None:
+                if rc == 0:
+                    self._notify("Uninstalled", "whisper-dic removed from login items.")
+                else:
+                    self._notify("Uninstall Failed", "Not currently installed.")
+                self._installed_item.title = f"Installed: {installed}"
+
+            callAfter(_ui)
+
         threading.Thread(target=_run, daemon=True).start()
 
     def _version_item(self) -> rumps.MenuItem:
@@ -887,8 +988,8 @@ class DictationMenuBar(rumps.App):
             lang = self._app.active_language
             ok = self._app.transcriber.health_check()
             status = "reachable" if ok else "UNREACHABLE"
-            rumps.notification(
-                "whisper-dic", f"Provider: {provider} ({status})",
+            self._notify(
+                f"Provider: {provider} ({status})",
                 f"Language: {lang} | Hotkey: {self.config.hotkey.key.replace('_', ' ')}",
             )
         threading.Thread(target=_run, daemon=True).start()
@@ -896,7 +997,7 @@ class DictationMenuBar(rumps.App):
     def _view_logs(self, _sender: Any) -> None:
         log_path = Path.home() / "Library" / "Logs" / "whisper-dictation.log"
         if not log_path.exists():
-            rumps.notification("whisper-dic", "No Logs", "No log file found yet.")
+            self._notify("No Logs", "No log file found yet.")
             return
         from AppKit import NSWorkspace
         NSWorkspace.sharedWorkspace().openFile_(str(log_path))
@@ -917,7 +1018,7 @@ class DictationMenuBar(rumps.App):
             self._app.set_language(new_config.whisper.language)
 
         if new_config.hotkey.key != old.hotkey.key:
-            self._app._listener.set_key(new_config.hotkey.key)
+            self._app.listener.set_key(new_config.hotkey.key)
 
         if new_config.audio_feedback.volume != old.audio_feedback.volume:
             self._app.config.audio_feedback.volume = new_config.audio_feedback.volume
@@ -950,7 +1051,7 @@ class DictationMenuBar(rumps.App):
             self._app.config.rewrite = new_config.rewrite
             self.config.rewrite = new_config.rewrite
             if new_config.rewrite.enabled:
-                self._recreate_rewriter()
+                self._recreate_rewriter(notify_missing_key=False)
             else:
                 if self._app._rewriter is not None:
                     self._app._rewriter.close()
@@ -992,7 +1093,20 @@ class DictationMenuBar(rumps.App):
 
         # Language list
         if new_config.whisper.languages != old.whisper.languages:
-            self._app._languages = list(new_config.whisper.languages)
+            self._app.set_languages(
+                list(new_config.whisper.languages),
+                active_language=new_config.whisper.language,
+            )
+
+        overlay_changed = (
+            new_config.overlay.reduced_motion != old.overlay.reduced_motion
+            or new_config.overlay.high_contrast != old.overlay.high_contrast
+            or abs(new_config.overlay.font_scale - old.overlay.font_scale) > 1e-6
+        )
+        if overlay_changed:
+            self._app.config.overlay = new_config.overlay
+            self.config.overlay = new_config.overlay
+            self._apply_overlay_accessibility()
 
         # Custom commands
         if new_config.custom_commands != old.custom_commands:
@@ -1070,7 +1184,17 @@ class DictationMenuBar(rumps.App):
                 for item in self._mic_menu.values():
                     item.state = 1 if getattr(item, "_mic_device", object()) == new_config.recording.device else 0
 
-            rumps.notification("whisper-dic", "Config Reloaded", "Settings updated from config.toml")
+            if overlay_changed:
+                rm = new_config.overlay.reduced_motion
+                hc = new_config.overlay.high_contrast
+                scale = new_config.overlay.font_scale
+                self._overlay_reduce_item.title = f"Reduced Motion: {'on' if rm else 'off'}"
+                self._overlay_contrast_item.title = f"High Contrast: {'on' if hc else 'off'}"
+                self._overlay_scale_menu.title = f"Text Size: {int(scale * 100)}%"
+                for value, item in self._overlay_scale_items.items():
+                    item.state = 1 if abs(value - scale) < 1e-6 else 0
+
+            self._notify("Config Reloaded", "Settings updated from config.toml")
 
         callAfter(_sync_ui)
 
@@ -1138,13 +1262,14 @@ class DictationMenuBar(rumps.App):
         """Reload config with wizard choices and start dictation."""
         self.config = load_config(self.config_path)
         self._app.config = self.config
+        self._apply_overlay_accessibility()
 
         # Update transcriber
         self._app.transcriber.close()
         self._app.transcriber = create_transcriber(self.config.whisper)
 
         # Update listener key
-        self._app._listener.set_key(self.config.hotkey.key)
+        self._app.listener.set_key(self.config.hotkey.key)
 
         # Update menus
         self._provider_menu.title = f"Provider: {self.config.whisper.provider}"
@@ -1173,8 +1298,8 @@ class DictationMenuBar(rumps.App):
         try:
             from ApplicationServices import AXIsProcessTrusted
             if not AXIsProcessTrusted():
-                rumps.notification(
-                    "whisper-dic", "Accessibility Permission Required",
+                self._notify(
+                    "Accessibility Permission Required",
                     "Open System Settings > Privacy & Security > Accessibility and add this app.",
                 )
         except ImportError:
@@ -1186,14 +1311,11 @@ class DictationMenuBar(rumps.App):
         if not self._app.startup_health_checks():
             provider = self.config.whisper.provider
             if provider == "groq" and not self.config.whisper.groq.api_key.strip():
-                rumps.notification("whisper-dic", "Groq API Key Missing",
-                                   "Run: whisper-dic set whisper.groq.api_key YOUR_KEY")
+                self._notify("Groq API Key Missing", "Run: whisper-dic set whisper.groq.api_key YOUR_KEY")
             elif provider == "local":
-                rumps.notification("whisper-dic", "Local Whisper Unreachable",
-                                   "Start your whisper.cpp server, then restart whisper-dic.")
+                self._notify("Local Whisper Unreachable", "Start your whisper.cpp server, then restart whisper-dic.")
             else:
-                rumps.notification("whisper-dic", "Startup Failed",
-                                   "Whisper provider is unreachable. Run: whisper-dic status")
+                self._notify("Startup Failed", "Whisper provider is unreachable. Run: whisper-dic status")
             return
 
         # Start listener on main thread — macOS 14+ requires TSM calls from main queue
@@ -1206,8 +1328,7 @@ class DictationMenuBar(rumps.App):
         self._device_timer.start()
         self._config_watcher.start()
         key = self.config.hotkey.key.replace("_", " ")
-        rumps.notification("whisper-dic", "Ready",
-                           f"Hold {key} to dictate. Double-tap to cycle language.")
+        self._notify("Ready", f"Hold {key} to dictate. Double-tap to cycle language.")
         print(f"[ready] Hold {key} to dictate. Hold {key} + Ctrl to dictate + send.")
 
 
