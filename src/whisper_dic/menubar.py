@@ -18,7 +18,7 @@ import sounddevice as sd
 from PyObjCTools.AppHelper import callAfter
 
 from .cli import _PLIST_PATH, command_install, command_uninstall
-from .config import LANG_NAMES, ConfigWatcher, load_config, set_config_value
+from .config import LANG_NAMES, ConfigWatcher, load_config, set_config_section, set_config_value
 from .dictation import DictationApp
 from .hotkey import NSEventHotkeyListener
 from .overlay import PreviewOverlay, RecordingOverlay
@@ -76,6 +76,7 @@ class DictationMenuBar(rumps.App):
         self._lang_menu = self._build_language_menu()
         self._hotkey_menu = self._build_hotkey_menu()
         self._rewrite_menu = self._build_rewrite_menu()
+        self._snippets_menu = self._build_snippets_menu()
         self._input_menu = self._build_input_menu()
         self._output_menu = self._build_output_menu()
         self._whisper_menu = self._build_whisper_menu()
@@ -92,6 +93,7 @@ class DictationMenuBar(rumps.App):
             self._hotkey_menu,
             None,
             self._rewrite_menu,
+            self._snippets_menu,
             None,
             self._input_menu,
             self._output_menu,
@@ -563,6 +565,135 @@ class DictationMenuBar(rumps.App):
         self._set_config(f"rewrite.contexts.{cat}.enabled", str(new_val).lower())
         sender.state = 1 if new_val else 0
         print(f"[menubar] Context {cat}: {'on' if new_val else 'off'}")
+
+    # --- Snippets menu ---
+
+    def _build_snippets_menu(self) -> rumps.MenuItem:
+        from . import commands
+
+        snippets = commands.list_snippets()
+        count = len(snippets)
+        menu = rumps.MenuItem(f"Snippets ({count})" if count else "Snippets")
+
+        menu.add(rumps.MenuItem("Add Snippet...", callback=self._on_add_snippet))
+        if snippets:
+            menu.add(None)
+            for phrase, text in sorted(snippets.items()):
+                preview = text[:40] + "..." if len(text) > 40 else text
+                preview = preview.replace("\n", " ")
+                sub = rumps.MenuItem(f'"{phrase}" \u2192 {preview}')
+                edit_item = rumps.MenuItem("Edit...", callback=self._on_edit_snippet)
+                edit_item._snippet_phrase = phrase  # type: ignore[attr-defined]
+                delete_item = rumps.MenuItem("Delete", callback=self._on_delete_snippet)
+                delete_item._snippet_phrase = phrase  # type: ignore[attr-defined]
+                sub.add(edit_item)
+                sub.add(delete_item)
+                menu.add(sub)
+        return menu
+
+    def _on_add_snippet(self, _sender: Any) -> None:
+        phrase_win = rumps.Window(
+            title="Add Snippet",
+            message="Enter the trigger phrase (what you say in command mode):",
+            ok="Next",
+            cancel="Cancel",
+        )
+        phrase_resp = phrase_win.run()
+        if not phrase_resp.clicked or not phrase_resp.text.strip():
+            return
+
+        phrase = phrase_resp.text.strip()
+
+        text_win = rumps.Window(
+            title="Add Snippet",
+            message=f'Enter the text to paste when you say "{phrase}":',
+            ok="Save",
+            cancel="Cancel",
+            dimensions=(320, 120),
+        )
+        text_resp = text_win.run()
+        if not text_resp.clicked or not text_resp.text.strip():
+            return
+
+        self._save_snippet(phrase, text_resp.text)
+
+    def _on_edit_snippet(self, sender: Any) -> None:
+        from . import commands
+
+        old_phrase = sender._snippet_phrase  # type: ignore[attr-defined]
+        snippets = commands.list_snippets()
+        old_text = snippets.get(old_phrase, "")
+
+        phrase_win = rumps.Window(
+            title="Edit Snippet",
+            message="Edit the trigger phrase:",
+            ok="Next",
+            cancel="Cancel",
+            default_text=old_phrase,
+        )
+        phrase_resp = phrase_win.run()
+        if not phrase_resp.clicked or not phrase_resp.text.strip():
+            return
+
+        new_phrase = phrase_resp.text.strip()
+
+        text_win = rumps.Window(
+            title="Edit Snippet",
+            message=f'Edit the text for "{new_phrase}":',
+            ok="Save",
+            cancel="Cancel",
+            default_text=old_text,
+            dimensions=(320, 120),
+        )
+        text_resp = text_win.run()
+        if not text_resp.clicked or not text_resp.text.strip():
+            return
+
+        # If phrase changed, remove the old one
+        if new_phrase.lower() != old_phrase.lower():
+            snippets.pop(old_phrase, None)
+
+        snippets[new_phrase] = text_resp.text
+        self._save_all_snippets(snippets)
+
+    def _on_delete_snippet(self, sender: Any) -> None:
+        from . import commands
+
+        phrase = sender._snippet_phrase  # type: ignore[attr-defined]
+        snippets = commands.list_snippets()
+        snippets.pop(phrase, None)
+        self._save_all_snippets(snippets)
+
+    def _save_snippet(self, phrase: str, text: str) -> None:
+        """Add or update a single snippet and persist to config."""
+        from . import commands
+
+        snippets = commands.list_snippets()
+        snippets[phrase] = text
+        self._save_all_snippets(snippets)
+
+    def _save_all_snippets(self, snippets: dict[str, str]) -> None:
+        """Write the full snippets dict to config and reload."""
+        from . import commands
+
+        set_config_section(self.config_path, "snippets", snippets)
+        self._config_watcher.mark_written()
+        commands.register_snippets(snippets)
+        self.config.snippets = snippets
+        self._app.config.snippets = snippets
+        self._rebuild_snippets_menu()
+
+    def _rebuild_snippets_menu(self) -> None:
+        """Rebuild the snippets submenu in-place."""
+        new_menu = self._build_snippets_menu()
+        # Replace items in existing menu object
+        for key in list(self._snippets_menu.keys()):
+            del self._snippets_menu[key]
+        for key, item in new_menu.items():
+            self._snippets_menu.add(item)
+        from . import commands
+        count = len(commands.list_snippets())
+        self._snippets_menu.title = f"Snippets ({count})" if count else "Snippets"
 
     def _build_help_menu(self) -> rumps.MenuItem:
         key_display = self.config.hotkey.key.replace("_", " ")
@@ -1539,6 +1670,11 @@ class DictationMenuBar(rumps.App):
             if new_config.custom_commands:
                 commands.register_custom(new_config.custom_commands)
 
+        # Snippets
+        if new_config.snippets != old.snippets:
+            from . import commands as cmds
+            cmds.register_snippets(new_config.snippets)
+
         # UI updates — must dispatch to main thread
         def _sync_ui():
             if new_config.whisper.provider != old.whisper.provider:
@@ -1622,6 +1758,9 @@ class DictationMenuBar(rumps.App):
                 for value, item in self._overlay_scale_items.items():
                     item.state = 1 if abs(value - scale) < 1e-6 else 0
                 self._apply_overlay_accessibility()
+
+            if new_config.snippets != old.snippets:
+                self._rebuild_snippets_menu()
 
             self._notify("Config Reloaded", "Settings updated from config.toml")
 

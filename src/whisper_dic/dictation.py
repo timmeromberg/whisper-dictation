@@ -64,8 +64,11 @@ class DictationApp:
 
         self.history = TranscriptionHistory()
 
+        commands.init_paster(self.paster)
         if config.custom_commands:
             commands.register_custom(config.custom_commands)
+        if config.snippets:
+            commands.register_snippets(config.snippets)
 
         cls = listener_class or HotkeyListener
         self._listener: HotkeyListener | NSEventHotkeyListener = cls(

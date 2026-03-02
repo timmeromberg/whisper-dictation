@@ -128,6 +128,7 @@ class TestPreviewLoop:
             config.rewrite.model = "llama-3.3-70b-versatile"
             config.rewrite.prompt = ""
             config.custom_commands = {}
+            config.snippets = {}
 
             app = DictationApp(config)
 
@@ -194,6 +195,7 @@ class TestPreviewLoop:
             config.rewrite.model = "llama-3.3-70b-versatile"
             config.rewrite.prompt = ""
             config.custom_commands = {}
+            config.snippets = {}
 
             app = DictationApp(config)
 
@@ -256,6 +258,7 @@ def _base_config() -> MagicMock:
     config.rewrite.model = "llama-3.3-70b-versatile"
     config.rewrite.prompt = ""
     config.custom_commands = {}
+    config.snippets = {}
     return config
 
 
