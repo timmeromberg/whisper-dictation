@@ -5,6 +5,11 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.6] - 2026-03-02
+
+### Fixed
+- CI now guarantees `.ci-flaky-report.txt` exists before artifact upload in every matrix job, removing noisy "No files were found" annotations while keeping flaky-triage artifacts available.
+
 ## [0.10.5] - 2026-03-02
 
 ### Added

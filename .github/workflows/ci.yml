@@ -94,6 +94,11 @@ jobs:
         if: runner.os != 'Linux'
         run: python scripts/ci_pytest_retry.py
 
+      - name: Ensure flaky report exists
+        if: always()
+        run: |
+          python -c "from pathlib import Path; p = Path('.ci-flaky-report.txt'); p.exists() or p.write_text('# CI flaky-test report\nstatus: report not generated\n', encoding='utf-8')"
+
       - name: Upload flaky report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
