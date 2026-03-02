@@ -123,6 +123,30 @@ class TestStartStop:
             result = r.stop()
             assert result is None
 
+    def test_stop_metadata_matches_silence_compressed_audio(self) -> None:
+        mock_stream = MagicMock()
+        captured_length: list[int] = []
+        with patch("whisper_dic.recorder.sd") as mock_sd, patch("whisper_dic.recorder.sf") as mock_sf:
+            mock_sd.InputStream.return_value = mock_stream
+            r = Recorder(sample_rate=16000)
+            r.start()
+
+            # 2 seconds of silence should be collapsed to keep_seconds (0.3s).
+            data = np.zeros((32000, 1), dtype=np.int16)
+            r._callback(data, 32000, None, None)
+
+            def fake_write(buf, audio, sr, format):
+                captured_length.append(int(audio.shape[0]))
+                buf.write(b"FLAC-compressed")
+
+            mock_sf.write.side_effect = fake_write
+            result = r.stop()
+            assert result is not None
+            assert captured_length
+            assert result.sample_count == captured_length[0]
+            assert result.duration_seconds == pytest.approx(captured_length[0] / 16000.0, abs=0.01)
+            assert result.sample_count < 32000
+
 
 class TestResetAudioBackend:
     def test_calls_terminate_and_initialize(self) -> None:

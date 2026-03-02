@@ -92,7 +92,12 @@ def strip_long_silence(
 
 
 def reset_audio_backend() -> None:
-    """Re-initialize PortAudio to rediscover devices after sleep/wake."""
+    """Re-initialize PortAudio to rediscover devices after sleep/wake.
+
+    Uses private sounddevice APIs (sd._terminate/_initialize) because there
+    is no public reset method. If sounddevice removes these in a future
+    version, this will need to be replaced with a full module reimport.
+    """
     try:
         sd._terminate()
         sd._initialize()
@@ -261,7 +266,6 @@ class Recorder:
 
         with self._lock:
             chunks = self._chunks
-            sample_count = self._sample_count
             audio: np.ndarray | None = None
             if chunks:
                 audio = self._snapshot_audio_locked()
@@ -274,14 +278,15 @@ class Recorder:
 
         # Collapse long silences so Whisper doesn't lose context after pauses
         audio = strip_long_silence(audio, self.sample_rate)
+        effective_sample_count = int(audio.shape[0])
 
         buffer = io.BytesIO()
         sf.write(buffer, audio, self.sample_rate, format="FLAC")
 
         return RecordingResult(
             audio_bytes=buffer.getvalue(),
-            duration_seconds=sample_count / float(self.sample_rate),
-            sample_count=sample_count,
+            duration_seconds=effective_sample_count / float(self.sample_rate),
+            sample_count=effective_sample_count,
         )
 
     def __del__(self) -> None:
