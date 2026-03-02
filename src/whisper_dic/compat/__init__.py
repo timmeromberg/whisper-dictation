@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 _PLATFORM = sys.platform
+
+
+def data_dir() -> Path:
+    """Platform-appropriate data directory for whisper-dic."""
+    if _PLATFORM == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "whisper-dic"
 
 if _PLATFORM == "darwin":
     from ._macos import (  # noqa: F401

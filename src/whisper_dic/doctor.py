@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .compat import data_dir
 from .config import AppConfig, load_config
 from .transcriber import create_transcriber
 
@@ -17,15 +17,6 @@ class CheckResult:
     passed: bool
     message: str
     fix: str
-
-
-def _data_dir() -> Path:
-    """Platform-appropriate data directory for whisper-dic."""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "whisper-dic"
 
 
 def check_config(config_path: Path) -> tuple[CheckResult, AppConfig | None]:
@@ -190,7 +181,7 @@ def check_accessibility() -> CheckResult | None:
 
 def check_local_install() -> CheckResult:
     """Check if whisper-dic setup-local has been run."""
-    data = _data_dir()
+    data = data_dir()
     server_name = "whisper-server.exe" if sys.platform == "win32" else "whisper-server"
     server_path = data / "bin" / server_name
     models_dir = data / "models"

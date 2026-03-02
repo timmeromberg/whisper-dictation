@@ -14,20 +14,8 @@ from pathlib import Path
 
 import httpx
 
+from .compat import data_dir as _data_dir
 from .config import set_config_value
-
-# ---------------------------------------------------------------------------
-# Data directory
-# ---------------------------------------------------------------------------
-
-def _data_dir() -> Path:
-    """Platform-appropriate data directory for whisper-dic."""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "whisper-dic"
-
 
 # ---------------------------------------------------------------------------
 # Model catalog
