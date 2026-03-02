@@ -5,6 +5,16 @@ All notable changes to whisper-dic are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.9] - 2026-03-02
+
+### Added
+- Menu bar first-run onboarding checklist (`Getting Started`) with persistent progress, reset/dismiss actions, and contextual tips
+- Permissions check now verifies Accessibility and Microphone status, shows specific guidance, and opens System Settings directly to the right pane
+- Branch protection now enforces admin compliance (`enforce_admins: true`)
+
+### Changed
+- "Check Permissions" onboarding step only marks complete when permissions are actually granted — users must re-check after granting access in System Settings
+
 ## [0.10.8] - 2026-03-02
 
 ### Fixed

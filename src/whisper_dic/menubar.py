@@ -208,15 +208,81 @@ class DictationMenuBar(rumps.App):
         self._sync_onboarding_menu()
         self._notify("Checklist Reset", "Getting Started checklist reset.")
 
+    def _check_accessibility_granted(self) -> bool:
+        """Return True if macOS Accessibility permission is granted."""
+        try:
+            from ApplicationServices import AXIsProcessTrusted
+            return bool(AXIsProcessTrusted())
+        except ImportError:
+            return True  # Not macOS or framework unavailable — assume OK
+
+    def _check_microphone_available(self) -> bool:
+        """Return True if at least one input device is accessible."""
+        try:
+            devices = sd.query_devices()
+            return any(d["max_input_channels"] > 0 for d in devices)  # type: ignore[index]
+        except Exception:
+            return False
+
     def _show_permission_guidance(self) -> None:
-        self._notify(
-            "Permissions",
-            "System Settings > Privacy & Security > Microphone + Accessibility.",
-        )
+        self._onboarding_check_permissions(None)
 
     def _onboarding_check_permissions(self, _sender: Any) -> None:
-        self._show_permission_guidance()
-        self._mark_onboarding_step("permissions")
+        has_accessibility = self._check_accessibility_granted()
+        has_microphone = self._check_microphone_available()
+        missing: list[str] = []
+        if not has_accessibility:
+            missing.append("Accessibility")
+        if not has_microphone:
+            missing.append("Microphone")
+
+        if not missing:
+            self._notify("Permissions OK", "Accessibility and Microphone permissions are granted.")
+            self._mark_onboarding_step("permissions")
+            return
+
+        # Build guidance message listing exactly what's missing
+        lines = ["whisper-dic needs these macOS permissions to work:\n"]
+        if not has_accessibility:
+            lines.append(
+                "Accessibility — required for global hotkey and paste.\n"
+                "  -> System Settings > Privacy & Security > Accessibility\n"
+                "  -> Add and enable whisper-dic (or Terminal/IDE running it)."
+            )
+        if not has_microphone:
+            lines.append(
+                "Microphone — required for recording dictation.\n"
+                "  -> System Settings > Privacy & Security > Microphone\n"
+                "  -> Enable access for whisper-dic (or Terminal/IDE running it)."
+            )
+        lines.append("\nClick OK to open System Settings.")
+        message = "\n\n".join(lines)
+
+        response = rumps.Window(
+            title="Permissions Required",
+            message=message,
+            ok="Open System Settings",
+            cancel="Skip",
+        ).run()
+
+        if response.clicked:
+            import subprocess
+            # Open the first missing permission pane
+            if not has_accessibility:
+                subprocess.Popen([
+                    "open", "x-apple.systempreferences:"
+                    "com.apple.preference.security?Privacy_Accessibility",
+                ])
+            elif not has_microphone:
+                subprocess.Popen([
+                    "open", "x-apple.systempreferences:"
+                    "com.apple.preference.security?Privacy_Microphone",
+                ])
+            self._notify(
+                "Check Again",
+                "After granting permissions, click 'Check Permissions' again to verify.",
+            )
+        # Don't mark complete — user must click again after granting
 
     def _onboarding_set_provider(self, _sender: Any) -> None:
         response = rumps.Window(
@@ -1600,16 +1666,16 @@ class DictationMenuBar(rumps.App):
 
     def _check_permissions(self) -> None:
         """Check macOS permissions and show guidance if missing."""
-        # Check Accessibility
-        try:
-            from ApplicationServices import AXIsProcessTrusted
-            if not AXIsProcessTrusted():
-                self._notify(
-                    "Accessibility Permission Required",
-                    "Open System Settings > Privacy & Security > Accessibility and add this app.",
-                )
-        except ImportError:
-            pass
+        if not self._check_accessibility_granted():
+            import subprocess
+            self._notify(
+                "Accessibility Permission Required",
+                "Opening System Settings — add this app under Accessibility.",
+            )
+            subprocess.Popen([
+                "open", "x-apple.systempreferences:"
+                "com.apple.preference.security?Privacy_Accessibility",
+            ])
 
     def _start_dictation(self) -> None:
         if _env_flag(_SMOKE_NO_INPUT_ENV):

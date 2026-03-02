@@ -122,6 +122,69 @@ class TestMenuBarThreadSafety:
             "You can reopen this checklist from the menu anytime.",
         )
 
+    def test_permissions_check_marks_complete_when_granted(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+        app._onboarding_menu = SimpleNamespace(title="")
+        app._onboarding_step_items = {
+            "permissions": SimpleNamespace(state=0),
+            "provider": SimpleNamespace(state=0),
+            "test_dictation": SimpleNamespace(state=0),
+            "privacy": SimpleNamespace(state=0),
+        }
+
+        with (
+            patch.object(app, "_check_accessibility_granted", return_value=True),
+            patch.object(app, "_check_microphone_available", return_value=True),
+        ):
+            app._onboarding_check_permissions(None)
+
+        assert app._onboarding_state["steps"]["permissions"] is True
+        app._notify.assert_called_once_with("Permissions OK", "Accessibility and Microphone permissions are granted.")
+
+    def test_permissions_check_shows_dialog_when_missing(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+
+        mock_response = SimpleNamespace(clicked=0)  # user clicked Skip
+        with (
+            patch.object(app, "_check_accessibility_granted", return_value=False),
+            patch.object(app, "_check_microphone_available", return_value=True),
+            patch("whisper_dic.menubar.rumps.Window") as mock_window,
+        ):
+            mock_window.return_value.run.return_value = mock_response
+            app._onboarding_check_permissions(None)
+
+        # Should NOT be marked complete
+        assert app._onboarding_state["steps"]["permissions"] is False
+        # Dialog should have been shown with accessibility guidance
+        mock_window.assert_called_once()
+        call_kwargs = mock_window.call_args
+        assert "Accessibility" in call_kwargs.kwargs["message"]
+
+    def test_permissions_check_opens_settings_on_ok(self, tmp_path: Path) -> None:
+        app = _bare_app()
+        app._onboarding_state_path = tmp_path / "onboarding.json"
+        app._onboarding_state = app._default_onboarding_state()
+
+        mock_response = SimpleNamespace(clicked=1)  # user clicked Open System Settings
+        with (
+            patch.object(app, "_check_accessibility_granted", return_value=False),
+            patch.object(app, "_check_microphone_available", return_value=True),
+            patch("whisper_dic.menubar.rumps.Window") as mock_window,
+            patch("subprocess.Popen") as mock_popen,
+        ):
+            mock_window.return_value.run.return_value = mock_response
+            app._onboarding_check_permissions(None)
+
+        mock_popen.assert_called_once()
+        cmd = mock_popen.call_args[0][0]
+        assert "Accessibility" in cmd[1]
+        # Still not marked complete — user must check again after granting
+        assert app._onboarding_state["steps"]["permissions"] is False
+
     def test_sync_context_menu_labels(self) -> None:
         app = _bare_app()
         app._context_items = {
