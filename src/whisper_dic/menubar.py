@@ -60,21 +60,12 @@ class DictationMenuBar(rumps.App):
         self._status_item.set_callback(None)
 
         self._lang_menu = self._build_language_menu()
-        self._provider_menu = self._build_provider_menu()
         self._hotkey_menu = self._build_hotkey_menu()
-        self._volume_menu, self._volume_slider = self._build_volume_menu()
-        self._mic_menu = self._build_microphone_menu()
-        self._textcmds_item, self._autosend_item, self._audioctrl_item, self._failover_item = (
-            self._build_toggle_items()
-        )
-        sp_on = self.config.recording.streaming_preview
-        self._preview_item = rumps.MenuItem(
-            f"Live Preview: {'on' if sp_on else 'off'}",
-            callback=self._toggle_preview,
-        )
         self._rewrite_menu = self._build_rewrite_menu()
+        self._input_menu = self._build_input_menu()
+        self._output_menu = self._build_output_menu()
+        self._whisper_menu = self._build_whisper_menu()
         self._help_menu = self._build_help_menu()
-        self._accessibility_menu = self._build_accessibility_menu()
         self._history_menu = rumps.MenuItem("History")
         self._rebuild_history_menu()
         self._apply_overlay_accessibility()
@@ -83,25 +74,16 @@ class DictationMenuBar(rumps.App):
             self._status_item,
             None,
             self._lang_menu,
-            self._provider_menu,
             self._hotkey_menu,
-            self._volume_menu,
-            self._mic_menu,
-            self._textcmds_item,
-            self._autosend_item,
-            self._audioctrl_item,
-            self._failover_item,
-            self._preview_item,
+            None,
             self._rewrite_menu,
             None,
-            self._history_menu,
-            self._build_recording_menu(),
-            self._accessibility_menu,
-            rumps.MenuItem("Groq API Key...", callback=self._set_groq_key),
+            self._input_menu,
+            self._output_menu,
+            self._whisper_menu,
             None,
-            rumps.MenuItem("Check Status", callback=self._check_status),
-            rumps.MenuItem("View Logs", callback=self._view_logs),
-            self._build_service_menu(),
+            self._history_menu,
+            self._build_advanced_menu(),
             None,
             self._help_menu,
             self._version_item(),
@@ -120,15 +102,6 @@ class DictationMenuBar(rumps.App):
             menu.add(item)
         return menu
 
-    def _build_provider_menu(self) -> rumps.MenuItem:
-        menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
-        for p in PROVIDER_OPTIONS:
-            item = rumps.MenuItem(p, callback=self._switch_provider)
-            if p == self.config.whisper.provider:
-                item.state = 1
-            menu.add(item)
-        return menu
-
     def _build_hotkey_menu(self) -> rumps.MenuItem:
         current_key = self.config.hotkey.key
         menu = rumps.MenuItem(f"Hotkey: {current_key.replace('_', ' ')}")
@@ -140,27 +113,19 @@ class DictationMenuBar(rumps.App):
             menu.add(item)
         return menu
 
-    def _build_volume_menu(self) -> tuple[rumps.MenuItem, rumps.SliderMenuItem]:
-        vol_pct = int(self.config.audio_feedback.volume * 100)
-        menu = rumps.MenuItem(f"Volume: {vol_pct}%")
-        slider = rumps.SliderMenuItem(
-            value=vol_pct, min_value=0, max_value=100,
-            callback=self._on_volume_slide,
-        )
-        menu.add(slider)
-        return menu, slider
+    def _build_input_menu(self) -> rumps.MenuItem:
+        """Input group: Microphone, Volume, Audio Control."""
+        menu = rumps.MenuItem("Input")
 
-    def _build_microphone_menu(self) -> rumps.MenuItem:
+        # Microphone submenu
         current = self.config.recording.device
         label = current or "System Default"
-        menu = rumps.MenuItem(f"Microphone: {label}")
-        # "System Default" option
+        self._mic_menu = rumps.MenuItem(f"Microphone: {label}")
         default_item = rumps.MenuItem("System Default", callback=self._switch_microphone)
         default_item._mic_device = None  # type: ignore[attr-defined]
         if current is None:
             default_item.state = 1
-        menu.add(default_item)
-        # List all input devices
+        self._mic_menu.add(default_item)
         try:
             for dev in sd.query_devices():
                 if dev["max_input_channels"] > 0:  # type: ignore[index]
@@ -169,27 +134,79 @@ class DictationMenuBar(rumps.App):
                     item._mic_device = name  # type: ignore[attr-defined]
                     if name == current:
                         item.state = 1
-                    menu.add(item)
+                    self._mic_menu.add(item)
         except Exception:
             pass
+        menu.add(self._mic_menu)
+
+        # Volume slider
+        vol_pct = int(self.config.audio_feedback.volume * 100)
+        self._volume_menu = rumps.MenuItem(f"Volume: {vol_pct}%")
+        self._volume_slider = rumps.SliderMenuItem(
+            value=vol_pct, min_value=0, max_value=100,
+            callback=self._on_volume_slide,
+        )
+        self._volume_menu.add(self._volume_slider)
+        menu.add(self._volume_menu)
+
+        # Audio Control toggle (checkmark)
+        self._audioctrl_item = rumps.MenuItem("Audio Control", callback=self._toggle_audio_control)
+        self._audioctrl_item.state = 1 if self.config.audio_control.enabled else 0
+        menu.add(self._audioctrl_item)
+
         return menu
 
-    def _build_toggle_items(
-        self,
-    ) -> tuple[rumps.MenuItem, rumps.MenuItem, rumps.MenuItem, rumps.MenuItem]:
-        tc_on = self.config.text_commands.enabled
-        textcmds = rumps.MenuItem(f"Text Commands: {'on' if tc_on else 'off'}", callback=self._toggle_text_commands)
+    def _build_output_menu(self) -> rumps.MenuItem:
+        """Output group: Text Commands, Auto-Send, Live Preview."""
+        menu = rumps.MenuItem("Output")
 
-        as_on = self.config.paste.auto_send
-        autosend = rumps.MenuItem(f"Auto-Send: {'on' if as_on else 'off'}", callback=self._toggle_auto_send)
+        self._textcmds_item = rumps.MenuItem("Text Commands", callback=self._toggle_text_commands)
+        self._textcmds_item.state = 1 if self.config.text_commands.enabled else 0
+        menu.add(self._textcmds_item)
 
-        ac_on = self.config.audio_control.enabled
-        audioctrl = rumps.MenuItem(f"Audio Control: {'on' if ac_on else 'off'}", callback=self._toggle_audio_control)
+        self._autosend_item = rumps.MenuItem("Auto-Send", callback=self._toggle_auto_send)
+        self._autosend_item.state = 1 if self.config.paste.auto_send else 0
+        menu.add(self._autosend_item)
 
-        fo_on = self.config.whisper.failover
-        failover = rumps.MenuItem(f"Failover: {'on' if fo_on else 'off'}", callback=self._toggle_failover)
+        self._preview_item = rumps.MenuItem("Live Preview", callback=self._toggle_preview)
+        self._preview_item.state = 1 if self.config.recording.streaming_preview else 0
+        menu.add(self._preview_item)
 
-        return textcmds, autosend, audioctrl, failover
+        return menu
+
+    def _build_whisper_menu(self) -> rumps.MenuItem:
+        """Whisper group: Provider, Failover, Groq API Key."""
+        menu = rumps.MenuItem("Whisper")
+
+        # Provider submenu
+        self._provider_menu = rumps.MenuItem(f"Provider: {self.config.whisper.provider}")
+        for p in PROVIDER_OPTIONS:
+            item = rumps.MenuItem(p, callback=self._switch_provider)
+            if p == self.config.whisper.provider:
+                item.state = 1
+            self._provider_menu.add(item)
+        menu.add(self._provider_menu)
+
+        # Failover toggle (checkmark)
+        self._failover_item = rumps.MenuItem("Failover", callback=self._toggle_failover)
+        self._failover_item.state = 1 if self.config.whisper.failover else 0
+        menu.add(self._failover_item)
+
+        menu.add(None)
+        menu.add(rumps.MenuItem("Groq API Key...", callback=self._set_groq_key))
+
+        return menu
+
+    def _build_advanced_menu(self) -> rumps.MenuItem:
+        """Advanced group: Recording, Accessibility, Service, diagnostics."""
+        menu = rumps.MenuItem("Advanced")
+        menu.add(self._build_recording_menu())
+        menu.add(self._build_accessibility_menu())
+        menu.add(self._build_service_menu())
+        menu.add(None)
+        menu.add(rumps.MenuItem("Check Status", callback=self._check_status))
+        menu.add(rumps.MenuItem("View Logs", callback=self._view_logs))
+        return menu
 
     def _build_rewrite_menu(self) -> rumps.MenuItem:
         from .rewriter import REWRITE_PRESETS
@@ -198,10 +215,8 @@ class DictationMenuBar(rumps.App):
         label = "on" if rw.enabled else "off"
         menu = rumps.MenuItem(f"AI Rewrite: {label}")
 
-        self._rewrite_toggle = rumps.MenuItem(
-            f"Enabled: {'yes' if rw.enabled else 'no'}",
-            callback=self._toggle_rewrite,
-        )
+        self._rewrite_toggle = rumps.MenuItem("Enabled", callback=self._toggle_rewrite)
+        self._rewrite_toggle.state = 1 if rw.enabled else 0
         menu.add(self._rewrite_toggle)
         menu.add(None)
 
@@ -242,11 +257,9 @@ class DictationMenuBar(rumps.App):
         for cat in CATEGORIES:
             cfg = self.config.rewrite.contexts.get(cat)
             enabled = cfg.enabled if cfg else True
-            item = rumps.MenuItem(
-                f"{cat.title()}: {'on' if enabled else 'off'}",
-                callback=self._toggle_context,
-            )
+            item = rumps.MenuItem(cat.title(), callback=self._toggle_context)
             item._context_category = cat  # type: ignore[attr-defined]
+            item.state = 1 if enabled else 0
             self._context_items[cat] = item
             menu.add(item)
         return menu
@@ -260,7 +273,7 @@ class DictationMenuBar(rumps.App):
         cfg.enabled = new_val
         self._app.config.rewrite.contexts[cat].enabled = new_val
         self._set_config(f"rewrite.contexts.{cat}.enabled", str(new_val).lower())
-        sender.title = f"{cat.title()}: {'on' if new_val else 'off'}"
+        sender.state = 1 if new_val else 0
         print(f"[menubar] Context {cat}: {'on' if new_val else 'off'}")
 
     def _build_help_menu(self) -> rumps.MenuItem:
@@ -308,14 +321,10 @@ class DictationMenuBar(rumps.App):
         contrast = self.config.overlay.high_contrast
         scale = self.config.overlay.font_scale
 
-        self._overlay_reduce_item = rumps.MenuItem(
-            f"Reduced Motion: {'on' if reduced else 'off'}",
-            callback=self._toggle_reduced_motion,
-        )
-        self._overlay_contrast_item = rumps.MenuItem(
-            f"High Contrast: {'on' if contrast else 'off'}",
-            callback=self._toggle_high_contrast,
-        )
+        self._overlay_reduce_item = rumps.MenuItem("Reduced Motion", callback=self._toggle_reduced_motion)
+        self._overlay_reduce_item.state = 1 if reduced else 0
+        self._overlay_contrast_item = rumps.MenuItem("High Contrast", callback=self._toggle_high_contrast)
+        self._overlay_contrast_item.state = 1 if contrast else 0
         menu.add(self._overlay_reduce_item)
         menu.add(self._overlay_contrast_item)
         menu.add(None)
@@ -538,7 +547,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("overlay.reduced_motion", "true" if new_val else "false")
         self.config.overlay.reduced_motion = new_val
         self._app.config.overlay.reduced_motion = new_val
-        self._overlay_reduce_item.title = f"Reduced Motion: {'on' if new_val else 'off'}"
+        self._overlay_reduce_item.state = 1 if new_val else 0
         self._apply_overlay_accessibility()
         print(f"[menubar] Reduced Motion: {'on' if new_val else 'off'}")
 
@@ -547,7 +556,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("overlay.high_contrast", "true" if new_val else "false")
         self.config.overlay.high_contrast = new_val
         self._app.config.overlay.high_contrast = new_val
-        self._overlay_contrast_item.title = f"High Contrast: {'on' if new_val else 'off'}"
+        self._overlay_contrast_item.state = 1 if new_val else 0
         self._apply_overlay_accessibility()
         print(f"[menubar] High Contrast: {'on' if new_val else 'off'}")
 
@@ -686,7 +695,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("text_commands.enabled", "true" if new_val else "false")
         self.config.text_commands.enabled = new_val
         self._app.cleaner.text_commands = new_val
-        self._textcmds_item.title = f"Text Commands: {'on' if new_val else 'off'}"
+        self._textcmds_item.state = 1 if new_val else 0
         print(f"[menubar] Text Commands: {'on' if new_val else 'off'}")
 
     def _toggle_auto_send(self, _sender: Any) -> None:
@@ -695,7 +704,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("paste.auto_send", "true" if new_val else "false")
         self.config.paste.auto_send = new_val
         self._app.config.paste.auto_send = new_val
-        self._autosend_item.title = f"Auto-Send: {'on' if new_val else 'off'}"
+        self._autosend_item.state = 1 if new_val else 0
         print(f"[menubar] Auto-Send: {'on' if new_val else 'off'}")
 
     def _toggle_audio_control(self, _sender: Any) -> None:
@@ -704,9 +713,8 @@ class DictationMenuBar(rumps.App):
         new_val = not current
         self._set_config("audio_control.enabled", "true" if new_val else "false")
         self.config.audio_control.enabled = new_val
-        # Recreate controller so devices are set up when toggling on
         self._app.audio_controller = AudioController(self.config.audio_control)
-        self._audioctrl_item.title = f"Audio Control: {'on' if new_val else 'off'}"
+        self._audioctrl_item.state = 1 if new_val else 0
         print(f"[menubar] Audio Control: {'on' if new_val else 'off'}")
 
     def _toggle_failover(self, _sender: Any) -> None:
@@ -715,7 +723,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("whisper.failover", "true" if new_val else "false")
         self.config.whisper.failover = new_val
         self._app.config.whisper.failover = new_val
-        self._failover_item.title = f"Failover: {'on' if new_val else 'off'}"
+        self._failover_item.state = 1 if new_val else 0
         print(f"[menubar] Failover: {'on' if new_val else 'off'}")
 
     def _toggle_preview(self, _sender: Any) -> None:
@@ -724,7 +732,7 @@ class DictationMenuBar(rumps.App):
         self._set_config("recording.streaming_preview", "true" if new_val else "false")
         self.config.recording.streaming_preview = new_val
         self._app.config.recording.streaming_preview = new_val
-        self._preview_item.title = f"Live Preview: {'on' if new_val else 'off'}"
+        self._preview_item.state = 1 if new_val else 0
         print(f"[menubar] Live Preview: {'on' if new_val else 'off'}")
 
     def _toggle_rewrite(self, _sender: Any) -> None:
@@ -842,7 +850,7 @@ class DictationMenuBar(rumps.App):
         """Sync menu labels with current rewrite config state."""
         enabled = self.config.rewrite.enabled
         self._rewrite_menu.title = f"AI Rewrite: {'on' if enabled else 'off'}"
-        self._rewrite_toggle.title = f"Enabled: {'yes' if enabled else 'no'}"
+        self._rewrite_toggle.state = 1 if enabled else 0
 
     def _build_recording_menu(self) -> rumps.MenuItem:
         menu = rumps.MenuItem("Recording")
@@ -1173,16 +1181,16 @@ class DictationMenuBar(rumps.App):
                 self._volume_slider.value = pct
 
             if new_config.paste.auto_send != old.paste.auto_send:
-                self._autosend_item.title = f"Auto-Send: {'on' if new_config.paste.auto_send else 'off'}"
+                self._autosend_item.state = 1 if new_config.paste.auto_send else 0
 
             if new_config.text_commands.enabled != old.text_commands.enabled:
-                self._textcmds_item.title = f"Text Commands: {'on' if new_config.text_commands.enabled else 'off'}"
+                self._textcmds_item.state = 1 if new_config.text_commands.enabled else 0
 
             if ac_changed:
-                self._audioctrl_item.title = f"Audio Control: {'on' if new_config.audio_control.enabled else 'off'}"
+                self._audioctrl_item.state = 1 if new_config.audio_control.enabled else 0
 
             if new_config.whisper.failover != old.whisper.failover:
-                self._failover_item.title = f"Failover: {'on' if new_config.whisper.failover else 'off'}"
+                self._failover_item.state = 1 if new_config.whisper.failover else 0
 
             if rw_changed:
                 self._update_rewrite_labels()
@@ -1190,8 +1198,7 @@ class DictationMenuBar(rumps.App):
                     item.state = 1 if m == new_config.rewrite.mode else 0
 
             if new_config.recording.streaming_preview != old.recording.streaming_preview:
-                sp_on = new_config.recording.streaming_preview
-                self._preview_item.title = f"Live Preview: {'on' if sp_on else 'off'}"
+                self._preview_item.state = 1 if new_config.recording.streaming_preview else 0
 
             if new_config.recording.preview_interval != old.recording.preview_interval:
                 self._preview_interval_item.title = f"Preview Interval: {new_config.recording.preview_interval}s"
@@ -1222,8 +1229,8 @@ class DictationMenuBar(rumps.App):
                 rm = new_config.overlay.reduced_motion
                 hc = new_config.overlay.high_contrast
                 scale = new_config.overlay.font_scale
-                self._overlay_reduce_item.title = f"Reduced Motion: {'on' if rm else 'off'}"
-                self._overlay_contrast_item.title = f"High Contrast: {'on' if hc else 'off'}"
+                self._overlay_reduce_item.state = 1 if rm else 0
+                self._overlay_contrast_item.state = 1 if hc else 0
                 self._overlay_scale_menu.title = f"Text Size: {int(scale * 100)}%"
                 for value, item in self._overlay_scale_items.items():
                     item.state = 1 if abs(value - scale) < 1e-6 else 0
