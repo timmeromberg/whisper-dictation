@@ -225,7 +225,39 @@ class DictationMenuBar(rumps.App):
         menu.add(rumps.MenuItem("Edit Custom Prompt...", callback=self._edit_rewrite_prompt))
         menu.add(rumps.MenuItem("Change Model...", callback=self._edit_rewrite_model))
 
+        menu.add(None)
+        menu.add(self._build_context_menu())
+
         return menu
+
+    def _build_context_menu(self) -> rumps.MenuItem:
+        from .app_context import CATEGORIES
+
+        menu = rumps.MenuItem("App Contexts")
+        self._context_items: dict[str, rumps.MenuItem] = {}
+        for cat in CATEGORIES:
+            cfg = self.config.rewrite.contexts.get(cat)
+            enabled = cfg.enabled if cfg else True
+            item = rumps.MenuItem(
+                f"{cat.title()}: {'on' if enabled else 'off'}",
+                callback=self._toggle_context,
+            )
+            item._context_category = cat  # type: ignore[attr-defined]
+            self._context_items[cat] = item
+            menu.add(item)
+        return menu
+
+    def _toggle_context(self, sender: Any) -> None:
+        cat = sender._context_category  # type: ignore[attr-defined]
+        cfg = self.config.rewrite.contexts.get(cat)
+        if cfg is None:
+            return
+        new_val = not cfg.enabled
+        cfg.enabled = new_val
+        self._app.config.rewrite.contexts[cat].enabled = new_val
+        self._set_config(f"rewrite.contexts.{cat}.enabled", str(new_val).lower())
+        sender.title = f"{cat.title()}: {'on' if new_val else 'off'}"
+        print(f"[menubar] Context {cat}: {'on' if new_val else 'off'}")
 
     def _build_help_menu(self) -> rumps.MenuItem:
         key_display = self.config.hotkey.key.replace("_", " ")

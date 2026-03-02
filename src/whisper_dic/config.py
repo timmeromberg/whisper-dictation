@@ -85,11 +85,20 @@ class AudioFeedbackConfig:
 
 
 @dataclass
+class ContextConfig:
+    """Per-category rewrite context configuration."""
+
+    enabled: bool = True
+    prompt: str = ""
+
+
+@dataclass
 class RewriteConfig:
     enabled: bool = False
     mode: str = "light"
     model: str = "llama-3.3-70b-versatile"
     prompt: str = ""  # only used when mode = "custom"
+    contexts: dict[str, ContextConfig] = field(default_factory=dict)
 
 
 @dataclass
@@ -122,6 +131,24 @@ def _section(data: dict[str, Any], name: str) -> dict[str, Any]:
     return cursor if isinstance(cursor, dict) else {}
 
 
+_CONTEXT_CATEGORIES = ("coding", "chat", "email", "writing", "browser")
+
+
+def _parse_contexts(contexts_data: dict[str, Any]) -> dict[str, ContextConfig]:
+    """Parse [rewrite.contexts.*] sections. Missing categories get defaults."""
+    contexts: dict[str, ContextConfig] = {}
+    for cat in _CONTEXT_CATEGORIES:
+        cat_data = contexts_data.get(cat, {})
+        if isinstance(cat_data, dict):
+            contexts[cat] = ContextConfig(
+                enabled=bool(cat_data.get("enabled", True)),
+                prompt=str(cat_data.get("prompt", "")),
+            )
+        else:
+            contexts[cat] = ContextConfig()
+    return contexts
+
+
 def load_config(path: Path) -> AppConfig:
     with path.open("rb") as fh:
         data = tomllib.load(fh)
@@ -136,6 +163,7 @@ def load_config(path: Path) -> AppConfig:
     feedback_data = _section(data, "audio_feedback")
     audio_control_data = _section(data, "audio_control")
     rewrite_data = _section(data, "rewrite")
+    contexts_data = _section(data, "rewrite.contexts")
     overlay_data = _section(data, "overlay")
     custom_commands_data = _section(data, "custom_commands")
 
@@ -215,6 +243,7 @@ def load_config(path: Path) -> AppConfig:
             mode=str(rewrite_data.get("mode", "light")),
             model=str(rewrite_data.get("model", "llama-3.3-70b-versatile")),
             prompt=str(rewrite_data.get("prompt", "")),
+            contexts=_parse_contexts(contexts_data),
         ),
         overlay=OverlayConfig(
             reduced_motion=bool(overlay_data.get("reduced_motion", False)),

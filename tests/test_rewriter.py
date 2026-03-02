@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from whisper_dic.rewriter import Rewriter
+from whisper_dic.rewriter import CONTEXT_PROMPTS, Rewriter, prompt_for_context
 
 
 @pytest.fixture
@@ -84,3 +84,60 @@ def test_rewrite_sends_correct_payload(rewriter: Rewriter) -> None:
     assert payload["messages"][0]["content"] == "Fix grammar."
     assert payload["messages"][1]["role"] == "user"
     assert payload["messages"][1]["content"] == "some text"
+
+
+def test_rewrite_with_prompt_override(rewriter: Rewriter) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "Overridden."}}]
+    }
+
+    with patch.object(rewriter._client, "post", return_value=mock_response) as mock_post:
+        rewriter.rewrite("some text", prompt_override="Custom override prompt.")
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["messages"][0]["content"] == "Custom override prompt."
+
+
+def test_rewrite_without_override_uses_default(rewriter: Rewriter) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "Default."}}]
+    }
+
+    with patch.object(rewriter._client, "post", return_value=mock_response) as mock_post:
+        rewriter.rewrite("some text")
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["messages"][0]["content"] == "Fix grammar."
+
+
+# --- prompt_for_context ---
+
+
+def test_prompt_for_context_with_custom_prompt() -> None:
+    result = prompt_for_context("coding", "My custom coding prompt.", "light", "")
+    assert result == "My custom coding prompt."
+
+
+def test_prompt_for_context_empty_prompt_uses_builtin() -> None:
+    result = prompt_for_context("coding", "", "light", "")
+    assert result == CONTEXT_PROMPTS["coding"]
+
+
+def test_prompt_for_context_no_category_uses_global() -> None:
+    result = prompt_for_context(None, "", "medium", "")
+    assert "Fix grammar" in result
+
+
+def test_prompt_for_context_unknown_category_uses_global() -> None:
+    result = prompt_for_context("nonexistent", "", "light", "custom fallback")
+    assert "punctuation" in result.lower()  # light preset
+
+
+def test_context_prompts_has_all_categories() -> None:
+    for cat in ("coding", "chat", "email", "writing", "browser"):
+        assert cat in CONTEXT_PROMPTS
+        assert len(CONTEXT_PROMPTS[cat]) > 50

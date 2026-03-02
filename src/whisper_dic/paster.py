@@ -20,7 +20,7 @@ class TextPaster:
         self._keyboard = Controller()
         self._lock = threading.Lock()
 
-    def paste(self, text: str, auto_send: bool = False) -> None:
+    def paste(self, text: str, auto_send: bool = False, app_id: str | None = None) -> None:
         text = text.strip()
         if not text:
             return
@@ -42,7 +42,7 @@ class TextPaster:
                 self._keyboard.release("v")
 
             if auto_send:
-                app = frontmost_app_id()
+                app = app_id if app_id else frontmost_app_id()
                 is_terminal = app in TERMINAL_APP_IDS
                 log("paste", f"Auto-send check: app={app}, terminal={is_terminal}")
                 if is_terminal:

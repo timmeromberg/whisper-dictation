@@ -195,6 +195,40 @@ prompt = "Rewrite this transcription in a professional tone."
 - `mode` options: `light`, `medium`, `full`, `custom`.
 - `prompt` is only used when `mode = "custom"`.
 
+### Per-App Context Prompts
+
+whisper-dic detects the frontmost app and automatically uses a context-appropriate rewrite prompt. Five categories are supported:
+
+| Category | Apps | Default behavior |
+|----------|------|-----------------|
+| **coding** | Terminals, VS Code, Cursor, Windsurf, JetBrains | Preserve technical terms, convert spoken code patterns (`dot py` → `.py`, `dash dash` → `--`) |
+| **chat** | Slack, Discord, Teams, iMessage, Signal | Casual tone, minimal grammar fixes |
+| **email** | Apple Mail, Outlook, Superhuman | Professional tone, proper grammar |
+| **writing** | Notion, Obsidian, Apple Notes, Word | Full prose cleanup |
+| **browser** | Safari, Chrome, Firefox, Arc, Edge | Balanced medium cleanup |
+
+Each category can be enabled/disabled and given a custom prompt:
+
+```toml
+[rewrite.contexts.coding]
+enabled = true
+# prompt = "Your custom coding prompt here"
+
+[rewrite.contexts.chat]
+enabled = true
+
+[rewrite.contexts.email]
+enabled = true
+
+[rewrite.contexts.writing]
+enabled = true
+
+[rewrite.contexts.browser]
+enabled = true
+```
+
+If the frontmost app doesn't match any category, the global `mode`/`prompt` above is used. If a category is disabled, dictation in those apps falls back to the global prompt.
+
 ## Live Preview
 
 Live preview is controlled by `recording.streaming_preview`, `recording.preview_interval`, and optionally `recording.preview_provider`.

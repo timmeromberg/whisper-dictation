@@ -115,7 +115,7 @@ config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
 
 app = DictationApp(config)
-app.paster.paste = lambda text, auto_send=False: None
+app.paster.paste = lambda text, auto_send=False, app_id=None: None
 
 states = []
 app.on_state_change = lambda state, text: states.append((state, text))
@@ -260,7 +260,7 @@ config = load_config(Path('$SMOKE_CONFIG'))
 config.audio_feedback.volume = 0.0
 
 app = DictationApp(config)
-app.paster.paste = lambda text, auto_send=False: None
+app.paster.paste = lambda text, auto_send=False, app_id=None: None
 
 states = []
 app.on_state_change = lambda state, text: states.append((state, text))
@@ -313,7 +313,7 @@ config.paste.auto_send = True
 app = DictationApp(config)
 
 paste_calls = []
-def mock_paste(text, auto_send=False):
+def mock_paste(text, auto_send=False, app_id=None):
     paste_calls.append({'text': text, 'auto_send': auto_send})
 app.paster.paste = mock_paste
 

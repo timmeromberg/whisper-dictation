@@ -16,9 +16,10 @@ import numpy as np
 from pynput import keyboard
 
 from . import commands
+from .app_context import resolve_context
 from .audio_control import AudioController
 from .cleaner import TextCleaner
-from .compat import check_accessibility
+from .compat import check_accessibility, frontmost_app_id
 from .compat import notify as _platform_notify
 from .compat import play_wav_file as _platform_play
 from .config import LANG_NAMES, AppConfig
@@ -27,7 +28,7 @@ from .hotkey import KEY_MAP, HotkeyListener, NSEventHotkeyListener
 from .log import log
 from .paster import TextPaster
 from .recorder import Recorder, RecordingResult
-from .rewriter import Rewriter, prompt_for_mode
+from .rewriter import Rewriter, prompt_for_context, prompt_for_mode
 from .transcriber import WhisperTranscriber, create_transcriber, create_transcriber_for
 
 if hasattr(keyboard.Key, "cmd_r"):
@@ -440,6 +441,8 @@ class DictationApp:
         worker.start()
 
     def _run_pipeline(self, result: RecordingResult, auto_send: bool = False, command_mode: bool = False) -> None:
+        # Capture frontmost app before acquiring lock — user is looking at target app now
+        captured_app_id = frontmost_app_id()
         try:
             with self._pipeline_lock:
                 size_kb = len(result.audio_bytes) / 1024
@@ -471,8 +474,19 @@ class DictationApp:
 
                 if self._rewriter is not None and not command_mode:
                     try:
-                        log("pipeline", "Rewriting with AI...")
-                        cleaned = self._rewriter.rewrite(cleaned)
+                        ctx = resolve_context(captured_app_id, self.config.rewrite.contexts)
+                        ctx_cfg = self.config.rewrite.contexts.get(ctx.category or "")
+                        effective_prompt = prompt_for_context(
+                            ctx.category,
+                            ctx_cfg.prompt if ctx_cfg else "",
+                            self.config.rewrite.mode,
+                            self.config.rewrite.prompt,
+                        )
+                        if ctx.category:
+                            log("pipeline", f"Rewriting with AI (context: {ctx.category}, app: {ctx.app_id})...")
+                        else:
+                            log("pipeline", "Rewriting with AI...")
+                        cleaned = self._rewriter.rewrite(cleaned, prompt_override=effective_prompt)
                     except Exception as exc:
                         log("pipeline", f"Rewrite failed, using cleaned text: {exc}")
 
@@ -494,7 +508,7 @@ class DictationApp:
                         self._emit_state("idle")
                     return
 
-                self.paster.paste(cleaned, auto_send=auto_send)
+                self.paster.paste(cleaned, auto_send=auto_send, app_id=captured_app_id)
                 self.history.add(cleaned, self.active_language, result.duration_seconds)
                 log("pipeline", f"Pasted {len(cleaned)} chars (auto_send={auto_send}).")
                 self._emit_state("idle")

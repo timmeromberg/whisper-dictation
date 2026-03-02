@@ -17,6 +17,7 @@ System-wide hold-to-dictate for macOS, Windows, and Linux. Hold a key, speak, re
 - **Multi-language** - double-tap the hotkey to cycle between configured languages
 - **Text commands** - say "period", "new line", "question mark" for punctuation
 - **AI rewriting** - optional LLM-powered cleanup of transcriptions (grammar, punctuation, capitalization)
+- **Per-app context** - automatically adapts rewrite style based on the frontmost app (coding, chat, email, writing, browser)
 - **Filler removal** - automatically strips "um", "uh", "you know", etc.
 - **Live preview** - see transcription text appearing in real-time while you speak (opt-in)
 - **Provider failover** - automatically tries the other provider when the primary fails

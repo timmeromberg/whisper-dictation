@@ -97,6 +97,38 @@ model = "llama-3.3-70b-versatile"
 # Custom prompt (only used when mode = "custom")
 # prompt = "Rewrite this transcription in a professional tone."
 
+# Per-app context-aware rewrite prompts
+# whisper-dic detects the frontmost app and automatically uses a context-appropriate
+# rewrite prompt. Categories: coding, chat, email, writing, browser.
+# Each category can be enabled/disabled and given a custom prompt.
+# If the app doesn't match any category, the global mode/prompt above is used.
+
+[rewrite.contexts.coding]
+# Terminals + IDEs (VS Code, Cursor, Windsurf, JetBrains, iTerm, Warp, etc.)
+# Preserves technical terms, converts spoken code patterns (dot py → .py)
+enabled = true
+# prompt = "Your custom coding prompt here"
+
+[rewrite.contexts.chat]
+# Slack, Discord, Teams, iMessage, Signal, Telegram
+# Casual tone, minimal intervention
+enabled = true
+
+[rewrite.contexts.email]
+# Apple Mail, Outlook, Superhuman, Spark
+# Professional tone, proper grammar
+enabled = true
+
+[rewrite.contexts.writing]
+# Notion, Obsidian, Apple Notes, Word, Pages, Bear
+# Full prose cleanup, improved clarity
+enabled = true
+
+[rewrite.contexts.browser]
+# Safari, Chrome, Firefox, Arc, Edge
+# Balanced medium cleanup (generic fallback for web apps)
+enabled = true
+
 [audio_feedback]
 enabled = true
 start_frequency = 880    # Hz — beep when recording starts

@@ -194,3 +194,41 @@ class TestSetConfigValue:
 
         mode = config_path.stat().st_mode & 0o777
         assert mode == 0o640
+
+
+class TestContextConfig:
+    def test_empty_config_gets_all_default_contexts(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.toml"
+        p.write_text("")
+        config = load_config(p)
+        assert len(config.rewrite.contexts) == 5
+        for cat in ("coding", "chat", "email", "writing", "browser"):
+            assert cat in config.rewrite.contexts
+            assert config.rewrite.contexts[cat].enabled is True
+            assert config.rewrite.contexts[cat].prompt == ""
+
+    def test_partial_contexts_in_config(self, tmp_path: Path) -> None:
+        p = tmp_path / "partial.toml"
+        p.write_text(
+            "[rewrite.contexts.coding]\n"
+            "enabled = false\n"
+            '\nprompt = "Custom coding prompt."\n'
+        )
+        config = load_config(p)
+        assert config.rewrite.contexts["coding"].enabled is False
+        assert config.rewrite.contexts["coding"].prompt == "Custom coding prompt."
+        # Other categories still get defaults
+        assert config.rewrite.contexts["chat"].enabled is True
+        assert config.rewrite.contexts["chat"].prompt == ""
+
+    def test_context_disabled(self, tmp_path: Path) -> None:
+        p = tmp_path / "disabled.toml"
+        p.write_text("[rewrite.contexts.email]\nenabled = false\n")
+        config = load_config(p)
+        assert config.rewrite.contexts["email"].enabled is False
+
+    def test_context_with_custom_prompt(self, tmp_path: Path) -> None:
+        p = tmp_path / "prompt.toml"
+        p.write_text('[rewrite.contexts.chat]\nprompt = "Be very casual."\n')
+        config = load_config(p)
+        assert config.rewrite.contexts["chat"].prompt == "Be very casual."

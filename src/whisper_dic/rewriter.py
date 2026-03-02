@@ -34,6 +34,62 @@ REWRITE_PRESETS: dict[str, tuple[str, str]] = {
 
 REWRITE_MODES = list(REWRITE_PRESETS.keys()) + ["custom"]
 
+# Default per-category system prompts for context-aware rewriting
+CONTEXT_PROMPTS: dict[str, str] = {
+    "coding": (
+        "You are a dictation assistant for software developers. The user is dictating "
+        "into a code editor or terminal — likely writing AI prompts, code instructions, "
+        "commit messages, or technical documentation.\n\n"
+        "Rules:\n"
+        "- Preserve all technical terms, file names, function names, and variable names exactly\n"
+        "- Convert spoken code patterns to symbols: 'dot py' → '.py', 'dash dash' → '--', "
+        "'equals equals' → '==', 'dot' → '.', 'slash' → '/', 'underscore' → '_', "
+        "'hash' or 'pound' → '#', 'at sign' → '@', 'pipe' → '|', 'tilde' → '~', "
+        "'backtick' → '`', 'ampersand' → '&', 'caret' → '^', 'star' or 'asterisk' → '*'\n"
+        "- Fix only grammar and clarity — do not change meaning or rephrase\n"
+        "- Do not add pleasantries or filler\n"
+        "- Return only the corrected text, nothing else."
+    ),
+    "chat": (
+        "You are a dictation assistant. The user is sending a casual message in a chat "
+        "app (Slack, Discord, iMessage, etc.).\n\n"
+        "Rules:\n"
+        "- Keep it short and conversational\n"
+        "- Fix obvious grammar mistakes but preserve informal tone\n"
+        "- Do not make the message sound overly formal or wordy\n"
+        "- Preserve slang, abbreviations, and casual phrasing\n"
+        "- Return only the corrected text, nothing else."
+    ),
+    "email": (
+        "You are a dictation assistant. The user is composing an email.\n\n"
+        "Rules:\n"
+        "- Use professional, clear language\n"
+        "- Fix grammar, punctuation, and sentence structure\n"
+        "- Maintain a polite and professional tone\n"
+        "- Do not add greetings or sign-offs unless the user dictated them\n"
+        "- Return only the corrected text, nothing else."
+    ),
+    "writing": (
+        "You are a dictation assistant. The user is writing notes, documentation, or "
+        "prose in an app like Notion, Obsidian, or Apple Notes.\n\n"
+        "Rules:\n"
+        "- Improve clarity, flow, and sentence structure\n"
+        "- Fix grammar and punctuation thoroughly\n"
+        "- Remove verbal filler and false starts\n"
+        "- Preserve the original meaning and structure\n"
+        "- Return only the rewritten text, nothing else."
+    ),
+    "browser": (
+        "You are a dictation assistant. The user is typing into a web browser — it "
+        "could be a form, search bar, social media post, or web app.\n\n"
+        "Rules:\n"
+        "- Fix grammar, punctuation, and capitalization\n"
+        "- Keep the original words and meaning as much as possible\n"
+        "- Use a balanced, neutral tone\n"
+        "- Return only the corrected text, nothing else."
+    ),
+}
+
 
 def _redact_sensitive(text: str) -> str:
     return re.sub(r"(gsk_|sk-|Bearer\s+)\S{6,}", r"\1***", text)
@@ -44,6 +100,25 @@ def prompt_for_mode(mode: str, custom_prompt: str) -> str:
     if mode in REWRITE_PRESETS:
         return REWRITE_PRESETS[mode][1]
     return custom_prompt
+
+
+def prompt_for_context(
+    category: str | None,
+    context_prompt: str,
+    global_mode: str,
+    global_custom_prompt: str,
+) -> str:
+    """Resolve the effective system prompt for a rewrite context.
+
+    If a category is set and has a non-empty custom prompt, use it.
+    If a category is set but prompt is empty, use the built-in default for that category.
+    If no category (None), fall back to the global mode/prompt.
+    """
+    if category is not None:
+        if context_prompt:
+            return context_prompt
+        return CONTEXT_PROMPTS.get(category, prompt_for_mode(global_mode, global_custom_prompt))
+    return prompt_for_mode(global_mode, global_custom_prompt)
 
 
 class Rewriter:
@@ -58,10 +133,17 @@ class Rewriter:
             transport=httpx.HTTPTransport(retries=2),
         )
 
-    def rewrite(self, text: str) -> str:
-        """Rewrite transcribed text. Returns original text on any failure."""
+    def rewrite(self, text: str, prompt_override: str | None = None) -> str:
+        """Rewrite transcribed text. Returns original text on any failure.
+
+        Args:
+            text: The transcribed text to rewrite.
+            prompt_override: If provided, uses this system prompt instead of the default.
+        """
         if not text.strip():
             return text
+
+        effective_prompt = prompt_override if prompt_override else self._prompt
 
         try:
             response = self._client.post(
@@ -69,7 +151,7 @@ class Rewriter:
                 json={
                     "model": self._model,
                     "messages": [
-                        {"role": "system", "content": self._prompt},
+                        {"role": "system", "content": effective_prompt},
                         {"role": "user", "content": text},
                     ],
                     "temperature": 0.3,
